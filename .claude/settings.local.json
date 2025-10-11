@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:community.sap.com)",
+      "Bash(find:*)",
+      "Bash(source:*)",
+      "Bash(python3 -m pip install:*)",
+      "Bash(git pull:*)",
+      "Bash(export:*)",
+      "Bash(export DYLD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$DYLD_LIBRARY_PATH)",
+      "Read(//usr/local/**)",
+      "Read(//Users/local/nwrfcsdk/**)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv sync:*)",
+      "Bash(python3 -m pytest app/tests/ -v)",
+      "Bash(pip install:*)",
+      "Bash(python3:*)",
+      "Bash(.venv/bin/python3 -m pytest app/tests/ -v)",
+      "Bash(/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/.venv/bin/python -m pytest app/tests/ -v)",
+      "Bash(.venv/bin/python -m pytest app/tests/ -v)",
+      "Bash(test:*)",
+      "Bash(.venv/bin/python -m pytest app/tests/test_integration.py -v -s)",
+      "Bash(.venv/bin/python:*)",
+      "Bash(timeout 5 .venv/bin/python -m app.main:*)",
+      "mcp__ABAP-ADT-RFC-Server__get_class_structure",
+      "mcp__ABAP-ADT-RFC-Server__get_class_source",
+      "mcp__ABAP-ADT-RFC-Server__search_objects"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "BrootABAPAgent"
+  ]
+}
