@@ -5,7 +5,6 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
 
 from app.core.rfc_adapter import RfcAdapter
-from pyrfc import Connection
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +21,14 @@ class DdicService:
     - Package information
     """
 
-    def __init__(self, connection: Connection):
+    def __init__(self, adapter: RfcAdapter):
         """
         Initialize the DDIC service.
 
         Args:
-            connection: Active RFC connection to SAP system
+            adapter: RfcAdapter instance for ADT API calls to SAP system
         """
-        self.adapter = RfcAdapter(connection)
+        self.adapter = adapter
         logger.debug("DdicService initialized")
 
     def get_ddic_element(self, element_name: str, element_type: str) -> Dict[str, Any]:

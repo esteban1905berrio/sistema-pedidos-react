@@ -2,7 +2,6 @@
 
 import logging
 from typing import Literal
-from pyrfc import Connection
 
 from app.core.rfc_adapter import RfcAdapter
 
@@ -12,14 +11,14 @@ logger = logging.getLogger(__name__)
 class ProgramService:
     """Service for ABAP program operations via RFC."""
 
-    def __init__(self, connection: Connection):
+    def __init__(self, adapter: RfcAdapter):
         """
         Initialize program service.
 
         Args:
-            connection: Active RFC connection
+            adapter: RfcAdapter instance for ADT API calls
         """
-        self.adapter = RfcAdapter(connection)
+        self.adapter = adapter
 
     def get_program_source(
         self, program_name: str, version: Literal["active", "inactive"] = "active"

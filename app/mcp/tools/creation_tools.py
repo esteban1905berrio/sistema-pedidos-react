@@ -1,0 +1,78 @@
+"""MCP tool registration for object creation/deletion operations."""
+
+from mcp.server.fastmcp import FastMCP
+from pydantic import Field
+from typing import Optional
+
+from app.services.creation_service import CreationService
+
+
+def register_creation_tools(mcp: FastMCP, creation_service: CreationService):
+    """Register object creation/deletion tools with MCP server."""
+
+    @mcp.tool(
+        name="create_class",
+        description="Create a new ABAP class. "
+                   "Automatically generates class definition and implementation. "
+                   "Use $TMP for local objects or specify a package + transport for transportable objects."
+    )
+    def create_class(
+        class_name: str = Field(
+            description="Name of the class (must start with Y or Z for customer namespace)"
+        ),
+        package: str = Field(
+            description="Package name (use '$TMP' for local development, or package name for transportable)"
+        ),
+        description: str = Field(
+            description="Class description/title"
+        ),
+        transport: Optional[str] = Field(
+            default=None,
+            description="Transport number (required for transportable packages, not needed for $TMP)"
+        ),
+        class_type: str = Field(
+            default="CLAS",
+            description="Class type (default: 'CLAS' for standard class)"
+        )
+    ) -> dict:
+        """Create a new ABAP class."""
+        return creation_service.create_class(class_name, package, description, transport, class_type)
+
+    @mcp.tool(
+        name="delete_object",
+        description="Delete an ABAP object (class, program, etc.). "
+                   "⚠️ USE WITH CAUTION! This permanently deletes the object. "
+                   "Requires transport number for transportable packages."
+    )
+    def delete_object(
+        object_uri: str = Field(
+            description="URI of the object to delete (e.g., '/sap/bc/adt/oo/classes/zcl_test')"
+        ),
+        transport: Optional[str] = Field(
+            default=None,
+            description="Transport number (required for transportable packages)"
+        ),
+        delete_option: str = Field(
+            default="deleteWithSuccessors",
+            description="Delete option: 'deleteWithSuccessors' (default) or 'deleteWithoutSuccessors'"
+        )
+    ) -> bool:
+        """Delete an ABAP object."""
+        return creation_service.delete_object(object_uri, transport, delete_option)
+
+    @mcp.tool(
+        name="validate_object_name",
+        description="Validate an object name according to SAP naming conventions. "
+                   "Checks if name follows SAP rules (length, allowed characters, customer namespace, etc.)."
+    )
+    def validate_object_name(
+        object_name: str = Field(
+            description="Object name to validate"
+        ),
+        object_type: str = Field(
+            default="CLAS/OC",
+            description="Object type (e.g., 'CLAS/OC' for class, 'PROG/P' for program)"
+        )
+    ) -> dict:
+        """Validate object name."""
+        return creation_service.validate_object_name(object_name, object_type)

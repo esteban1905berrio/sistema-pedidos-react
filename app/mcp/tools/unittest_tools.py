@@ -1,0 +1,28 @@
+"""MCP tool registration for unit test execution operations."""
+
+from mcp.server.fastmcp import FastMCP
+from pydantic import Field
+
+from app.services.unittest_service import UnittestService
+
+
+def register_unittest_tools(mcp: FastMCP, unittest_service: UnittestService):
+    """Register unit test tools with MCP server."""
+
+    @mcp.tool(
+        name="run_unit_tests",
+        description="Execute ABAP unit tests for an object. "
+                   "Returns test results with pass/fail status, execution time, and error messages. "
+                   "Optionally includes code coverage analysis."
+    )
+    def run_unit_tests(
+        object_uri: str = Field(
+            description="URI of the object to test (e.g., '/sap/bc/adt/oo/classes/zcl_test')"
+        ),
+        coverage: bool = Field(
+            default=False,
+            description="Include code coverage analysis (default: False)"
+        )
+    ) -> dict:
+        """Run unit tests for an ABAP object."""
+        return unittest_service.run_unit_tests(object_uri, coverage)

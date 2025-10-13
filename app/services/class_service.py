@@ -3,7 +3,6 @@
 import logging
 import xml.etree.ElementTree as et
 from typing import Literal, Dict, Any, List
-from pyrfc import Connection
 
 from app.core.rfc_adapter import RfcAdapter
 
@@ -43,14 +42,14 @@ class ClassStructureResult(Dict[str, Any]):
 class ClassService:
     """Service for ABAP class operations via RFC."""
 
-    def __init__(self, connection: Connection):
+    def __init__(self, adapter: RfcAdapter):
         """
         Initialize class service.
 
         Args:
-            connection: Active RFC connection
+            adapter: RfcAdapter instance for ADT API calls
         """
-        self.adapter = RfcAdapter(connection)
+        self.adapter = adapter
 
     def get_class_source(
         self,

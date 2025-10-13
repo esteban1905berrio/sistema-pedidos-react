@@ -1,0 +1,75 @@
+"""MCP tool registration for object lock/unlock and modification operations."""
+
+from mcp.server.fastmcp import FastMCP
+from pydantic import Field
+from typing import Optional
+
+from app.services.object_service import ObjectService
+
+
+def register_object_tools(mcp: FastMCP, object_service: ObjectService):
+    """Register object-related tools with MCP server."""
+
+    @mcp.tool(
+        name="lock",
+        description="Lock an ABAP object for editing. "
+                   "Returns a LOCK_HANDLE that must be used for subsequent operations (modify, unlock). "
+                   "IMPORTANT: Always unlock the object after editing to release the lock."
+    )
+    def lock(
+        object_uri: str = Field(
+            description="URI of the object to lock (e.g., '/sap/bc/adt/oo/classes/ztest/source/main')"
+        ),
+        access_mode: str = Field(
+            default="MODIFY",
+            description="Access mode: 'MODIFY' (default) or 'READ'"
+        )
+    ) -> str:
+        """Lock an object for editing."""
+        return object_service.lock(object_uri, access_mode)
+
+    @mcp.tool(
+        name="unlock",
+        description="Unlock an ABAP object after editing. "
+                   "Releases the lock obtained with lock() operation. "
+                   "IMPORTANT: Always call this after finishing modifications."
+    )
+    def unlock(
+        object_uri: str = Field(
+            description="URI of the object to unlock"
+        ),
+        lock_handle: str = Field(
+            description="Lock handle obtained from lock() operation"
+        )
+    ) -> bool:
+        """Unlock an object after editing."""
+        return object_service.unlock(object_uri, lock_handle)
+
+    @mcp.tool(
+        name="set_object_source",
+        description="Modify the source code of an ABAP object. "
+                   "IMPORTANT: Object must be locked before calling this method. "
+                   "After modification, don't forget to activate the object and unlock it."
+    )
+    def set_object_source(
+        object_uri: str = Field(
+            description="URI of the object (with /source/main)"
+        ),
+        source_code: str = Field(
+            description="New source code content"
+        ),
+        lock_handle: str = Field(
+            description="Lock handle from lock() operation"
+        ),
+        transport: Optional[str] = Field(
+            default=None,
+            description="Transport number (optional)"
+        )
+    ) -> bool:
+        """Modify object source code."""
+        return object_service.set_object_source(
+            object_uri,
+            source_code,
+            lock_handle,
+            transport=transport
+        )

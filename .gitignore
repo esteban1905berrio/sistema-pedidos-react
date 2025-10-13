@@ -155,6 +155,7 @@ dev_rfc.log
 debug_fase1.log
 debug_fase2.log
 *.log
+logs/
 
 # Reference projects (DO NOT commit to repo)
 mcp-abap-abap-adt-api/

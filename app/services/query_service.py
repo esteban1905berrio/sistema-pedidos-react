@@ -5,7 +5,6 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 
 from app.core.rfc_adapter import RfcAdapter
-from pyrfc import Connection
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +19,14 @@ class QueryService:
     - Filter and limit data retrieval
     """
 
-    def __init__(self, connection: Connection):
+    def __init__(self, adapter: RfcAdapter):
         """
         Initialize the query service.
 
         Args:
-            connection: Active RFC connection to SAP system
+            adapter: RfcAdapter instance for ADT API calls to SAP system
         """
-        self.adapter = RfcAdapter(connection)
+        self.adapter = adapter
         logger.debug("QueryService initialized")
 
     def get_table_contents(
@@ -72,20 +71,23 @@ class QueryService:
             logger.warning(f"max_rows {max_rows} exceeds limit, setting to 1000")
             max_rows = 1000
 
-        # Build query body XML
-        query_body = self._build_query_xml(
+        # Build SQL SELECT statement
+        sql_statement = self._build_sql_select(
             table_name=table_name,
-            max_rows=max_rows,
             where_clause=where_clause,
             fields=fields
         )
 
+        # Use DDIC-based data preview endpoint
         response = self.adapter.request(
-            uri="/sap/bc/adt/datapreview/freestyle",
+            uri="/sap/bc/adt/datapreview/ddic",
             method="POST",
-            params={},
-            body=query_body,
-            content_type="application/xml"
+            params={
+                "rowNumber": max_rows,
+                "ddicEntityName": table_name
+            },
+            body=sql_statement,
+            content_type="text/plain"
         )
 
         if response.status_code == 200:
@@ -155,6 +157,44 @@ class QueryService:
 
     # Private helper methods
 
+    def _build_sql_select(
+        self,
+        table_name: str,
+        where_clause: Optional[str] = None,
+        fields: Optional[List[str]] = None
+    ) -> str:
+        """
+        Build SQL SELECT statement for data preview.
+
+        Format: SELECT TABLE~FIELD1, TABLE~FIELD2 FROM TABLE
+
+        Args:
+            table_name: Table name
+            where_clause: Optional WHERE clause
+            fields: Optional field list
+
+        Returns:
+            SQL SELECT statement string
+        """
+        # Build SELECT clause
+        # For now use simple SELECT * - field extraction from DDIC needs namespace fix
+        # TODO: Implement proper field extraction once DDIC XML parsing is fixed
+        if fields:
+            # User provided specific fields
+            select_fields = ', '.join([f"{table_name}~{field}" for field in fields])
+        else:
+            # Use SELECT * for all fields
+            select_fields = "*"
+
+        # Build complete SQL
+        sql = f"SELECT {select_fields} FROM {table_name}"
+
+        if where_clause:
+            sql += f" WHERE {where_clause}"
+
+        logger.debug(f"Built SQL: {sql}")
+        return sql
+
     def _build_query_xml(
         self,
         table_name: str,
@@ -163,7 +203,7 @@ class QueryService:
         fields: Optional[List[str]] = None
     ) -> str:
         """
-        Build XML body for table query.
+        Build XML body for table query (legacy freestyle endpoint).
 
         Args:
             table_name: Table name
@@ -221,7 +261,16 @@ class QueryService:
 
     def _parse_table_data(self, xml_text: str, table_name: str) -> Dict[str, Any]:
         """
-        Parse table data XML response.
+        Parse table data XML response from ADT data preview.
+
+        The XML format is column-oriented:
+        <dataPreview:columns>
+          <dataPreview:metadata name="FIELD1" type="C" .../>
+          <dataPreview:dataSet>
+            <dataPreview:data>value1</dataPreview:data>
+            <dataPreview:data>value2</dataPreview:data>
+          </dataPreview:dataSet>
+        </dataPreview:columns>
 
         Args:
             xml_text: XML response from SAP
@@ -233,10 +282,7 @@ class QueryService:
         try:
             root = ET.fromstring(xml_text)
 
-            ns = {
-                'dataPreview': 'http://www.sap.com/adt/dataPreview',
-                'adtcore': 'http://www.sap.com/adt/core'
-            }
+            ns = {'dataPreview': 'http://www.sap.com/adt/dataPreview'}
 
             table_data = {
                 'table_name': table_name,
@@ -246,38 +292,56 @@ class QueryService:
                 'metadata': {}
             }
 
-            # Parse column metadata
-            for column in root.findall('.//dataPreview:column', ns):
-                col_info = {
-                    'name': column.get('name', ''),
-                    'type': column.get('type', ''),
-                    'length': column.get('length', ''),
-                    'description': column.get('description', '')
-                }
-                table_data['columns'].append(col_info)
+            # Parse column-oriented data
+            columns_data = []  # List of (column_name, column_values) tuples
 
-            # Parse rows
-            for row_elem in root.findall('.//dataPreview:row', ns):
-                row = {}
-                for field in row_elem.findall('.//dataPreview:field', ns):
-                    field_name = field.get('name', '')
-                    field_value = field.text or ''
-                    row[field_name] = field_value
-                table_data['rows'].append(row)
+            for columns_elem in root.findall('.//dataPreview:columns', ns):
+                # Get metadata
+                metadata = columns_elem.find('.//dataPreview:metadata', ns)
+                if metadata is not None:
+                    col_name = metadata.get(f'{{{ns["dataPreview"]}}}name', '')
+                    col_type = metadata.get(f'{{{ns["dataPreview"]}}}type', '')
+                    col_desc = metadata.get(f'{{{ns["dataPreview"]}}}description', '')
+                    col_length = metadata.get(f'{{{ns["dataPreview"]}}}length', '')
+
+                    table_data['columns'].append({
+                        'name': col_name,
+                        'type': col_type,
+                        'length': col_length,
+                        'description': col_desc
+                    })
+
+                    # Get data values for this column
+                    data_set = columns_elem.find('.//dataPreview:dataSet', ns)
+                    if data_set is not None:
+                        values = [data.text or '' for data in data_set.findall('.//dataPreview:data', ns)]
+                        columns_data.append((col_name, values))
+
+            # Convert column-oriented data to row-oriented
+            if columns_data:
+                num_rows = len(columns_data[0][1])  # Get row count from first column
+                for row_idx in range(num_rows):
+                    row = {}
+                    for col_name, col_values in columns_data:
+                        row[col_name] = col_values[row_idx] if row_idx < len(col_values) else ''
+                    table_data['rows'].append(row)
 
             table_data['row_count'] = len(table_data['rows'])
-
-            # Extract metadata
-            metadata_elem = root.find('.//dataPreview:metadata', ns)
-            if metadata_elem is not None:
-                for attr_name, attr_value in metadata_elem.attrib.items():
-                    table_data['metadata'][attr_name] = attr_value
 
             return table_data
 
         except ET.ParseError as e:
             logger.error(f"Failed to parse table data XML: {e}")
-            # Return minimal data on parse error
+            return {
+                'table_name': table_name,
+                'columns': [],
+                'rows': [],
+                'row_count': 0,
+                'error': str(e),
+                'raw_xml': xml_text
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error parsing table data: {e}")
             return {
                 'table_name': table_name,
                 'columns': [],

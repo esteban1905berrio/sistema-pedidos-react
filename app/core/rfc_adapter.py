@@ -123,8 +123,13 @@ class RfcAdapter:
         }
 
         # Add body if present
+        # RFC expects MESSAGE_BODY as bytes
         if body:
-            request_dict["BODY"] = body
+            # Convert string body to bytes
+            if isinstance(body, str):
+                request_dict["MESSAGE_BODY"] = body.encode('utf-8')
+            else:
+                request_dict["MESSAGE_BODY"] = body
 
         # Log request details
         logger.debug(f"RFC Request: {method} {full_uri}")
