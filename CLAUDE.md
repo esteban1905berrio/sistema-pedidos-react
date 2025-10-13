@@ -19,6 +19,7 @@ This section defines the formal software development lifecycle to be followed fo
 ### Phase 1: Requirements Analysis
 - Use `docs/requirements/pr_*.md` to analyze and refine User Stories with AI agent (requirements-analyst-ai)
 - Present analysis before implementation
+- Asks questions to broaden understanding of the requirement and avoid overlooking important points. Questions from the functional and technical perspective of the requirement.
 - Wait for user approval before proceeding
 
 ### Phase 2: Design & Framework Research
@@ -41,10 +42,37 @@ This section defines the formal software development lifecycle to be followed fo
 - When concluding each phase, update PR document with files modified (without extensive source code details)
 
 ### Phase 4: Testing
-- Run test flows via `python run_flow.py <flow_id>`
+
+**Test Organization:**
+- **All tests MUST be created in `app/tests/` directory**
+- Test naming convention: `test_<category>_<functionality>.py`
+- Integration tests that require SAP connection: Use prefix `test_fase*` or `test_<category>_category.py`
+- Debug/exploratory tests: Use prefix `test_debug_*.py`
+
+**Test Execution:**
+```bash
+# Run all tests
+.venv/bin/python -m pytest app/tests/ -v
+
+# Run specific category tests
+./run_test.sh app/tests/test_cds_category.py
+./run_test.sh app/tests/test_enhancement_category.py
+
+# Run with coverage
+.venv/bin/python -m pytest app/tests/ --cov=app --cov-report=html
+```
+
+**Coverage Requirements:**
 - 80%+ coverage for business logic
-- Healthcare logic: 95%+ coverage (authentication, medical data processing)
-- Mock external services (never call real APIs in tests)
+- All new services require corresponding test files
+- Mock external services when appropriate (never call real SAP APIs in unit tests)
+
+**Logging:**
+- **All log files MUST be stored in `logs/` directory** (ignored by git)
+- Use Python logging module with appropriate levels
+- Debug logs for development troubleshooting
+- Info logs for operation tracking
+- Never commit log files to repository
 
 ### Phase 5: Documentation
 - Use `claude-md-updater` agent for automatic documentation
@@ -78,27 +106,80 @@ This section defines the formal software development lifecycle to be followed fo
 
 ### Current Status
 
-**Implemented Tools**:
-- ✅ `get_class_source`: Get complete ABAP class source code
-- ✅ `get_class_structure`: Get class metadata, methods, attributes
-- ✅ `get_object_source`: Get source for any ABAP object by ADT URI
-- ✅ `search_objects`: Search ABAP objects by name pattern (supports wildcards)
-- ✅ `get_program_source`: Get ABAP program/report source code
-- ✅ `get_include_source`: Get program include source code
+**Project Metrics:**
+- ✅ **59 MCP Tools** implemented across 10 categories
+- ✅ **17 Services** created
+- ✅ **Unified Architecture**: All services use `RfcAdapter`
+- ✅ **67% Testing Coverage** (40/59 tools fully tested)
 
-**To Be Implemented** (from reference projects):
-- 🔲 `lock`/`unlock`: Lock/unlock objects for editing
-- 🔲 `set_object_source`: Modify ABAP object source code
-- 🔲 `activate`: Activate ABAP objects after modification
-- 🔲 `create`: Create new ABAP objects
-- 🔲 `delete`: Delete ABAP objects
-- 🔲 `transport_info`: Get transport request information
-- 🔲 `create_transport`: Create transport requests
-- 🔲 `syntax_check`: Perform syntax checks on code
-- 🔲 `prettyprint`: Format ABAP code
-- 🔲 `code_completion`: Get code completion suggestions
-- 🔲 `get_table`: Retrieve ABAP table/structure definitions
-- 🔲 `run_unit_tests`: Execute ABAP unit tests
+**Tool Categories (59 total):**
+1. **Repository & Source** (9 tools) - Class, program, object source code operations
+2. **Data Dictionary** (4 tools) - DDIC elements, annotations, package search
+3. **Query & Preview** (2 tools) - Table contents, SQL queries
+4. **Transport Management** (14 tools) - Complete transport lifecycle
+5. **Object Modification** (3 tools) - Lock, unlock, modify source
+6. **Activation** (3 tools) - Activate objects, batch activation, inactive list
+7. **Code Quality** (4 tools) - Syntax check, pretty print, settings
+8. **Lifecycle** (4 tools) - Create, delete, validate, unit tests
+9. **Where-Used Analysis** (2 tools) - Usage snippets, dependencies
+10. **CDS Views** (4 tools) - CDS metadata, source, search, properties
+11. **RAP Objects** (8 tools) - Service bindings, definitions, OData, DDLX, BDEF, explorer
+12. **Enhancements** (3 tools) - Search, metadata, source (ENHO types)
+
+**See [README.md](README.md) for complete tool list and usage examples.**
+
+## Project Organization
+
+### Directory Structure
+
+```
+brootpersonalagent/
+├── app/                           # Main application code
+│   ├── core/                      # Core infrastructure (RFC, adapter, config)
+│   ├── services/                  # 17 business logic services
+│   ├── mcp/                       # MCP server and tool registration
+│   │   ├── server.py              # Main MCP server
+│   │   └── tools/                 # 59 MCP tool definitions
+│   └── tests/                     # ⚠️ ALL TESTS GO HERE
+│       ├── test_fase*.py          # Phase validation tests
+│       ├── test_*_category.py     # Category tests (CDS, RAP, Enhancement)
+│       └── test_debug_*.py        # Debug/exploratory tests
+│
+├── docs/                          # Documentation
+│   ├── requirements/              # PR and requirement documents
+│   └── architecture/              # Architecture documentation
+│
+├── logs/                          # ⚠️ ALL LOG FILES GO HERE (git ignored)
+│   ├── dev_rfc.log
+│   ├── test_*.log
+│   └── debug_*.log
+│
+├── PyRFC/                         # SAP RFC SDK bindings (reference)
+├── .env                           # Environment variables (git ignored)
+├── .env.example                   # Example environment configuration
+├── .gitignore                     # Git ignore rules
+├── .mcp.json                      # MCP server configuration (git ignored)
+├── CLAUDE.md                      # This file - Claude Code instructions
+├── README.md                      # Project documentation
+├── pyproject.toml                 # Python project configuration
+├── uv.lock                        # Dependency lock file
+└── run_test.sh                    # Test execution helper script
+```
+
+### File Naming Conventions
+
+**Services:** `<category>_service.py` (e.g., `cds_service.py`, `transport_service.py`)
+**Tools:** `<category>_tools.py` (e.g., `cds_tools.py`, `transport_tools.py`)
+**Tests:** `test_<category>_<functionality>.py` (e.g., `test_cds_category.py`)
+**Logs:** Store ALL logs in `logs/` directory (never in project root)
+
+### What NOT to Commit
+
+- ❌ Log files (*.log) - use `logs/` directory
+- ❌ Environment files (.env, .mcp.json)
+- ❌ IDE config (.vscode/, .idea/, *.code-workspace)
+- ❌ Python artifacts (__pycache__/, *.pyc, .pytest_cache/)
+- ❌ Virtual environments (.venv/, venv/)
 
 ## Core Development Commands
 

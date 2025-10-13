@@ -3,7 +3,6 @@
 import logging
 from xml.etree import ElementTree as et
 from typing import List, Dict
-from pyrfc import Connection
 
 from app.core.rfc_adapter import RfcAdapter
 
@@ -25,14 +24,14 @@ XML_NAMESPACES = {
 class SearchService:
     """Service for searching ABAP objects via RFC."""
 
-    def __init__(self, connection: Connection):
+    def __init__(self, adapter: RfcAdapter):
         """
         Initialize search service.
 
         Args:
-            connection: Active RFC connection
+            adapter: RfcAdapter instance for ADT API calls
         """
-        self.adapter = RfcAdapter(connection)
+        self.adapter = adapter
 
     def search_objects(self, query: str, max_results: int = 10) -> List[Dict[str, str]]:
         """

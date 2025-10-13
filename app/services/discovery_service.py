@@ -5,7 +5,6 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
 
 from app.core.rfc_adapter import RfcAdapter
-from pyrfc import Connection
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +19,14 @@ class DiscoveryService:
     - Feature details and capabilities
     """
 
-    def __init__(self, connection: Connection):
+    def __init__(self, adapter: RfcAdapter):
         """
         Initialize the discovery service.
 
         Args:
-            connection: Active RFC connection to SAP system
+            adapter: RfcAdapter instance for ADT API calls to SAP system
         """
-        self.adapter = RfcAdapter(connection)
+        self.adapter = adapter
         logger.debug("DiscoveryService initialized")
 
     def get_object_types(self) -> List[Dict[str, Any]]:

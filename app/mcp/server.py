@@ -12,6 +12,16 @@ from app.services.discovery_service import DiscoveryService
 from app.services.navigation_service import NavigationService
 from app.services.ddic_service import DdicService
 from app.services.query_service import QueryService
+from app.services.transport_service import TransportService
+from app.services.object_service import ObjectService
+from app.services.activation_service import ActivationService
+from app.services.code_quality_service import CodeQualityService
+from app.services.creation_service import CreationService
+from app.services.unittest_service import UnittestService
+from app.services.whereused_service import WhereUsedService
+from app.services.cds_service import CDSService
+from app.services.rap_service import RAPService
+from app.services.enhancement_service import EnhancementService
 from app.mcp.tools.class_tools import register_class_tools
 from app.mcp.tools.search_tools import register_search_tools
 from app.mcp.tools.program_tools import register_program_tools
@@ -19,6 +29,16 @@ from app.mcp.tools.discovery_tools import register_discovery_tools
 from app.mcp.tools.navigation_tools import register_navigation_tools
 from app.mcp.tools.ddic_tools import register_ddic_tools
 from app.mcp.tools.query_tools import register_query_tools
+from app.mcp.tools.transport_tools import register_transport_tools
+from app.mcp.tools.object_tools import register_object_tools
+from app.mcp.tools.activation_tools import register_activation_tools
+from app.mcp.tools.code_quality_tools import register_code_quality_tools
+from app.mcp.tools.creation_tools import register_creation_tools
+from app.mcp.tools.unittest_tools import register_unittest_tools
+from app.mcp.tools.whereused_tools import register_whereused_tools
+from app.mcp.tools.cds_tools import register_cds_tools
+from app.mcp.tools.rap_tools import register_rap_tools
+from app.mcp.tools.enhancement_tools import register_enhancement_tools
 
 # Configure logging
 logging.basicConfig(
@@ -46,14 +66,29 @@ def initialize_services():
         conn = get_connection(config).__enter__()
         logger.info("RFC connection established")
 
-        # Initialize services
-        class_service = ClassService(conn)
-        search_service = SearchService(conn)
-        program_service = ProgramService(conn)
-        discovery_service = DiscoveryService(conn)
-        navigation_service = NavigationService(conn)
-        ddic_service = DdicService(conn)
-        query_service = QueryService(conn)
+        # Create single RfcAdapter instance for all services
+        from app.core.rfc_adapter import RfcAdapter
+        adapter = RfcAdapter(conn)
+        logger.info("RfcAdapter initialized")
+
+        # Initialize all services with RfcAdapter
+        class_service = ClassService(adapter)
+        search_service = SearchService(adapter)
+        program_service = ProgramService(adapter)
+        discovery_service = DiscoveryService(adapter)
+        navigation_service = NavigationService(adapter)
+        ddic_service = DdicService(adapter)
+        query_service = QueryService(adapter)
+        transport_service = TransportService(adapter)
+        object_service = ObjectService(adapter)
+        activation_service = ActivationService(adapter)
+        code_quality_service = CodeQualityService(adapter)
+        creation_service = CreationService(adapter)
+        unittest_service = UnittestService(adapter)
+        whereused_service = WhereUsedService(adapter)
+        cds_service = CDSService(adapter)
+        rap_service = RAPService(adapter)
+        enhancement_service = EnhancementService(adapter)
 
         return (
             class_service,
@@ -63,6 +98,16 @@ def initialize_services():
             navigation_service,
             ddic_service,
             query_service,
+            transport_service,
+            object_service,
+            activation_service,
+            code_quality_service,
+            creation_service,
+            unittest_service,
+            whereused_service,
+            cds_service,
+            rap_service,
+            enhancement_service,
         )
 
     except Exception as e:
@@ -80,6 +125,16 @@ logger.info("Initializing ABAP services...")
     navigation_service,
     ddic_service,
     query_service,
+    transport_service,
+    object_service,
+    activation_service,
+    code_quality_service,
+    creation_service,
+    unittest_service,
+    whereused_service,
+    cds_service,
+    rap_service,
+    enhancement_service,
 ) = initialize_services()
 logger.info("Services initialized successfully")
 
@@ -92,6 +147,16 @@ register_discovery_tools(mcp, discovery_service)
 register_navigation_tools(mcp, navigation_service)
 register_ddic_tools(mcp, ddic_service)
 register_query_tools(mcp, query_service)
+register_transport_tools(mcp, transport_service)
+register_object_tools(mcp, object_service)
+register_activation_tools(mcp, activation_service)
+register_code_quality_tools(mcp, code_quality_service)
+register_creation_tools(mcp, creation_service)
+register_unittest_tools(mcp, unittest_service)
+register_whereused_tools(mcp, whereused_service)
+register_cds_tools(mcp, cds_service)
+register_rap_tools(mcp, rap_service)
+register_enhancement_tools(mcp, enhancement_service)
 logger.info("MCP tools registered")
 
 
@@ -140,6 +205,71 @@ This MCP server provides tools to interact with SAP ABAP systems via RFC.
 - **get_table_contents**: Preview table data with filtering and limits
 - **run_query**: Execute custom SQL queries or advanced data retrieval
 
+### Transport Management Operations
+- **get_transport_request**: Get complete transport data (tasks and objects)
+- **get_transport_tasks**: Get tasks associated with a transport
+- **get_transport_objects**: Get ABAP objects from a transport or task
+- **transport_info**: Get transport information for an object
+- **create_transport**: Create a new transport request
+- **list_user_transports**: List transport requests for a user
+- **add_object_to_transport**: Assign an object to a transport request
+- **release_transport**: Release a transport request (⚠️ Use with caution!)
+- **get_transport_config**: Get transport configuration for the system
+- **delete_transport**: Delete a transport request (⚠️ Non-released only!)
+- **set_transport_owner**: Change owner of a transport request
+- **add_transport_user**: Add a collaborator to a transport
+- **get_system_users**: Get list of users in the SAP system
+- **get_transport_reference**: Get transport references for an object
+
+### Object Modification Operations
+- **lock**: Lock an ABAP object for editing (returns LOCK_HANDLE)
+- **unlock**: Unlock an object after editing
+- **set_object_source**: Modify source code of an object (requires lock)
+
+### Activation Operations
+- **activate**: Activate a single ABAP object
+- **activate_objects**: Activate multiple objects in batch
+- **get_inactive_objects**: Get list of inactive objects for current user
+
+### Code Quality Operations
+- **syntax_check**: Check ABAP code for syntax errors
+- **prettyprint**: Format ABAP code according to SAP standards
+- **get_prettyprint_settings**: Get current pretty printer settings
+- **set_prettyprint_settings**: Configure pretty printer (indentation, keyword style)
+
+### Object Lifecycle Operations
+- **create_class**: Create a new ABAP class
+- **delete_object**: Delete an ABAP object (⚠️ use with caution!)
+- **validate_object_name**: Validate object name according to SAP conventions
+
+### Unit Testing Operations
+- **run_unit_tests**: Execute ABAP unit tests with optional code coverage
+
+### Where-Used Analysis Operations
+- **get_where_used**: Find where an ABAP object is used across the system
+- **get_where_used_dependencies**: Get detailed dependency graph for an object
+
+### CDS Views & Core Data Services Operations
+- **get_cds_view_metadata**: Get metadata for CDS views including SQL view name
+- **get_cds_view_source**: Get DDL source code of CDS views
+- **search_cds_views_by_sqlview**: Search CDS views by SQL view name pattern
+- **get_cds_view_properties**: Get package, owner, and API state properties
+
+### RAP Objects & OData Services Operations
+- **get_service_binding**: Get service binding metadata (SRVB)
+- **get_service_definition_metadata**: Get service definition metadata (SRVD)
+- **get_service_definition_source**: Get service definition source code
+- **get_odata_service_info**: Get OData service information and endpoints
+- **get_metadata_extension**: Get metadata extension (DDLX) for UI annotations
+- **get_ddlx_parser_info**: Get annotation definitions for metadata extensions
+- **get_behavior_definition**: Get behavior definition (BDEF) source code
+- **explore_rap_object**: Intelligent exploration of RAP object relationships
+
+### Enhancement Operations (Ampliaciones)
+- **search_enhancements**: Search for enhancements in a package (ENHO types)
+- **get_enhancement_metadata**: Get enhancement metadata including hook implementations
+- **get_enhancement_source**: Get enhancement source code (ENHANCEMENT blocks)
+
 ## Configuration
 
 The server reads SAP connection details from environment variables:
@@ -161,6 +291,14 @@ Use this server with Claude Code to:
 5. Access Data Dictionary metadata
 6. Preview table contents and execute queries
 7. Discover available object types and ADT features
+8. Manage transport requests and change management
+9. Create and release transports programmatically
+10. Collaborate on transports with multiple users
+11. **Lock, edit, and activate ABAP objects**
+12. **Complete end-to-end modification workflows**
+13. **Work with CDS Views and Core Data Services**
+14. **Explore RAP objects and OData services**
+15. **Analyze enhancements and hook implementations**
 
 Example queries:
 - "Show me all custom classes starting with Z"
@@ -169,6 +307,22 @@ Example queries:
 - "Show me the structure of table MARA"
 - "Preview the first 10 rows of table USR02"
 - "What object types are available in the repository?"
+- "Create a new transport for my changes"
+- "List my open transport requests"
+- "What transport is object ZTEST_CLASS in?"
+- "Show me all tasks and objects in transport S4DK932806"
+- "What objects are in task S4DK932807?"
+- "Lock class ZTEST_CLASS for editing"
+- "Modify the source code of ZTEST_CLASS"
+- "Activate class ZTEST_CLASS"
+- "Show me all my inactive objects"
+- "Get metadata for CDS view ZIFII1008_2"
+- "Show me the DDL source code of CDS view ZIFII1008_2"
+- "Find all enhancements in package ZI1008"
+- "Get the source code of enhancement ZFII1008_1"
+- "Show me the service binding for ZMYSERVICE"
+- "Get the behavior definition for ZMYBO"
+- "Explore the RAP object ZMYSERVICEDEF"
 """
 
 

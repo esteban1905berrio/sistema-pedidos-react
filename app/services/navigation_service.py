@@ -5,7 +5,6 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
 
 from app.core.rfc_adapter import RfcAdapter
-from pyrfc import Connection
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +16,14 @@ class NavigationService:
     This service provides tools to navigate packages, folders, and object hierarchies.
     """
 
-    def __init__(self, connection: Connection):
+    def __init__(self, adapter: RfcAdapter):
         """
         Initialize the navigation service.
 
         Args:
-            connection: Active RFC connection to SAP system
+            adapter: RfcAdapter instance for ADT API calls to SAP system
         """
-        self.adapter = RfcAdapter(connection)
+        self.adapter = adapter
         logger.debug("NavigationService initialized")
 
     def get_node_contents(self, node_uri: str, project_name: str = None) -> List[Dict[str, Any]]:
