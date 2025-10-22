@@ -24,6 +24,12 @@
       "Bash(.venv/bin/python -m pytest app/tests/test_integration.py -v -s)",
       "Bash(.venv/bin/python:*)",
       "Bash(timeout 5 .venv/bin/python -m app.main:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "mcp__langgraph-docs-mcp__list_doc_sources",
+      "mcp__langgraph-docs-mcp__fetch_docs",
+      "mcp__playwright__*",
       "mcp__ABAP-ADT-RFC-Server__get_class_structure",
       "mcp__ABAP-ADT-RFC-Server__get_class_source",
       "mcp__ABAP-ADT-RFC-Server__search_objects",
@@ -31,13 +37,27 @@
       "Bash(./run_test.sh:*)",
       "Bash(/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/run_test.sh app/tests/test_cds_category.py)",
       "Bash(/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/run_test.sh app/tests/test_enhancement_category.py)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cat:*)",
+      "Skill(mcp-builder)",
+      "Read(//Users/bastianroot/.claude/skills/mcp-builder/reference/**)",
+      "Bash(gtimeout 5 .venv/bin/python -m app.main)",
+      "Read(//Users/bastianroot/**)",
+      "Bash(for file in app/services/*.py)",
+      "Bash(do python3 -m py_compile \"$file\")",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Read(//Library/Frameworks/Python.framework/Versions/3.11/bin/**)",
+      "Bash(/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/.venv/bin/python:*)"
     ],
     "deny": [],
     "ask": []
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "BrootABAPAgent"
+    "BrootABAPAgent",
+    "langgraph-docs-mcp",
+    "context7",
+    "hugging-face"
   ]
 }

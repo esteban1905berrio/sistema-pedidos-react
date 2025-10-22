@@ -5,21 +5,13 @@ from typing import Dict, Any, Optional, List
 from xml.etree import ElementTree as ET
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class CDSService:
+class CDSService(BaseService):
     """Service for CDS Views and Core Data Services operations."""
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize CDSService.
-
-        Args:
-            adapter: RFC adapter for making ADT requests
-        """
-        self.adapter = adapter
 
     def get_cds_view_metadata(
         self,
@@ -59,19 +51,20 @@ class CDSService:
         """
         logger.info(f"Getting CDS view metadata for: {cds_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/ddic/ddl/sources/{cds_name.lower()}",
-            method="GET",
-            params={"version": version},
-            content_type="application/vnd.sap.adt.ddic.ddlsources.v2+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/ddic/ddl/sources/{cds_name.lower()}",
+                method="GET",
+                params={"version": version},
+                content_type="application/vnd.sap.adt.ddic.ddlsources.v2+xml"
+            )
 
-        if response.status_code == 200:
-            return self._parse_cds_metadata(response.text)
-        else:
-            error_msg = f"{response.status_code} - Failed to get CDS metadata for {cds_name}"
-            logger.error(error_msg)
-            raise Exception(f"{error_msg}\n{response.text}")
+            if response.status_code == 200:
+                return self._parse_cds_metadata(response.text)
+            else:
+                error_msg = f"{response.status_code} - Failed to get CDS metadata for {cds_name}"
+                logger.error(error_msg)
+                raise Exception(f"{error_msg}\n{response.text}")
 
     def get_cds_view_source(
         self,
@@ -101,12 +94,13 @@ class CDSService:
         """
         logger.info(f"Getting CDS view source for: {cds_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/ddic/ddl/sources/{cds_name.lower()}/source/main",
-            method="GET",
-            params={"version": version},
-            content_type="text/plain"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/ddic/ddl/sources/{cds_name.lower()}/source/main",
+                method="GET",
+                params={"version": version},
+                content_type="text/plain"
+            )
 
         if response.status_code == 200:
             logger.info(f"Retrieved CDS source for {cds_name} ({len(response.text)} characters)")
@@ -145,15 +139,16 @@ class CDSService:
         """
         logger.info(f"Searching CDS views by SQL view name: {sql_view_name}")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/repository/informationsystem/search",
-            method="GET",
-            params={
-                "objectType": "VIEW/DV",
-                "name": sql_view_name,
-                "maxResults": str(max_results) if max_results else "100"
-            }
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/repository/informationsystem/search",
+                method="GET",
+                params={
+                    "objectType": "VIEW/DV",
+                    "name": sql_view_name,
+                    "maxResults": str(max_results) if max_results else "100"
+                }
+            )
 
         if response.status_code == 200:
             results = self._parse_search_results(response.text)
@@ -193,14 +188,15 @@ class CDSService:
         """
         logger.info(f"Getting CDS view properties for: {cds_name}")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/repository/informationsystem/objectproperties/values",
-            method="GET",
-            params={
-                "objectName": cds_name,
-                "objectType": "DDLS"
-            }
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/repository/informationsystem/objectproperties/values",
+                method="GET",
+                params={
+                    "objectName": cds_name,
+                    "objectType": "DDLS"
+                }
+            )
 
         if response.status_code == 200:
             return self._parse_object_properties(response.text)

@@ -111,28 +111,38 @@ Servidor MCP (Model Context Protocol) que permite interactuar con sistemas SAP A
 
 ## 🔧 Installation
 
-### 1. Clone and Setup
+### Automated Setup (Recommended)
+
+Use the unified setup script that handles everything automatically:
 
 ```bash
-# Clone repository
-cd /path/to/project
+cd /path/to/brootpersonalagent
 
-# Install dependencies with uv
-uv sync
-
-# Compile and install PyRFC
-cd PyRFC
-export SAPNWRFC_HOME=/usr/local/nwrfcsdk
-export DYLD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$DYLD_LIBRARY_PATH
-python3 -m pip install .
-cd ..
+# Run automated setup
+./setup.sh
 ```
 
-### 2. Configure Environment
+**What the script does**:
+- ✅ Detects OS (macOS/Linux/Windows)
+- ✅ Configures SAP RFC SDK environment variables
+- ✅ Creates virtual environment
+- ✅ Installs all dependencies (uv or pip)
+- ✅ Compiles PyRFC automatically
+- ✅ Validates `.env` configuration
+- ✅ Configures Claude Desktop integration
+- ✅ Verifies installation
 
-Create `.env` file with your SAP credentials:
+### Configure SAP Credentials
+
+Create or edit `.env` file with your SAP credentials:
 
 ```bash
+# Copy example and edit
+cp .env.example .env
+code .env
+```
+
+```env
 # Required Settings
 SAP_ASHOST=your.sap.server.com
 SAP_SYSNR=00
@@ -150,27 +160,25 @@ TEST_SEARCH_QUERY=CL_ABAP*
 TEST_PROGRAM_NAME=SAPBC_START_PROGRAMS
 ```
 
-### 3. Configure MCP for Claude Code
+### Using with Claude Desktop
 
-Create/update your `.mcp.json` file:
+If you used `./setup.sh`, Claude Desktop is already configured automatically.
 
-```json
-{
-  "mcpServers": {
-    "ABAP-ADT-RFC-Server": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "app.main"],
-      "cwd": "/path/to/brootpersonalagent",
-      "env": {
-        "SAPNWRFC_HOME": "/usr/local/nwrfcsdk",
-        "DYLD_LIBRARY_PATH": "/usr/local/nwrfcsdk/lib"
-      }
-    }
-  }
-}
+To verify the configuration:
+```bash
+# macOS
+cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
+
+# Linux
+cat ~/.config/Claude/claude_desktop_config.json
+
+# Windows
+type %APPDATA%\Claude\claude_desktop_config.json
 ```
 
-**Important**: Update `cwd` to your actual project path.
+**Manual Configuration** (if needed):
+
+See [INSTALLATION.md](INSTALLATION.md) for detailed manual setup instructions.
 
 ## 🚀 Usage
 
@@ -220,47 +228,70 @@ Create/update your `.mcp.json` file:
 ### Direct Testing (Phase-by-Phase)
 
 ```bash
-# Set environment variables first
-export SAPNWRFC_HOME=/usr/local/nwrfcsdk
-export DYLD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$DYLD_LIBRARY_PATH
+# Run all tests
+.venv/bin/python -m pytest app/tests/ -v
 
 # FASE 1: Repository & Source
-./run_test.sh app/tests/test_debug_search.py
+.venv/bin/python -m pytest app/tests/test_debug_search.py -v
 # Tests: search_objects, get_class_source, get_class_structure
 
 # FASE 2: DDIC & Data Dictionary
-./run_test.sh app/tests/test_debug_query.py
+.venv/bin/python -m pytest app/tests/test_debug_query.py -v
 # Tests: get_table_contents, run_query, get_ddic_element
 
 # FASE 3: Transport Management
-./run_test.sh app/tests/test_debug_transport_s4dk932806.py
+.venv/bin/python -m pytest app/tests/test_debug_transport_s4dk932806.py -v
 # Tests: get_transport_request, get_transport_tasks, get_transport_objects
 
 # FASE 4: Object Modification
-./run_test.sh app/tests/test_fase4_object_modification.py
+.venv/bin/python -m pytest app/tests/test_fase4_object_modification.py -v
 # Tests: lock, set_object_source, activate, unlock
 
 # FASE 5: Code Quality
-./run_test.sh app/tests/test_fase5_code_quality.py
+.venv/bin/python -m pytest app/tests/test_fase5_code_quality.py -v
 # Tests: syntax_check, prettyprint, get_prettyprint_settings
 
 # FASE 6: Lifecycle & Testing
-./run_test.sh app/tests/test_fase6_lifecycle.py
+.venv/bin/python -m pytest app/tests/test_fase6_lifecycle.py -v
 # Tests: create_class, delete_object, run_unit_tests
 
 # FASE 7: Where-Used Analysis
-./run_test.sh app/tests/test_fase7_whereused.py
+.venv/bin/python -m pytest app/tests/test_fase7_whereused.py -v
 # Tests: get_where_used, get_where_used_dependencies
 
 # New Categories: CDS Views, RAP Objects, Enhancements
-./run_test.sh app/tests/test_cds_category.py
+.venv/bin/python -m pytest app/tests/test_cds_category.py -v
 # Tests: get_cds_view_metadata, get_cds_view_source (2/4 passing)
 
-./run_test.sh app/tests/test_enhancement_category.py
+.venv/bin/python -m pytest app/tests/test_enhancement_category.py -v
 # Tests: search_enhancements, get_enhancement_metadata, get_enhancement_source (3/3 passing ✅)
 
 # RAP testing pending
-# ./run_test.sh app/tests/test_rap_category.py
+# .venv/bin/python -m pytest app/tests/test_rap_category.py -v
+```
+
+## 🔧 Setup Script
+
+The project includes a unified installation script:
+
+### `setup.sh` - Complete Automated Setup
+Handles everything in a single command:
+- ✅ Detects OS (macOS/Linux/Windows)
+- ✅ Configures SAP RFC SDK environment variables
+- ✅ Creates virtual environment
+- ✅ Installs dependencies (uv or pip)
+- ✅ Compiles PyRFC automatically
+- ✅ Validates `.env` configuration
+- ✅ Configures Claude Desktop integration
+- ✅ Verifies installation
+
+```bash
+./setup.sh
+```
+
+After running the setup, you can run tests directly:
+```bash
+.venv/bin/python -m pytest app/tests/ -v
 ```
 
 ## 📁 Project Structure
@@ -373,15 +404,6 @@ uv run python app/tests/test_fase5_code_quality.py
 
 # Test class creation and lifecycle
 uv run python app/tests/test_fase6_lifecycle.py
-```
-
-### Using run_test.sh Wrapper
-
-```bash
-# Automatically sets environment variables
-./run_test.sh app/tests/test_debug_search.py
-./run_test.sh app/tests/test_debug_query.py
-./run_test.sh app/tests/test_debug_transport_s4dk932806.py
 ```
 
 ### Run All Tests with Pytest

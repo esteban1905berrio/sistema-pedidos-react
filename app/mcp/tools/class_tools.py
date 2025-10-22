@@ -20,6 +20,13 @@ def register_class_tools(mcp: FastMCP, class_service: ClassService):
         name="get_class_source",
         description="Get the source code of an ABAP class from SAP system. "
         "Returns the complete class definition including methods, attributes, and implementation.",
+        annotations={
+            "title": "Get Class Source Code",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True
+        }
     )
     def get_class_source(
         class_name: str = Field(
@@ -48,6 +55,13 @@ def register_class_tools(mcp: FastMCP, class_service: ClassService):
         "Returns class components (methods, attributes), visibility, and other metadata without the full source code. "
         "IMPORTANT: Only use this tool when the user specifically asks for class structure/metadata. "
         "For general class information, use get_class_source instead.",
+        annotations={
+            "title": "Get Class Structure",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True
+        }
     )
     def get_class_structure(
         class_name: str = Field(

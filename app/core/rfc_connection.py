@@ -50,10 +50,52 @@ class RfcConnectionPool:
         logger.info(f"Creating new RFC connection to {self.config.ashost}")
         return Connection(**params)
 
+    def _is_connection_alive(self, conn: Connection) -> bool:
+        """
+        Check if a connection is still alive and valid.
+
+        Args:
+            conn: Connection to check
+
+        Returns:
+            bool: True if connection is alive, False otherwise
+        """
+        if conn is None:
+            return False
+
+        try:
+            # Try to ping the connection
+            conn.call('RFC_PING')
+            return True
+        except Exception as e:
+            logger.debug(f"Connection health check failed: {e}")
+            return False
+
+    def _remove_dead_connection(self, conn_index: int):
+        """
+        Remove a dead connection from the pool.
+
+        Args:
+            conn_index: Index of the connection to remove
+        """
+        with self._lock:
+            if conn_index < len(self._connections):
+                old_conn = self._connections[conn_index]
+                if old_conn:
+                    try:
+                        old_conn.close()
+                    except:
+                        pass
+                self._connections[conn_index] = None
+                logger.info(f"Removed dead connection {conn_index} from pool")
+
     @contextmanager
     def get_connection(self):
         """
         Get a connection from the pool (context manager).
+
+        This method validates connection health before reusing and
+        automatically recreates dead connections.
 
         Usage:
             with pool.get_connection() as conn:
@@ -70,11 +112,20 @@ class RfcConnectionPool:
                 # Try to find an available connection
                 for i, available in enumerate(self._available):
                     if available:
-                        conn = self._connections[i]
-                        self._available[i] = False
-                        conn_index = i
-                        logger.debug(f"Reusing connection {i} from pool")
-                        break
+                        potential_conn = self._connections[i]
+
+                        # Validate connection health before reusing
+                        if self._is_connection_alive(potential_conn):
+                            conn = potential_conn
+                            self._available[i] = False
+                            conn_index = i
+                            logger.debug(f"Reusing healthy connection {i} from pool")
+                            break
+                        else:
+                            # Connection is dead, remove it and try next
+                            logger.warning(f"Connection {i} is dead, removing from pool")
+                            self._remove_dead_connection(i)
+                            continue
 
                 # If no available connection and pool not full, create new one
                 if conn is None and len(self._connections) < self.pool_size:

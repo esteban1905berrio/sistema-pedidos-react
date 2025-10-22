@@ -5,21 +5,13 @@ from typing import List, Dict, Any, Optional
 from xml.etree import ElementTree as ET
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class WhereUsedService:
+class WhereUsedService(BaseService):
     """Service for finding where ABAP objects are used."""
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize WhereUsedService.
-
-        Args:
-            adapter: RFC adapter for making ADT requests
-        """
-        self.adapter = adapter
 
     def get_usage_references(
         self,
@@ -75,29 +67,30 @@ class WhereUsedService:
         full_uri = f"/sap/bc/adt/repository/informationsystem/usageReferences?uri={object_uri}"
 
         # Make POST request
-        response = self.adapter.request(
-            uri=full_uri,
-            method="POST",
-            params={},
-            body=body,
-            headers={
-                "Accept": "application/vnd.sap.adt.repository.usagereferences.result.v1+xml"
-            },
-            content_type="application/vnd.sap.adt.repository.usagereferences.request.v1+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=full_uri,
+                method="POST",
+                params={},
+                body=body,
+                headers={
+                    "Accept": "application/vnd.sap.adt.repository.usagereferences.result.v1+xml"
+                },
+                content_type="application/vnd.sap.adt.repository.usagereferences.request.v1+xml"
+            )
 
-        # Log response for debugging
-        logger.debug(f"Response status: {response.status_code}")
-        logger.debug(f"Response XML (first 1000 chars): {response.text[:1000]}")
+            # Log response for debugging
+            logger.debug(f"Response status: {response.status_code}")
+            logger.debug(f"Response XML (first 1000 chars): {response.text[:1000]}")
 
-        # Parse XML response
-        result = self._parse_usage_references_response(response.text)
+            # Parse XML response
+            result = self._parse_usage_references_response(response.text)
 
-        logger.info(
-            f"Found {result.get('total_references', 0)} references for {object_uri}"
-        )
+            logger.info(
+                f"Found {result.get('total_references', 0)} references for {object_uri}"
+            )
 
-        return result
+            return result
 
     def get_usage_snippets(
         self,
@@ -151,16 +144,17 @@ class WhereUsedService:
         body = self._build_usage_snippets_xml(object_identifier)
 
         # Make POST request
-        response = self.adapter.request(
-            uri="/sap/bc/adt/repository/informationsystem/usageSnippets",
-            method="POST",
-            params={},
-            body=body,
-            headers={
-                "Accept": "application/vnd.sap.adt.repository.usagesnippets.result.v1+xml"
-            },
-            content_type="application/vnd.sap.adt.repository.usagesnippets.request.v1+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/repository/informationsystem/usageSnippets",
+                method="POST",
+                params={},
+                body=body,
+                headers={
+                    "Accept": "application/vnd.sap.adt.repository.usagesnippets.result.v1+xml"
+                },
+                content_type="application/vnd.sap.adt.repository.usagesnippets.request.v1+xml"
+            )
 
         # Log response for debugging
         logger.debug(f"Response status: {response.status_code}")

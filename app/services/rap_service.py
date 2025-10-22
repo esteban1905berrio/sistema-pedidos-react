@@ -5,23 +5,15 @@ from typing import Dict, Any, Optional, List
 from xml.etree import ElementTree as ET
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class RAPService:
+class RAPService(BaseService):
     """Service for RAP objects: Service Binding, Service Definition, Metadata Extension, Behavior Definition."""
 
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize RAPService.
-
-        Args:
-            adapter: RFC adapter for making ADT requests
-        """
-        self.adapter = adapter
-
-    # ============================================================================
+# ============================================================================
     # SERVICE BINDING & DEFINITION
     # ============================================================================
 
@@ -57,12 +49,13 @@ class RAPService:
         """
         logger.info(f"Getting Service Binding metadata for: {binding_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/businessservices/bindings/{binding_name.lower()}",
-            method="GET",
-            params={"version": version},
-            content_type="application/vnd.sap.adt.businessservices.odatav2+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/businessservices/bindings/{binding_name.lower()}",
+                method="GET",
+                params={"version": version},
+                content_type="application/vnd.sap.adt.businessservices.odatav2+xml"
+            )
 
         if response.status_code == 200:
             return self._parse_service_binding(response.text)
@@ -97,12 +90,13 @@ class RAPService:
         """
         logger.info(f"Getting Service Definition metadata for: {srvd_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/ddic/srvd/sources/{srvd_name.lower()}",
-            method="GET",
-            params={"version": version},
-            content_type="application/vnd.sap.adt.ddic.srvd.v1+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/ddic/srvd/sources/{srvd_name.lower()}",
+                method="GET",
+                params={"version": version},
+                content_type="application/vnd.sap.adt.ddic.srvd.v1+xml"
+            )
 
         if response.status_code == 200:
             return self._parse_service_definition_metadata(response.text)
@@ -135,12 +129,13 @@ class RAPService:
         """
         logger.info(f"Getting Service Definition source for: {srvd_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/ddic/srvd/sources/{srvd_name.lower()}/source/main",
-            method="GET",
-            params={"version": version},
-            content_type="text/plain"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/ddic/srvd/sources/{srvd_name.lower()}/source/main",
+                method="GET",
+                params={"version": version},
+                content_type="text/plain"
+            )
 
         if response.status_code == 200:
             logger.info(f"Retrieved Service Definition source for {srvd_name} ({len(response.text)} characters)")
@@ -176,11 +171,12 @@ class RAPService:
         """
         logger.info(f"Getting OData service info for: {service_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/businessservices/odatav2/{service_name.lower()}",
-            method="GET",
-            params={}
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/businessservices/odatav2/{service_name.lower()}",
+                method="GET",
+                params={}
+            )
 
         if response.status_code == 200:
             return self._parse_odata_service_info(response.text)
@@ -222,12 +218,13 @@ class RAPService:
         """
         logger.info(f"Getting Metadata Extension for: {ddlx_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/ddic/ddlx/sources/{ddlx_name.lower()}",
-            method="GET",
-            params={"version": version},
-            content_type="application/vnd.sap.adt.ddic.ddlx.v1+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/ddic/ddlx/sources/{ddlx_name.lower()}",
+                method="GET",
+                params={"version": version},
+                content_type="application/vnd.sap.adt.ddic.ddlx.v1+xml"
+            )
 
         if response.status_code == 200:
             return self._parse_metadata_extension(response.text)
@@ -253,12 +250,13 @@ class RAPService:
         """
         logger.info("Getting DDLX parser info")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/ddic/ddlx/parser/info",
-            method="GET",
-            params={},
-            content_type="application/vnd.sap.adt.ddlx.parserinfo.v3+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/ddic/ddlx/parser/info",
+                method="GET",
+                params={},
+                content_type="application/vnd.sap.adt.ddlx.parserinfo.v3+xml"
+            )
 
         if response.status_code == 200:
             return self._parse_ddlx_parser_info(response.text)
@@ -299,12 +297,13 @@ class RAPService:
         """
         logger.info(f"Getting Behavior Definition for: {bdef_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/bo/behaviordefinitions/{bdef_name.lower()}",
-            method="GET",
-            params={"version": version},
-            content_type="application/vnd.sap.adt.blues.v1+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/bo/behaviordefinitions/{bdef_name.lower()}",
+                method="GET",
+                params={"version": version},
+                content_type="application/vnd.sap.adt.blues.v1+xml"
+            )
 
         if response.status_code == 200:
             logger.info(f"Retrieved Behavior Definition for {bdef_name} ({len(response.text)} characters)")

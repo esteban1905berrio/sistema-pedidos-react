@@ -4,21 +4,13 @@ import logging
 from typing import Literal
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class ProgramService:
+class ProgramService(BaseService):
     """Service for ABAP program operations via RFC."""
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize program service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls
-        """
-        self.adapter = adapter
 
     def get_program_source(
         self, program_name: str, version: Literal["active", "inactive"] = "active"
@@ -46,13 +38,14 @@ class ProgramService:
 
         logger.info(f"Fetching source for program {program_name} ({version})")
 
-        response = self.adapter.request(
-            uri=uri,
-            method="GET",
-            params=params,
-            body="",
-            content_type="text/plain",
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=uri,
+                method="GET",
+                params=params,
+                body="",
+                content_type="text/plain",
+            )
 
         if response.status_code == 200:
             logger.debug(f"Successfully retrieved source for {program_name}")
@@ -83,13 +76,14 @@ class ProgramService:
 
         logger.info(f"Setting source for program {program_name}")
 
-        response = self.adapter.request(
-            uri=uri,
-            method="PUT",
-            params={"lockHandle": lock_handle},
-            body=source_code,
-            content_type="text/plain; charset=utf-8",
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=uri,
+                method="PUT",
+                params={"lockHandle": lock_handle},
+                body=source_code,
+                content_type="text/plain; charset=utf-8",
+            )
 
         if response.status_code == 200:
             logger.debug(f"Successfully set source for {program_name}")
@@ -123,13 +117,14 @@ class ProgramService:
 
         logger.info(f"Fetching source for include {include_name} in {program_name}")
 
-        response = self.adapter.request(
-            uri=uri,
-            method="GET",
-            params=params,
-            body="",
-            content_type="text/plain",
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=uri,
+                method="GET",
+                params=params,
+                body="",
+                content_type="text/plain",
+            )
 
         if response.status_code == 200:
             logger.debug(f"Successfully retrieved include {include_name}")

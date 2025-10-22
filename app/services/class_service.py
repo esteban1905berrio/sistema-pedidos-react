@@ -5,6 +5,7 @@ import xml.etree.ElementTree as et
 from typing import Literal, Dict, Any, List
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
@@ -39,17 +40,10 @@ class ClassStructureResult(Dict[str, Any]):
     pass
 
 
-class ClassService:
+class ClassService(BaseService):
     """Service for ABAP class operations via RFC."""
 
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize class service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls
-        """
-        self.adapter = adapter
+    pass  # Inherits __init__ and _get_adapter from BaseService
 
     def get_class_source(
         self,
@@ -76,13 +70,15 @@ class ClassService:
 
         logger.info(f"Fetching source for class {class_name} ({version})")
 
-        response = self.adapter.request(
-            uri=uri,
-            method="GET",
-            params=params,
-            body="",
-            content_type="text/plain",
-        )
+        # Use connection pool - acquire connection per request
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=uri,
+                method="GET",
+                params=params,
+                body="",
+                content_type="text/plain",
+            )
 
         if response.status_code == 200:
             logger.debug(f"Successfully retrieved source for {class_name}")
@@ -118,13 +114,14 @@ class ClassService:
 
         logger.info(f"Setting source for class {class_name}")
 
-        response = self.adapter.request(
-            uri=uri,
-            method="PUT",
-            params={"lockHandle": lock_handle},
-            body=source_code,
-            content_type="text/plain; charset=utf-8",
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=uri,
+                method="PUT",
+                params={"lockHandle": lock_handle},
+                body=source_code,
+                content_type="text/plain; charset=utf-8",
+            )
 
         if response.status_code == 200:
             logger.debug(f"Successfully set source for {class_name}")
@@ -159,13 +156,14 @@ class ClassService:
 
         logger.info(f"Fetching structure for class {class_name}")
 
-        response = self.adapter.request(
-            uri=uri,
-            method="GET",
-            params={"version": version, "withShortDescriptions": True},
-            body="",
-            content_type="application/*",
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=uri,
+                method="GET",
+                params={"version": version, "withShortDescriptions": True},
+                body="",
+                content_type="application/*",
+            )
 
         if 200 <= response.status_code < 300:
             structure = self._parse_class_structure(response.text)
@@ -272,9 +270,10 @@ class ClassService:
 
         logger.info(f"Fetching source for URI: {object_uri}")
 
-        response = self.adapter.request(
-            uri=object_uri, method="GET", params=params, body="", content_type="application/xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=object_uri, method="GET", params=params, body="", content_type="application/xml"
+            )
 
         if response.status_code == 200:
             return response.text
@@ -311,12 +310,13 @@ class ClassService:
         """
         logger.info(f"Getting includes for class: {class_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/oo/classes/{class_name.lower()}/includes",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/oo/classes/{class_name.lower()}/includes",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             includes = self._parse_class_includes(response.text)
@@ -409,12 +409,13 @@ class ClassService:
         if not structure_uri.endswith('/objectstructure'):
             structure_uri = f"{object_uri}/objectstructure"
 
-        response = self.adapter.request(
-            uri=structure_uri,
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=structure_uri,
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             structure = self._parse_object_structure(response.text)

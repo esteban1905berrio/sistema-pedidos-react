@@ -12,7 +12,7 @@ import pytest
 import os
 from dotenv import load_dotenv
 
-from app.core.rfc_connection import get_connection
+from app.core.rfc_connection import RfcConnectionPool
 from app.core.config import SAPConfig
 from app.services.class_service import ClassService
 from app.services.search_service import SearchService
@@ -45,28 +45,30 @@ def sap_config():
 
 
 @pytest.fixture(scope="module")
-def rfc_connection(sap_config):
-    """Get RFC connection from pool."""
-    with get_connection(sap_config) as conn:
-        yield conn
+def connection_pool(sap_config):
+    """Create RFC connection pool."""
+    pool = RfcConnectionPool(sap_config, pool_size=2)
+    yield pool
+    # Cleanup: close all connections when done
+    pool.close_all()
 
 
 @pytest.fixture
-def class_service(rfc_connection):
+def class_service(connection_pool):
     """Create ClassService instance."""
-    return ClassService(rfc_connection)
+    return ClassService(connection_pool)
 
 
 @pytest.fixture
-def search_service(rfc_connection):
+def search_service(connection_pool):
     """Create SearchService instance."""
-    return SearchService(rfc_connection)
+    return SearchService(connection_pool)
 
 
 @pytest.fixture
-def program_service(rfc_connection):
+def program_service(connection_pool):
     """Create ProgramService instance."""
-    return ProgramService(rfc_connection)
+    return ProgramService(connection_pool)
 
 
 class TestClassServiceIntegration:

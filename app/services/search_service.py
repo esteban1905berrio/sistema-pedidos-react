@@ -5,6 +5,7 @@ from xml.etree import ElementTree as et
 from typing import List, Dict
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +22,8 @@ XML_NAMESPACES = {
 }
 
 
-class SearchService:
+class SearchService(BaseService):
     """Service for searching ABAP objects via RFC."""
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize search service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls
-        """
-        self.adapter = adapter
 
     def search_objects(self, query: str, max_results: int = 10) -> List[Dict[str, str]]:
         """
@@ -57,12 +49,13 @@ class SearchService:
 
         logger.info(f"Searching for objects matching: {query}")
 
-        response = self.adapter.request(
-            uri=uri,
-            method="GET",
-            params={"operation": "quickSearch", "query": query, "maxResults": max_results},
-            body="",
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=uri,
+                method="GET",
+                params={"operation": "quickSearch", "query": query, "maxResults": max_results},
+                body="",
+            )
 
         if response.status_code == 200:
             elements = self._parse_search_results(response.text)

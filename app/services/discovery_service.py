@@ -5,11 +5,12 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class DiscoveryService:
+class DiscoveryService(BaseService):
     """
     Service for discovering ABAP repository capabilities and object types.
 
@@ -18,16 +19,6 @@ class DiscoveryService:
     - ADT features available
     - Feature details and capabilities
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the discovery service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("DiscoveryService initialized")
 
     def get_object_types(self) -> List[Dict[str, Any]]:
         """
@@ -49,12 +40,13 @@ class DiscoveryService:
         """
         logger.info("Getting object types from SAP system")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/repository/typestructure",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/repository/typestructure",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             object_types = self._parse_object_types(response.text)
@@ -82,12 +74,13 @@ class DiscoveryService:
         """
         logger.info("Getting ADT discovery information")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/discovery",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/discovery",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             discovery_data = self._parse_adt_discovery(response.text)
@@ -119,12 +112,13 @@ class DiscoveryService:
         """
         logger.info(f"Getting details for feature: {feature_name}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/discovery/{feature_name}",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/discovery/{feature_name}",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             feature_data = self._parse_feature_details(response.text)

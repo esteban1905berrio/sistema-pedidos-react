@@ -5,21 +5,13 @@ from typing import Dict, Any, List
 from xml.etree import ElementTree as ET
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class EnhancementService:
+class EnhancementService(BaseService):
     """Service for Enhancement operations (Hook Implementations, BAdI, etc.)."""
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize EnhancementService.
-
-        Args:
-            adapter: RFC adapter for making ADT requests
-        """
-        self.adapter = adapter
 
     def search_enhancements(
         self,
@@ -59,22 +51,23 @@ class EnhancementService:
         # Build XML request body with facet preselection
         body = self._build_search_xml(package, enhancement_type)
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/repository/informationsystem/virtualfolders/contents",
-            method="POST",
-            params={},
-            body=body,
-            content_type="application/vnd.sap.adt.repository.virtualfolders.request.v1+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/repository/informationsystem/virtualfolders/contents",
+                method="POST",
+                params={},
+                body=body,
+                content_type="application/vnd.sap.adt.repository.virtualfolders.request.v1+xml"
+            )
 
-        if response.status_code == 200:
-            results = self._parse_search_results(response.text)
-            logger.info(f"Found {len(results)} enhancements in package {package}")
-            return results
-        else:
-            error_msg = f"{response.status_code} - Failed to search enhancements in {package}"
-            logger.error(error_msg)
-            raise Exception(f"{error_msg}\n{response.text}")
+            if response.status_code == 200:
+                results = self._parse_search_results(response.text)
+                logger.info(f"Found {len(results)} enhancements in package {package}")
+                return results
+            else:
+                error_msg = f"{response.status_code} - Failed to search enhancements in {package}"
+                logger.error(error_msg)
+                raise Exception(f"{error_msg}\n{response.text}")
 
     def get_enhancement_metadata(
         self,
@@ -124,12 +117,13 @@ class EnhancementService:
         """
         logger.info(f"Getting enhancement metadata for: {enhancement_name} (subtype: {enhancement_subtype})")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/enhancements/{enhancement_subtype}/{enhancement_name.lower()}",
-            method="GET",
-            params={},
-            content_type="application/vnd.sap.adt.enh.enhoxhh.v3+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/enhancements/{enhancement_subtype}/{enhancement_name.lower()}",
+                method="GET",
+                params={},
+                content_type="application/vnd.sap.adt.enh.enhoxhh.v3+xml"
+            )
 
         if response.status_code == 200:
             return self._parse_enhancement_metadata(response.text)
@@ -163,12 +157,13 @@ class EnhancementService:
         """
         logger.info(f"Getting enhancement source for: {enhancement_name} (subtype: {enhancement_subtype})")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/enhancements/{enhancement_subtype}/{enhancement_name.lower()}/source/main",
-            method="GET",
-            params={},
-            content_type="text/plain"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/enhancements/{enhancement_subtype}/{enhancement_name.lower()}/source/main",
+                method="GET",
+                params={},
+                content_type="text/plain"
+            )
 
         if response.status_code == 200:
             logger.info(f"Retrieved enhancement source for {enhancement_name} ({len(response.text)} characters)")
