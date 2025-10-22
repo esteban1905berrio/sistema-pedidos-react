@@ -52,7 +52,7 @@ mcp = FastMCP("ABAP-ADT-RFC-Server")
 
 def initialize_services():
     """
-    Initialize services with RFC connection.
+    Initialize services with RFC connection pool.
 
     Returns:
         tuple: All initialized service instances
@@ -62,33 +62,35 @@ def initialize_services():
         config = load_config()
         logger.info(f"Loaded SAP configuration for {config.ashost}:{config.sysnr}")
 
-        # Get RFC connection from pool
-        conn = get_connection(config).__enter__()
-        logger.info("RFC connection established")
+        # Initialize connection pool (not acquiring connection yet)
+        from app.core.rfc_connection import get_connection_pool
+        pool = get_connection_pool(config)
+        logger.info("RFC connection pool initialized")
 
-        # Create single RfcAdapter instance for all services
+        # Store config and pool for per-request connection acquisition
+        # Services will use the pool to get connections when needed
         from app.core.rfc_adapter import RfcAdapter
-        adapter = RfcAdapter(conn)
-        logger.info("RfcAdapter initialized")
+        logger.info("RfcAdapter will use connection pool for requests")
 
-        # Initialize all services with RfcAdapter
-        class_service = ClassService(adapter)
-        search_service = SearchService(adapter)
-        program_service = ProgramService(adapter)
-        discovery_service = DiscoveryService(adapter)
-        navigation_service = NavigationService(adapter)
-        ddic_service = DdicService(adapter)
-        query_service = QueryService(adapter)
-        transport_service = TransportService(adapter)
-        object_service = ObjectService(adapter)
-        activation_service = ActivationService(adapter)
-        code_quality_service = CodeQualityService(adapter)
-        creation_service = CreationService(adapter)
-        unittest_service = UnittestService(adapter)
-        whereused_service = WhereUsedService(adapter)
-        cds_service = CDSService(adapter)
-        rap_service = RAPService(adapter)
-        enhancement_service = EnhancementService(adapter)
+        # Initialize all services with connection pool (not adapter yet)
+        # Services will create adapters per-request using the pool
+        class_service = ClassService(pool)
+        search_service = SearchService(pool)
+        program_service = ProgramService(pool)
+        discovery_service = DiscoveryService(pool)
+        navigation_service = NavigationService(pool)
+        ddic_service = DdicService(pool)
+        query_service = QueryService(pool)
+        transport_service = TransportService(pool)
+        object_service = ObjectService(pool)
+        activation_service = ActivationService(pool)
+        code_quality_service = CodeQualityService(pool)
+        creation_service = CreationService(pool)
+        unittest_service = UnittestService(pool)
+        whereused_service = WhereUsedService(pool)
+        cds_service = CDSService(pool)
+        rap_service = RAPService(pool)
+        enhancement_service = EnhancementService(pool)
 
         return (
             class_service,

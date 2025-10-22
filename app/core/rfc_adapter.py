@@ -3,6 +3,7 @@
 import logging
 from typing import Literal, Dict, Any, Optional
 from pyrfc import Connection
+from app.core.retry_handler import retry_on_network_error, rfc_circuit_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +139,8 @@ class RfcAdapter:
             logger.debug(f"Body length: {len(body)}")
 
         try:
-            # Execute RFC call
-            result = self.conn.call("SADT_REST_RFC_ENDPOINT", REQUEST=request_dict)
+            # Execute RFC call with retry logic and circuit breaker
+            result = self._call_with_retry(request_dict)
 
             # Wrap response
             response = RfcResponse(result)
@@ -152,6 +153,27 @@ class RfcAdapter:
         except Exception as e:
             logger.error(f"RFC call failed: {e}")
             raise
+
+    @retry_on_network_error()
+    @rfc_circuit_breaker
+    def _call_with_retry(self, request_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute RFC call with retry logic.
+
+        This method is decorated with retry logic and circuit breaker.
+        It will automatically retry on transient network errors with
+        exponential backoff.
+
+        Args:
+            request_dict: RFC request dictionary
+
+        Returns:
+            Dict[str, Any]: RFC response
+
+        Raises:
+            Exception: If all retry attempts fail
+        """
+        return self.conn.call("SADT_REST_RFC_ENDPOINT", REQUEST=request_dict)
 
     def _build_uri(self, uri: str, params: Optional[Dict[str, Any]]) -> str:
         """Build full URI with query parameters."""

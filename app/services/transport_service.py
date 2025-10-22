@@ -5,11 +5,12 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class TransportService:
+class TransportService(BaseService):
     """
     Service for managing ABAP transport requests (CTS).
 
@@ -20,16 +21,6 @@ class TransportService:
     - Release transports
     - Manage transport collaboration
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the transport service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("TransportService initialized")
 
     # Sprint 3.1: Transport Info & Creation
 
@@ -66,12 +57,13 @@ class TransportService:
         if operation:
             params["operation"] = operation
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/cts/transportinformation",
-            method="GET",
-            params=params,
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/cts/transportinformation",
+                method="GET",
+                params=params,
+                body=""
+            )
 
         if response.status_code == 200:
             transport_data = self._parse_transport_info(response.text)
@@ -113,13 +105,14 @@ class TransportService:
     <tm:target></tm:target>
 </tm:request>"""
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/cts/transports",
-            method="POST",
-            params={"devclass": dev_class},
-            body=body,
-            content_type="application/vnd.sap.adt.transportrequests.v1+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/cts/transports",
+                method="POST",
+                params={"devclass": dev_class},
+                body=body,
+                content_type="application/vnd.sap.adt.transportrequests.v1+xml"
+            )
 
         if response.status_code in [200, 201]:
             transport_number = self._extract_transport_number(response.text)
@@ -162,12 +155,13 @@ class TransportService:
         if status:
             params["status"] = status
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/cts/transports",
-            method="GET",
-            params=params,
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/cts/transports",
+                method="GET",
+                params=params,
+                body=""
+            )
 
         if response.status_code == 200:
             transports = self._parse_transport_list(response.text)
@@ -205,12 +199,13 @@ class TransportService:
         """
         logger.info(f"Getting transport request data: {transport_number}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/cts/transportrequests/{transport_number}",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/cts/transportrequests/{transport_number}",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             transport_data = self._parse_transport_request(response.text)
@@ -310,13 +305,14 @@ class TransportService:
         if lock_handle:
             params["lockHandle"] = lock_handle
 
-        response = self.adapter.request(
-            uri=object_uri,
-            method="POST",
-            params=params,
-            body="",
-            content_type="application/xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=object_uri,
+                method="POST",
+                params=params,
+                body="",
+                content_type="application/xml"
+            )
 
         if response.status_code in [200, 204]:
             logger.info(f"Successfully added object to transport")
@@ -351,12 +347,13 @@ class TransportService:
         if ignore_atc:
             params["ignore_atc"] = "true"
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/cts/transports/{transport_number}/release",
-            method="POST",
-            params=params,
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/cts/transports/{transport_number}/release",
+                method="POST",
+                params=params,
+                body=""
+            )
 
         if response.status_code in [200, 204]:
             result = self._parse_release_result(response.text)
@@ -380,12 +377,13 @@ class TransportService:
         """
         logger.info("Getting transport configuration")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/cts/transportconfiguration",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/cts/transportconfiguration",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             config = self._parse_transport_config(response.text)
@@ -412,12 +410,13 @@ class TransportService:
         """
         logger.info(f"Deleting transport: {transport_number}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/cts/transports/{transport_number}",
-            method="DELETE",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/cts/transports/{transport_number}",
+                method="DELETE",
+                params={},
+                body=""
+            )
 
         if response.status_code in [200, 204]:
             logger.info(f"Transport deleted successfully")
@@ -453,13 +452,14 @@ class TransportService:
         body = f"""<?xml version="1.0" encoding="UTF-8"?>
 <tm:owner xmlns:tm="http://www.sap.com/adt/cts/transports">{target_user}</tm:owner>"""
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/cts/transports/{transport_number}/owner",
-            method="POST",
-            params={},
-            body=body,
-            content_type="application/xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/cts/transports/{transport_number}/owner",
+                method="POST",
+                params={},
+                body=body,
+                content_type="application/xml"
+            )
 
         if response.status_code in [200, 204]:
             logger.info(f"Transport owner changed successfully")
@@ -493,13 +493,14 @@ class TransportService:
         body = f"""<?xml version="1.0" encoding="UTF-8"?>
 <tm:user xmlns:tm="http://www.sap.com/adt/cts/transports">{user}</tm:user>"""
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/cts/transports/{transport_number}/users",
-            method="POST",
-            params={},
-            body=body,
-            content_type="application/xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/cts/transports/{transport_number}/users",
+                method="POST",
+                params={},
+                body=body,
+                content_type="application/xml"
+            )
 
         if response.status_code in [200, 201, 204]:
             logger.info(f"User added to transport successfully")
@@ -522,12 +523,13 @@ class TransportService:
         """
         logger.info("Getting system users")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/cts/users",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/cts/users",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             users = self._parse_user_list(response.text)
@@ -571,12 +573,13 @@ class TransportService:
         if tr_number:
             params["tr_number"] = tr_number
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/cts/transportreference",
-            method="GET",
-            params=params,
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/cts/transportreference",
+                method="GET",
+                params=params,
+                body=""
+            )
 
         if response.status_code == 200:
             references = self._parse_transport_references(response.text)

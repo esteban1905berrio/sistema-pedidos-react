@@ -6,11 +6,12 @@ import base64
 from typing import List, Dict, Any, Optional
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class CodeQualityService:
+class CodeQualityService(BaseService):
     """
     Service for code quality operations.
 
@@ -19,16 +20,6 @@ class CodeQualityService:
     - Pretty print (format) ABAP code
     - Get and set pretty printer settings
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the code quality service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("CodeQualityService initialized")
 
     # Sprint 5.1: Syntax Check
 
@@ -65,13 +56,14 @@ class CodeQualityService:
         # Build XML body with base64-encoded source
         body = self._build_syntax_check_xml(object_uri, include_uri, source, version)
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/checkruns",
-            method="POST",
-            params={"reporters": "abapCheckRun"},
-            body=body,
-            content_type="application/vnd.sap.adt.checkobjects+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/checkruns",
+                method="POST",
+                params={"reporters": "abapCheckRun"},
+                body=body,
+                content_type="application/vnd.sap.adt.checkobjects+xml"
+            )
 
         if response.status_code == 200:
             messages = self._parse_syntax_check_result(response.text)
@@ -101,13 +93,14 @@ class CodeQualityService:
         """
         logger.info("Running pretty printer on source code")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/abapsource/prettyprinter",
-            method="POST",
-            params={},
-            body=source,
-            content_type="text/plain"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/abapsource/prettyprinter",
+                method="POST",
+                params={},
+                body=source,
+                content_type="text/plain"
+            )
 
         if response.status_code == 200:
             formatted_source = response.text
@@ -132,12 +125,13 @@ class CodeQualityService:
         """
         logger.info("Getting pretty printer settings")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/abapsource/prettyprinter/settings",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/abapsource/prettyprinter/settings",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             settings = self._parse_prettyprint_settings(response.text)
@@ -172,13 +166,14 @@ class CodeQualityService:
         # Build XML body for settings
         body = self._build_prettyprint_settings_xml(indent, style)
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/abapsource/prettyprinter/settings",
-            method="PUT",
-            params={},
-            body=body,
-            content_type="application/xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/abapsource/prettyprinter/settings",
+                method="PUT",
+                params={},
+                body=body,
+                content_type="application/xml"
+            )
 
         if response.status_code in [200, 204]:
             logger.info("Pretty printer settings updated successfully")

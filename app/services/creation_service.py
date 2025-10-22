@@ -5,11 +5,12 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Any, Optional
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class CreationService:
+class CreationService(BaseService):
     """
     Service for object lifecycle management (creation/deletion).
 
@@ -18,16 +19,6 @@ class CreationService:
     - Delete ABAP objects
     - Validate object names
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the creation service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("CreationService initialized")
 
     def create_class(
         self,
@@ -68,13 +59,14 @@ class CreationService:
         if transport:
             params["corrNr"] = transport
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/oo/classes",
-            method="POST",
-            params=params,
-            body=body,
-            content_type="application/vnd.sap.adt.oo.classes.v2+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/oo/classes",
+                method="POST",
+                params=params,
+                body=body,
+                content_type="application/vnd.sap.adt.oo.classes.v2+xml"
+            )
 
         if response.status_code in [200, 201]:
             # Extract URI from response
@@ -122,12 +114,13 @@ class CreationService:
         if transport:
             params["corrNr"] = transport
 
-        response = self.adapter.request(
-            uri=object_uri,
-            method="DELETE",
-            params=params,
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=object_uri,
+                method="DELETE",
+                params=params,
+                body=""
+            )
 
         if response.status_code in [200, 204]:
             logger.info(f"Object deleted successfully: {object_uri}")
@@ -159,15 +152,16 @@ class CreationService:
         """
         logger.info(f"Validating object name: {object_name} (type: {object_type})")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/repository/validation/objectname",
-            method="POST",
-            params={
-                "objName": object_name,
-                "objType": object_type
-            },
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/repository/validation/objectname",
+                method="POST",
+                params={
+                    "objName": object_name,
+                    "objType": object_type
+                },
+                body=""
+            )
 
         if response.status_code == 200:
             result = self._parse_validation_result(response.text)

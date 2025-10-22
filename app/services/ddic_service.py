@@ -5,11 +5,12 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class DdicService:
+class DdicService(BaseService):
     """
     Service for accessing ABAP Data Dictionary (DDIC) information.
 
@@ -20,16 +21,6 @@ class DdicService:
     - CDS annotations
     - Package information
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the DDIC service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("DdicService initialized")
 
     def get_ddic_element(self, element_name: str, element_type: str) -> Dict[str, Any]:
         """
@@ -58,12 +49,13 @@ class DdicService:
         if element_type not in valid_types:
             raise ValueError(f"Invalid element type: {element_type}. Must be one of {valid_types}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/ddic/{element_type}/{element_name.lower()}",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/ddic/{element_type}/{element_name.lower()}",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             element_data = self._parse_ddic_element(response.text, element_type)
@@ -90,12 +82,13 @@ class DdicService:
         """
         logger.info(f"Accessing DDIC repository path: {path}")
 
-        response = self.adapter.request(
-            uri=f"/sap/bc/adt/ddic/repository/{path}",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=f"/sap/bc/adt/ddic/repository/{path}",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             repo_data = self._parse_repository_data(response.text)
@@ -126,12 +119,13 @@ class DdicService:
         """
         logger.info("Getting CDS annotation definitions")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/ddic/annotations",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/ddic/annotations",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             annotations = self._parse_annotations(response.text)
@@ -165,12 +159,13 @@ class DdicService:
             'maxResults': str(max_results)
         }
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/packages",
-            method="GET",
-            params=params,
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/packages",
+                method="GET",
+                params=params,
+                body=""
+            )
 
         if response.status_code == 200:
             packages = self._parse_package_list(response.text)

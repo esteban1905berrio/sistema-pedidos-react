@@ -5,11 +5,12 @@ import xml.etree.ElementTree as ET
 from typing import Optional
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class ObjectService:
+class ObjectService(BaseService):
     """
     Service for managing ABAP object locks and modifications.
 
@@ -18,16 +19,6 @@ class ObjectService:
     - Unlock objects after editing
     - Modify object source code
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the object service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("ObjectService initialized")
 
     # Sprint 4.1: Lock/Unlock
 
@@ -55,15 +46,16 @@ class ObjectService:
         """
         logger.info(f"Locking object: {object_uri}")
 
-        response = self.adapter.request(
-            uri=object_uri,
-            method="POST",
-            params={
-                "_action": "LOCK",
-                "accessMode": access_mode
-            },
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=object_uri,
+                method="POST",
+                params={
+                    "_action": "LOCK",
+                    "accessMode": access_mode
+                },
+                body=""
+            )
 
         if response.status_code == 200:
             # Extract LOCK_HANDLE from response
@@ -99,15 +91,16 @@ class ObjectService:
         """
         logger.info(f"Unlocking object: {object_uri}")
 
-        response = self.adapter.request(
-            uri=object_uri,
-            method="POST",
-            params={
-                "_action": "UNLOCK",
-                "lockHandle": lock_handle
-            },
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=object_uri,
+                method="POST",
+                params={
+                    "_action": "UNLOCK",
+                    "lockHandle": lock_handle
+                },
+                body=""
+            )
 
         if response.status_code in [200, 204]:
             logger.info(f"Object unlocked successfully")
@@ -160,13 +153,14 @@ class ObjectService:
         if transport:
             params["corrNr"] = transport
 
-        response = self.adapter.request(
-            uri=object_uri,
-            method="PUT",
-            params=params,
-            body=source_code,
-            content_type=content_type
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri=object_uri,
+                method="PUT",
+                params=params,
+                body=source_code,
+                content_type=content_type
+            )
 
         if response.status_code in [200, 204]:
             logger.info(f"Source code updated successfully")

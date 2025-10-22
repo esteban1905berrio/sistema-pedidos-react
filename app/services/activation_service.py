@@ -5,11 +5,12 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class ActivationService:
+class ActivationService(BaseService):
     """
     Service for activating ABAP objects.
 
@@ -18,16 +19,6 @@ class ActivationService:
     - Activate multiple objects in batch
     - Get list of inactive objects
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the activation service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("ActivationService initialized")
 
     # Sprint 4.3: Activation
 
@@ -75,13 +66,14 @@ class ActivationService:
             "preauditRequested": "true" if preaudit else "false"
         }
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/activation",
-            method="POST",
-            params=params,
-            body=body,
-            content_type="application/vnd.sap.adt.activation+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/activation",
+                method="POST",
+                params=params,
+                body=body,
+                content_type="application/vnd.sap.adt.activation+xml"
+            )
 
         if response.status_code == 200:
             result = self._parse_activation_result(response.text)
@@ -131,13 +123,14 @@ class ActivationService:
             "preauditRequested": "true" if preaudit else "false"
         }
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/activation",
-            method="POST",
-            params=params,
-            body=body,
-            content_type="application/vnd.sap.adt.activation+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/activation",
+                method="POST",
+                params=params,
+                body=body,
+                content_type="application/vnd.sap.adt.activation+xml"
+            )
 
         if response.status_code == 200:
             result = self._parse_activation_result(response.text)
@@ -173,12 +166,13 @@ class ActivationService:
         """
         logger.info("Getting inactive objects for current user")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/activation/inactiveobjects",
-            method="GET",
-            params={},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/activation/inactiveobjects",
+                method="GET",
+                params={},
+                body=""
+            )
 
         if response.status_code == 200:
             inactive_objects = self._parse_inactive_objects(response.text)

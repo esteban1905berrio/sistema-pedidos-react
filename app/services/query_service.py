@@ -5,11 +5,12 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class QueryService:
+class QueryService(BaseService):
     """
     Service for querying and previewing ABAP data.
 
@@ -18,16 +19,6 @@ class QueryService:
     - Execute custom queries
     - Filter and limit data retrieval
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the query service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("QueryService initialized")
 
     def get_table_contents(
         self,
@@ -79,16 +70,17 @@ class QueryService:
         )
 
         # Use DDIC-based data preview endpoint
-        response = self.adapter.request(
-            uri="/sap/bc/adt/datapreview/ddic",
-            method="POST",
-            params={
-                "rowNumber": max_rows,
-                "ddicEntityName": table_name
-            },
-            body=sql_statement,
-            content_type="text/plain"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/datapreview/ddic",
+                method="POST",
+                params={
+                    "rowNumber": max_rows,
+                    "ddicEntityName": table_name
+                },
+                body=sql_statement,
+                content_type="text/plain"
+            )
 
         if response.status_code == 200:
             table_data = self._parse_table_data(response.text, table_name)
@@ -138,13 +130,14 @@ class QueryService:
         # Build advanced query XML
         query_body = self._build_advanced_query_xml(sql, max_rows, parameters)
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/datapreview/freestyle",
-            method="POST",
-            params={},
-            body=query_body,
-            content_type="application/xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/datapreview/freestyle",
+                method="POST",
+                params={},
+                body=query_body,
+                content_type="application/xml"
+            )
 
         if response.status_code == 200:
             query_data = self._parse_query_results(response.text)

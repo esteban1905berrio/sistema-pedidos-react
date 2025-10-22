@@ -5,11 +5,12 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class UnittestService:
+class UnittestService(BaseService):
     """
     Service for unit test execution.
 
@@ -17,16 +18,6 @@ class UnittestService:
     - Execute ABAP unit tests
     - Get unit test results
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the unittest service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("UnittestService initialized")
 
     def run_unit_tests(
         self,
@@ -60,13 +51,14 @@ class UnittestService:
         # Build XML body for unit test execution
         body = self._build_unittest_xml(object_uri, coverage)
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/abapunit/testruns",
-            method="POST",
-            params={},
-            body=body,
-            content_type="application/vnd.sap.adt.abapunit.testruns.config.v4+xml"
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/abapunit/testruns",
+                method="POST",
+                params={},
+                body=body,
+                content_type="application/vnd.sap.adt.abapunit.testruns.config.v4+xml"
+            )
 
         if response.status_code == 200:
             result = self._parse_unittest_result(response.text)

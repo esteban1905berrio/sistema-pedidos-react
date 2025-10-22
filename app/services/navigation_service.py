@@ -5,26 +5,17 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
 
 from app.core.rfc_adapter import RfcAdapter
+from app.services.base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class NavigationService:
+class NavigationService(BaseService):
     """
     Service for navigating the ABAP repository tree structure.
 
     This service provides tools to navigate packages, folders, and object hierarchies.
     """
-
-    def __init__(self, adapter: RfcAdapter):
-        """
-        Initialize the navigation service.
-
-        Args:
-            adapter: RfcAdapter instance for ADT API calls to SAP system
-        """
-        self.adapter = adapter
-        logger.debug("NavigationService initialized")
 
     def get_node_contents(self, node_uri: str, project_name: str = None) -> List[Dict[str, Any]]:
         """
@@ -55,12 +46,13 @@ class NavigationService:
         if project_name:
             params['projectname'] = project_name
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/repository/nodestructure",
-            method="GET",
-            params={**params, 'parent_uri': node_uri},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/repository/nodestructure",
+                method="GET",
+                params={**params, 'parent_uri': node_uri},
+                body=""
+            )
 
         if response.status_code == 200:
             contents = self._parse_node_contents(response.text)
@@ -92,12 +84,13 @@ class NavigationService:
         """
         logger.info(f"Finding object path for: {object_uri}")
 
-        response = self.adapter.request(
-            uri="/sap/bc/adt/repository/nodestructure",
-            method="GET",
-            params={'uri': object_uri},
-            body=""
-        )
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/repository/nodestructure",
+                method="GET",
+                params={'uri': object_uri},
+                body=""
+            )
 
         if response.status_code == 200:
             path_data = self._parse_object_path(response.text, object_uri)
