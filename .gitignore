@@ -165,9 +165,6 @@ temp/
 # SAP RFC SDK binaries (platform-specific)
 nwrfcsdk/
 
-# MCP configuration with sensitive data
-.mcp.json
-
 # Test artifacts
 *.pyc
 test_*.db
