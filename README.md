@@ -1,12 +1,12 @@
 # 🎉 MCP ABAP ADT RFC Server
 
-**Servidor MCP completo para operaciones ABAP via RFC - 59 Tools Implementadas**
+**Servidor MCP completo para operaciones ABAP via RFC - 63+ Tools Implementadas**
 
-Servidor MCP (Model Context Protocol) que permite interactuar con sistemas SAP ABAP a través de RFC SDK. Este servidor expone **59 herramientas** organizadas en **10 categorías funcionales**, permitiendo a Claude Code y otras herramientas LLM realizar operaciones completas de desarrollo ABAP: desde búsqueda y lectura hasta modificación, activación, testing, análisis de referencias, y gestión de CDS Views, objetos RAP y enhancements.
+Servidor MCP (Model Context Protocol) que permite interactuar con sistemas SAP ABAP a través de RFC SDK. Este servidor expone **60 herramientas** organizadas en **10 categorías funcionales**, permitiendo a Claude Code y otras herramientas LLM realizar operaciones completas de desarrollo ABAP: desde búsqueda y lectura hasta modificación, activación, testing, análisis de referencias, y gestión de CDS Views, objetos RAP y enhancements.
 
 ## ✨ Funcionalidades Principales
 
-### 🔍 Repository & Source (9 tools)
+### 🔍 Repository & Source (10 tools)
 **Búsqueda y lectura de objetos ABAP**
 - `search_objects` - Búsqueda con wildcards (ej: `ZCL_*`, `*UTIL*`)
 - `get_class_source` - Código fuente completo de clases
@@ -17,6 +17,7 @@ Servidor MCP (Model Context Protocol) que permite interactuar con sistemas SAP A
 - `get_object_types` - Tipos de objetos disponibles
 - `adt_discovery` - Capacidades ADT del sistema
 - `get_node_contents` - Navegación de árbol de repositorio
+- `get_package_objects` - **NUEVO** Obtener objetos de un paquete consultando TADIR con filtros avanzados (8 campos: PGMID, OBJECT, OBJ_NAME, SRCSYSTEM, AUTHOR, DEVCLASS, CREATED_ON, CHECK_DATE). Filtros: object_types, author, created_from/to
 
 ### 📚 DDIC & Data Dictionary (6 tools)
 **Acceso a diccionario de datos y queries**
@@ -60,6 +61,19 @@ Servidor MCP (Model Context Protocol) que permite interactuar con sistemas SAP A
 - `get_prettyprint_settings` - Obtener configuración de formato
 - `set_prettyprint_settings` - Configurar estilo de formato
 
+### 🚀 High-Level Modification Workflows (4 tools - NEW!)
+**Workflows completos LOCK → SYNTAX → MODIFY → UNLOCK → ACTIVATE**
+- `modify_function_module` - Workflow completo para modificar módulo de función
+- `modify_class` - Workflow completo para modificar clase ABAP
+- `modify_program` - Workflow completo para modificar programa/reporte
+- `modify_include` - Workflow completo para modificar include de programa
+
+**Características:**
+- ✅ Sintaxis validación automática (previene código inválido)
+- ✅ Manejo de locks con try-finally (garantiza liberación)
+- ✅ Activación automática opcional
+- ✅ Reporte detallado de estado por paso
+
 ### 🏗️ Lifecycle & Testing (4 tools)
 **Creación, eliminación y testing**
 - `create_class` - Crear nueva clase ABAP
@@ -96,6 +110,82 @@ Servidor MCP (Model Context Protocol) que permite interactuar con sistemas SAP A
 - `get_enhancement_metadata` - Metadata incluyendo hook implementations
 - `get_enhancement_source` - Código fuente de bloques ENHANCEMENT
 
+## 🚀 Token Optimization Features
+
+El servidor implementa un sistema completo de optimización de tokens para manejar respuestas grandes de SAP sin exceder límites de caracteres:
+
+### 📦 Paginación Inteligente
+- **Offset-based pagination** con metadata completa (has_more, next_offset, current_page)
+- **Default page size**: 50 objetos (configurable hasta 1000)
+- **Workflow**: Recuperación incremental guiada por metadata de paginación
+
+**Ejemplo**:
+```python
+# Primera página
+result = get_package_objects("ZFI", max_rows=50)
+# → pagination: {has_more: true, next_offset: 50}
+
+# Siguiente página
+if result["pagination"]["has_more"]:
+    next_result = get_package_objects("ZFI", offset=50)
+```
+
+### 🎯 Formatos de Respuesta Flexibles
+- **detailed** (default): Metadata completa (100% datos)
+- **summary**: Nombres + conteos (~90% reducción)
+- **types_only**: Solo conteos (~99% reducción)
+
+**Estrategia**: Start broad → Drill down
+```python
+# 1. Vista general rápida
+get_package_objects("ZFI", response_format="types_only")
+# → {CLAS: 7, PROG: 121}
+
+# 2. Nombres específicos
+get_package_objects("ZFI", response_format="summary", object_types=["CLAS"])
+# → {CLAS: {count: 7, names: ["ZCLS1", "ZCLS2", ...]}}
+
+# 3. Metadata completa con paginación
+get_package_objects("ZFI", response_format="detailed", object_types=["CLAS"], max_rows=20)
+```
+
+### ✂️ CHARACTER_LIMIT Automático
+- **Límite global**: 25,000 caracteres por respuesta
+- **Truncamiento inteligente** con mensajes educativos
+- **Sugerencias contextuales**: Paginación, filtros, formatos compactos
+
+### 🔀 Fragmentación de Objetos Grandes
+Para clases grandes que exceden CHARACTER_LIMIT:
+```python
+# 1. Recuperar include principal
+result = get_class_source("ZCLCXR1002_UTIL")
+
+# 2. Si está truncado, listar includes disponibles
+includes = get_class_includes("ZCLCXR1002_UTIL")
+
+# 3. Recuperar includes específicos
+main = get_class_source("ZCLCXR1002_UTIL", include_type="main")
+impl = get_class_source("ZCLCXR1002_UTIL", include_type="implementation")
+tests = get_class_source("ZCLCXR1002_UTIL", include_type="testclasses")
+```
+
+**Include types disponibles**:
+- `main`: Definición de clase (PUBLIC section)
+- `implementation`: Implementaciones de métodos
+- `testclasses`: ABAP Unit tests
+- `macros`: Definiciones de macros
+
+### 📊 Métricas de Optimización
+
+| Escenario | Antes | Después | Reducción |
+|-----------|-------|---------|-----------|
+| Package ZFI (241 objetos) | 120K chars | 25K chars (detailed) | 79% |
+| Package ZFI (summary) | 120K chars | 12K chars | 90% |
+| Package ZFI (types_only) | 120K chars | 1.2K chars | 99% |
+| Clase grande (50K) | 50K chars | 4 × 12.5K (fragmentado) | Completo |
+
+**Documentación completa**: Ver `docs/architecture/token-optimization-strategy.md`
+
 ## 📋 Prerequisites
 
 1. **SAP NetWeaver RFC SDK** installed
@@ -131,6 +221,55 @@ cd /path/to/brootpersonalagent
 - ✅ Validates `.env` configuration
 - ✅ Configures Claude Desktop integration
 - ✅ Verifies installation
+
+### Manual Dependency Installation
+
+If you prefer manual installation or need to customize dependencies:
+
+**Production Dependencies:**
+```bash
+# Install from requirements.txt
+pip install -r requirements.txt
+
+# OR using uv (faster)
+uv pip install -r requirements.txt
+```
+
+**Development Dependencies (Optional):**
+```bash
+# Install development tools (pytest, ruff, pyright)
+pip install -r requirements-dev.txt
+
+# OR using uv
+uv pip install -r requirements-dev.txt
+```
+
+**PyRFC (SAP RFC SDK Binding):**
+```bash
+# IMPORTANT: PyRFC must be compiled manually
+# Requires SAP NetWeaver RFC SDK installed first
+
+# 1. Set environment variables
+export SAPNWRFC_HOME=/Users/local/nwrfcsdk  # or your SDK path
+export DYLD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$DYLD_LIBRARY_PATH  # macOS
+# OR
+export LD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$LD_LIBRARY_PATH  # Linux
+
+# 2. Compile and install PyRFC
+cd PyRFC
+python3 -m pip install .
+cd ..
+```
+
+**Core Dependencies Included:**
+- `pydantic>=2.11.0` - Data validation
+- `python-dotenv>=1.1.0` - Environment configuration
+- `mcp>=1.15.0` - Model Context Protocol framework
+- `httpx>=0.28.0` - HTTP client (MCP requirement)
+- `pytest>=8.4.0` - Testing (dev only)
+- `pyrfc==3.4` - SAP RFC SDK bindings (manual install)
+
+**Note:** See `requirements.txt` for complete dependency list with version constraints.
 
 ### Configure SAP Credentials
 
@@ -185,7 +324,7 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed manual setup instructions.
 ### With Claude Code
 
 1. **Restart Claude Code** to load the MCP server
-2. The server will appear as **"ABAP-ADT-RFC-Server"** with 59 available tools
+2. The server will appear as **"ABAP-ADT-RFC-Server"** with 60 available tools
 3. Ask Claude Code natural language questions:
 
 ```
@@ -219,6 +358,15 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed manual setup instructions.
 - "Find all enhancements in package ZI1008"
 - "Show me the source code of enhancement ZFII1008_1"
 - "What hook implementations exist in enhancement ZFII1008_1?"
+
+📦 Package Objects (con filtros avanzados):
+- "Get all objects from package ZMMI1229_0"
+- "Show me object inventory for package ZFII1008_0"
+- "What objects are in package $TMP grouped by type?"
+- "Get only classes and programs from package ZMMI1229_0"
+- "Show me objects created by author DEVELOPER in package ZFII1008_0"
+- "Get objects from $TMP created between 2025-01-01 and 2025-12-31"
+- "Show me CLAS objects by author SAP from package $TMP"
 
 ✏️ Modificación completa:
 - "Read class ZCL_TEST, create transport, lock it, add a BREAK-POINT
@@ -324,12 +472,12 @@ app/
 │
 ├── mcp/
 │   ├── server.py                  # Main MCP server
-│   └── tools/                     # 59 MCP Tools
+│   └── tools/                     # 60 MCP Tools
 │       ├── class_tools.py         # 3 tools
 │       ├── search_tools.py        # 1 tool
 │       ├── program_tools.py       # 2 tools
 │       ├── discovery_tools.py     # 2 tools
-│       ├── navigation_tools.py    # 1 tool
+│       ├── navigation_tools.py    # 3 tools (get_node_contents, find_object_path, get_package_objects)
 │       ├── ddic_tools.py          # 4 tools
 │       ├── query_tools.py         # 2 tools
 │       ├── transport_tools.py     # 14 tools
@@ -494,14 +642,15 @@ export DYLD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$DYLD_LIBRARY_PATH
 
 ## 📊 Project Metrics
 
-- ✅ **59 tools** implemented (10 categories)
+- ✅ **60 tools** implemented (10 categories)
 - ✅ **17 services** created
 - ✅ **100%** implementation coverage
-- ✅ **67%** test coverage (40/59 tools fully tested)
-- 🆕 **15 new tools** added: CDS Views (4), RAP Objects (8), Enhancements (3)
+- ✅ **68%** test coverage (41/60 tools fully tested)
+- 🆕 **16 new tools** added: CDS Views (4), RAP Objects (8), Enhancements (3), Package Objects (1)
 - ⏱️ **Rapid development**: 3 new categories implemented
 - 🔍 **Where-Used**: Successfully finds and displays code references with context
 - 🎯 **Enhancement testing**: 100% pass rate (3/3 tools validated)
+- 📦 **Package exploration**: TADIR-based package object inventory with 8 essential fields and advanced filtering (object_types, author, date range)
 
 ## 📄 Additional Documentation
 

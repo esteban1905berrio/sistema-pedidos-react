@@ -67,6 +67,46 @@ This section defines the formal software development lifecycle to be followed fo
 - All new services require corresponding test files
 - Mock external services when appropriate (never call real SAP APIs in unit tests)
 
+**Test Setup Pattern (MANDATORY):**
+
+When creating integration tests that need SAP connection, **ALWAYS** follow this exact pattern:
+
+```python
+import os
+from dotenv import load_dotenv
+from app.core.config import SAPConfig
+from app.core.rfc_connection import RfcConnectionPool
+from app.services.class_service import ClassService  # or any service
+
+load_dotenv()
+
+def test_something():
+    # Step 1: Create SAPConfig from environment
+    sap_config = SAPConfig(
+        ashost=os.getenv("SAP_ASHOST", ""),
+        sysnr=os.getenv("SAP_SYSNR", ""),
+        client=os.getenv("SAP_CLIENT", ""),
+        user=os.getenv("SAP_USER", ""),
+        passwd=os.getenv("SAP_PASSWD", ""),
+        lang=os.getenv("SAP_LANG", "EN"),
+        saprouter=os.getenv("SAP_ROUTER"),
+    )
+
+    # Step 2: Create RfcConnectionPool with SAPConfig
+    connection_pool = RfcConnectionPool(sap_config, pool_size=1)
+
+    # Step 3: Create service with connection pool
+    service = ClassService(connection_pool)
+
+    # Step 4: Use the service
+    result = service.get_class_source("ZCLCXR1002_UTIL")
+```
+
+**CRITICAL**:
+- ❌ **NEVER** try to create `RfcConnectionPool` directly with connection params
+- ❌ **NEVER** create services without a `RfcConnectionPool` instance
+- ✅ **ALWAYS** use the pattern: `SAPConfig` → `RfcConnectionPool` → `Service`
+
 **Logging:**
 - **All log files MUST be stored in `logs/` directory** (ignored by git)
 - Use Python logging module with appropriate levels
@@ -384,6 +424,53 @@ The `.mcp.json` file configures Claude Code to use this server:
 - `get_program_source`: Get ABAP program/report source code
 - `get_include_source`: Get program include source code
 
+### High-Level Modification Workflows (NEW - 2025-10-24)
+
+**Complete ADT Modification Flow:** `LOCK → SYNTAX_CHECK → MODIFY → UNLOCK → ACTIVATE`
+
+These workflows automate the entire modification process with built-in error handling, syntax validation, and automatic activation.
+
+**Available Workflows:**
+- `modify_function_module(fm_name, fg_name, new_source, transport?, auto_activate?, validate_syntax?)`
+- `modify_class(class_name, new_source, include_type?, transport?, auto_activate?, validate_syntax?)`
+- `modify_program(program_name, new_source, transport?, auto_activate?, validate_syntax?)`
+- `modify_include(include_name, program_name, new_source, transport?, auto_activate?, validate_syntax?)`
+
+**Key Features:**
+- ✅ One tool call instead of 4-5 low-level operations
+- ✅ Automatic syntax validation (prevents saving invalid code)
+- ✅ Guaranteed lock release via try-finally blocks
+- ✅ Detailed status reporting for each step
+- ✅ Optional auto-activation control
+
+**Example Usage:**
+```python
+result = modify_function_module(
+    "ZTEST_FM",
+    "ZTEST_FG",
+    "FUNCTION ZTEST_FM.\n  rv_result = 'Hello'.\nENDFUNCTION.",
+    transport="DEVK900123",
+    auto_activate=True,
+    validate_syntax=True
+)
+
+if result["success"]:
+    print("✓ Modification completed successfully")
+else:
+    for msg in result["messages"]:
+        print(f"Error: {msg['text']}")
+```
+
+**Architecture:** Three-tier hybrid design
+- **Tier 1 (Infrastructure):** Low-level operations (lock, unlock, modify, activate)
+- **Tier 2 (Workflows):** High-level orchestration with type-specific logic
+- **Tier 3 (MCP Tools):** LLM-friendly interface with clear descriptions
+
+**Documentation:**
+- Full workflow documentation: `docs/architecture/modification-workflows.md`
+- Skill documentation: `.claude/skills/abap-assistant/README.md`
+- Implementation guide: `docs/requirements/pr_flow_object_create.md`
+
 ## Important Development Notes
 
 ### SAP NetWeaver RFC SDK Dependency
@@ -497,14 +584,60 @@ Use `app/tests/test_debug_rfc.py` for manual RFC call testing.
 
 ### Working with ADT URIs
 
-ADT URIs follow the pattern:
-- Classes: `/sap/bc/adt/oo/classes/{CLASS_NAME}/source/{INCLUDE_TYPE}`
-- Programs: `/sap/bc/adt/programs/programs/{PROGRAM_NAME}`
-- Search: `/sap/bc/adt/repository/informationsystem/search`
-- Lock: `{OBJECT_URI}?_action=LOCK&accessMode=MODIFY`
-- Activate: `/sap/bc/adt/activation`
+**CRITICAL**: ADT URIs must be **exact and complete**. Many endpoints require specific path segments.
 
-Query parameters like `version=active` and `withShortDescriptions=true` control response content.
+**Verified URI Patterns:**
+
+1. **Class Source**:
+   ```
+   /sap/bc/adt/oo/classes/{class_name}/source/{include_type}
+   include_type: main, implementation, testclasses, macros
+   ```
+
+2. **Class Includes** (MUST include type):
+   ```
+   ✅ CORRECT:   /sap/bc/adt/oo/classes/{class_name}/includes/{include_type}
+   ❌ INCORRECT: /sap/bc/adt/oo/classes/{class_name}/includes
+
+   include_type: definitions, implementations, testclasses, macros
+   ```
+
+3. **Class Structure**:
+   ```
+   /sap/bc/adt/oo/classes/{class_name}/objectstructure?version=active&withShortDescriptions=true
+   ```
+
+4. **Programs**:
+   ```
+   /sap/bc/adt/programs/programs/{program_name}
+   ```
+
+5. **Search**:
+   ```
+   /sap/bc/adt/repository/informationsystem/search
+   ```
+
+6. **Lock/Unlock**:
+   ```
+   {object_uri}?_action=LOCK&accessMode=MODIFY
+   ```
+
+7. **Activation**:
+   ```
+   /sap/bc/adt/activation
+   ```
+
+**Common Mistakes to Avoid:**
+- ❌ Missing required path segments (e.g., `/includes` without `/{type}`)
+- ❌ Using wrong HTTP method (GET vs POST)
+- ❌ Wrong Content-Type header (use `text/plain` for source code)
+- ❌ Forgetting query parameters like `version=active`
+
+**Query Parameters:**
+- `version=active|inactive` - Control which version to retrieve
+- `withShortDescriptions=true` - Include descriptions in structure
+- `_action=LOCK` - Lock operations
+- `accessMode=MODIFY|READ` - Access mode for locks
 
 ### Implementation Priority
 

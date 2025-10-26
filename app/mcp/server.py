@@ -22,6 +22,7 @@ from app.services.whereused_service import WhereUsedService
 from app.services.cds_service import CDSService
 from app.services.rap_service import RAPService
 from app.services.enhancement_service import EnhancementService
+from app.services.modification_service import ModificationService
 from app.mcp.tools.class_tools import register_class_tools
 from app.mcp.tools.search_tools import register_search_tools
 from app.mcp.tools.program_tools import register_program_tools
@@ -39,6 +40,7 @@ from app.mcp.tools.whereused_tools import register_whereused_tools
 from app.mcp.tools.cds_tools import register_cds_tools
 from app.mcp.tools.rap_tools import register_rap_tools
 from app.mcp.tools.enhancement_tools import register_enhancement_tools
+from app.mcp.tools.modification_tools import register_modification_tools
 
 # Configure logging
 logging.basicConfig(
@@ -91,6 +93,7 @@ def initialize_services():
         cds_service = CDSService(pool)
         rap_service = RAPService(pool)
         enhancement_service = EnhancementService(pool)
+        modification_service = ModificationService(pool)
 
         return (
             class_service,
@@ -110,6 +113,7 @@ def initialize_services():
             cds_service,
             rap_service,
             enhancement_service,
+            modification_service,
         )
 
     except Exception as e:
@@ -137,6 +141,7 @@ logger.info("Initializing ABAP services...")
     cds_service,
     rap_service,
     enhancement_service,
+    modification_service,
 ) = initialize_services()
 logger.info("Services initialized successfully")
 
@@ -159,6 +164,7 @@ register_whereused_tools(mcp, whereused_service)
 register_cds_tools(mcp, cds_service)
 register_rap_tools(mcp, rap_service)
 register_enhancement_tools(mcp, enhancement_service)
+register_modification_tools(mcp, modification_service)
 logger.info("MCP tools registered")
 
 
@@ -271,6 +277,12 @@ This MCP server provides tools to interact with SAP ABAP systems via RFC.
 - **search_enhancements**: Search for enhancements in a package (ENHO types)
 - **get_enhancement_metadata**: Get enhancement metadata including hook implementations
 - **get_enhancement_source**: Get enhancement source code (ENHANCEMENT blocks)
+
+### High-Level Modification Workflows (NEW!)
+- **modify_function_module**: Complete workflow to modify function module (LOCK → SYNTAX → MODIFY → UNLOCK → ACTIVATE)
+- **modify_class**: Complete workflow to modify ABAP class with automatic validation and activation
+- **modify_program**: Complete workflow to modify ABAP program/report with validation
+- **modify_include**: Complete workflow to modify program include with validation
 
 ## Configuration
 

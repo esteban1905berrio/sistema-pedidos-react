@@ -34,7 +34,7 @@ class RfcConnectionPool:
         self._available: list[bool] = []
 
     def _create_connection(self) -> Connection:
-        """Create a new RFC connection."""
+        """Create a new RFC connection with 30s timeout."""
         params = {
             "ashost": self.config.ashost,
             "sysnr": self.config.sysnr,
@@ -42,12 +42,14 @@ class RfcConnectionPool:
             "user": self.config.user,
             "passwd": self.config.passwd,
             "lang": self.config.lang,
+            "timeout": "30",  # Connection timeout in seconds (must be string)
         }
 
+        # Only add saprouter if it's not None and not empty
         if self.config.saprouter:
             params["saprouter"] = self.config.saprouter
 
-        logger.info(f"Creating new RFC connection to {self.config.ashost}")
+        logger.info(f"Creating new RFC connection to {self.config.ashost} (timeout: 30s)")
         return Connection(**params)
 
     def _is_connection_alive(self, conn: Connection) -> bool:

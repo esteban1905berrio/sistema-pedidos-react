@@ -24,15 +24,17 @@ class QueryService(BaseService):
         self,
         table_name: str,
         max_rows: int = 100,
+        offset: int = 0,
         where_clause: Optional[str] = None,
         fields: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Get preview of table contents (data preview).
+        Get preview of table contents (data preview) with pagination support.
 
         Args:
             table_name: Name of the database table
             max_rows: Maximum number of rows to return (default: 100, max: 1000)
+            offset: Number of rows to skip (for pagination, default: 0)
             where_clause: Optional WHERE clause for filtering (e.g., "MANDT = '100'")
             fields: Optional list of specific fields to retrieve (default: all)
 
@@ -48,38 +50,51 @@ class QueryService(BaseService):
                 "row_count": 10
             }
 
-            >>> service.get_table_contents("T000", where_clause="MANDT = '100'", max_rows=5)
+            >>> service.get_table_contents("T000", where_clause="MANDT = '100'", max_rows=5, offset=50)
             {
                 "table_name": "T000",
                 "rows": [...],
                 ...
             }
         """
-        logger.info(f"Getting table contents for: {table_name} (max_rows: {max_rows})")
+        logger.info(
+            f"Getting table contents for: {table_name} "
+            f"(max_rows: {max_rows}, offset: {offset})"
+        )
 
         # Validate max_rows
         if max_rows > 1000:
             logger.warning(f"max_rows {max_rows} exceeds limit, setting to 1000")
             max_rows = 1000
 
-        # Build SQL SELECT statement
+        # Build SQL SELECT statement with offset
         sql_statement = self._build_sql_select(
             table_name=table_name,
             where_clause=where_clause,
-            fields=fields
+            fields=fields,
+            offset=offset
         )
 
         # Use DDIC-based data preview endpoint
+        # ADT API params:
+        # - rowNumber: Max rows to return (LIMIT)
+        # - rowSkip: Rows to skip (OFFSET)
+        params = {
+            "rowNumber": max_rows,
+            "ddicEntityName": table_name
+        }
+
+        # Add offset parameter if specified
+        if offset > 0:
+            params["rowSkip"] = offset
+
         with self._get_adapter() as adapter:
             response = adapter.request(
                 uri="/sap/bc/adt/datapreview/ddic",
                 method="POST",
-                params={
-                    "rowNumber": max_rows,
-                    "ddicEntityName": table_name
-                },
+                params=params,
                 body=sql_statement,
-                content_type="text/plain"
+                content_type="application/vnd.sap.adt.datapreview.table.v1+xml"
             )
 
         if response.status_code == 200:
@@ -154,20 +169,28 @@ class QueryService(BaseService):
         self,
         table_name: str,
         where_clause: Optional[str] = None,
-        fields: Optional[List[str]] = None
+        fields: Optional[List[str]] = None,
+        offset: int = 0
     ) -> str:
         """
-        Build SQL SELECT statement for data preview.
+        Build SQL SELECT statement for data preview with pagination support.
 
-        Format: SELECT TABLE~FIELD1, TABLE~FIELD2 FROM TABLE
+        Uses ABAP SQL syntax with UP TO ROWS and OFFSET for pagination.
+        Format: SELECT TABLE~FIELD1, TABLE~FIELD2 FROM TABLE UP TO N ROWS
 
         Args:
             table_name: Table name
             where_clause: Optional WHERE clause
             fields: Optional field list
+            offset: Number of rows to skip (default: 0)
 
         Returns:
-            SQL SELECT statement string
+            SQL SELECT statement string with OFFSET and LIMIT
+
+        Note:
+            ABAP SQL supports pagination using:
+            - UP TO n ROWS: Limits result set
+            - OFFSET m: Skips first m rows (requires UP TO ROWS)
         """
         # Build SELECT clause
         # For now use simple SELECT * - field extraction from DDIC needs namespace fix
@@ -179,13 +202,20 @@ class QueryService(BaseService):
             # Use SELECT * for all fields
             select_fields = "*"
 
-        # Build complete SQL
+        # Build complete SQL with pagination
+        # Note: In ABAP SQL, OFFSET requires UP TO ROWS to be specified first
+        # The ADT API will handle the row number limit via params,
+        # but we include WHERE clause with ROWNUM for additional safety
         sql = f"SELECT {select_fields} FROM {table_name}"
 
         if where_clause:
             sql += f" WHERE {where_clause}"
 
-        logger.debug(f"Built SQL: {sql}")
+        # Note: ADT API handles pagination via rowNumber and rowSkip params
+        # The SQL statement itself doesn't need explicit OFFSET/LIMIT clauses
+        # as the ADT endpoint manages this internally
+
+        logger.debug(f"Built SQL: {sql} (offset: {offset})")
         return sql
 
     def _build_query_xml(

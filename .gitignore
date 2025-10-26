@@ -1,4 +1,4 @@
-# Byte-compiled / optimized / DLL files
+e# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -160,6 +160,7 @@ logs/
 # Reference projects (DO NOT commit to repo)
 mcp-abap-abap-adt-api/
 abap-adt-py/
+temp/
 
 # SAP RFC SDK binaries (platform-specific)
 nwrfcsdk/

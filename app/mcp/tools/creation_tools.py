@@ -11,6 +11,68 @@ def register_creation_tools(mcp: FastMCP, creation_service: CreationService):
     """Register object creation/deletion tools with MCP server."""
 
     @mcp.tool(
+        name="create_function_group",
+        description="Create a new ABAP function group. "
+                   "Automatically generates function group structure with main program and includes. "
+                   "Requires package name and transport for transportable packages."
+    )
+    def create_function_group(
+        function_group_name: str = Field(
+            description="Name of the function group (must start with Y or Z for customer namespace)"
+        ),
+        package: str = Field(
+            description="Package name (e.g., 'ZFI' for transportable package)"
+        ),
+        description: str = Field(
+            description="Function group description/title"
+        ),
+        transport: Optional[str] = Field(
+            default=None,
+            description="Transport number (required for transportable packages)"
+        )
+    ) -> dict:
+        """Create a new ABAP function group."""
+        return creation_service.create_function_group(
+            function_group_name,
+            package,
+            description,
+            transport
+        )
+
+    @mcp.tool(
+        name="create_function_module",
+        description="Create a new ABAP function module within an existing function group. "
+                   "The function group must already exist. "
+                   "Requires package name and transport for transportable packages."
+    )
+    def create_function_module(
+        function_module_name: str = Field(
+            description="Name of the function module (e.g., 'ZFIAAC002_DMEE_NRO_TRASLADO_DAV')"
+        ),
+        function_group_name: str = Field(
+            description="Name of the parent function group that must already exist (e.g., 'ZFIAAC002_1')"
+        ),
+        package: str = Field(
+            description="Package name (e.g., 'ZFI' for transportable package)"
+        ),
+        description: str = Field(
+            description="Function module description/title"
+        ),
+        transport: Optional[str] = Field(
+            default=None,
+            description="Transport number (required for transportable packages)"
+        )
+    ) -> dict:
+        """Create a new ABAP function module."""
+        return creation_service.create_function_module(
+            function_module_name,
+            function_group_name,
+            package,
+            description,
+            transport
+        )
+
+    @mcp.tool(
         name="create_class",
         description="Create a new ABAP class. "
                    "Automatically generates class definition and implementation. "

@@ -1,7 +1,8 @@
 """MCP tools for ABAP class operations."""
 
-from typing import Literal
+from typing import Literal, Dict, Any
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from app.services.class_service import ClassService
@@ -19,14 +20,15 @@ def register_class_tools(mcp: FastMCP, class_service: ClassService):
     @mcp.tool(
         name="get_class_source",
         description="Get the source code of an ABAP class from SAP system. "
-        "Returns the complete class definition including methods, attributes, and implementation.",
-        annotations={
-            "title": "Get Class Source Code",
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": True
-        }
+        "Returns the complete class definition including methods, attributes, and implementation. "
+        "Supports fragmentation by include type to handle large classes that exceed character limits.",
+        annotations=ToolAnnotations(
+            title="Get Class Source Code",
+            readOnlyHint=True,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=True
+        )
     )
     def get_class_source(
         class_name: str = Field(
@@ -36,18 +38,40 @@ def register_class_tools(mcp: FastMCP, class_service: ClassService):
             default="active",
             description="Version to retrieve: 'active' for activated code or 'inactive' for draft",
         ),
-    ) -> str:
+        include_type: str = Field(
+            default="main",
+            description="Type of include to retrieve: 'main' (class definition), 'implementation', "
+            "'testclasses', 'macros'. Use get_class_includes() to see all available includes. "
+            "Fragmentation by include helps retrieve large classes that exceed character limits."
+        ),
+    ) -> Dict[str, Any]:
         """
-        Retrieve the source code of an ABAP class.
+        Retrieve the source code of an ABAP class with intelligent fragmentation.
 
-        This tool fetches the complete source code of a class from the SAP system,
-        including class definition, methods, and implementation.
+        This tool fetches class source code and automatically handles CHARACTER_LIMIT
+        by providing truncation guidance when source is too large. For large classes,
+        retrieve specific includes instead of the complete source.
+
+        Fragmentation workflow:
+        1. First call: get_class_source("ZCLCXR1002_UTIL") → Returns main include
+        2. If truncated, call get_class_includes("ZCLCXR1002_UTIL") to see all includes
+        3. Retrieve specific includes: get_class_source("ZCLCXR1002_UTIL", include_type="implementation")
+        4. Repeat for other includes: "testclasses", "macros"
+
+        Returns:
+            Dictionary with:
+            - source: Source code (potentially truncated with guidance)
+            - class_name: Class name
+            - version: Version retrieved
+            - include_type: Include type retrieved
+            - metadata: Truncation info and suggestions
 
         Example usage:
-        - get_class_source("CL_ABAP_CHAR_UTILITIES")
-        - get_class_source("ZTEST_CLASS", version="inactive")
+        - get_class_source("CL_ABAP_CHAR_UTILITIES") → Get main include
+        - get_class_source("ZTEST_CLASS", version="inactive") → Get inactive main include
+        - get_class_source("ZCLCXR1002_UTIL", include_type="implementation") → Get implementation include
         """
-        return class_service.get_class_source(class_name, version=version)
+        return class_service.get_class_source(class_name, version=version, include_type=include_type)
 
     @mcp.tool(
         name="get_class_structure",
@@ -55,13 +79,13 @@ def register_class_tools(mcp: FastMCP, class_service: ClassService):
         "Returns class components (methods, attributes), visibility, and other metadata without the full source code. "
         "IMPORTANT: Only use this tool when the user specifically asks for class structure/metadata. "
         "For general class information, use get_class_source instead.",
-        annotations={
-            "title": "Get Class Structure",
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": True
-        }
+        annotations=ToolAnnotations(
+            title="Get Class Structure",
+            readOnlyHint=True,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=True
+        )
     )
     def get_class_structure(
         class_name: str = Field(
@@ -93,11 +117,17 @@ def register_class_tools(mcp: FastMCP, class_service: ClassService):
     @mcp.tool(
         name="get_object_source",
         description="Get source code for any ABAP object using its ADT URI. "
-        "Generic method that works with classes, programs, includes, and other ADT objects.",
+        "Generic method that works with classes, programs, includes, function groups, function modules, and other ADT objects. "
+        "Supports all ABAP repository object types accessible via ADT.",
     )
     def get_object_source(
         object_uri: str = Field(
-            description="Full ADT URI to the object (e.g., '/sap/bc/adt/oo/classes/ZTEST/source/main')"
+            description="Full ADT URI to the object. Examples:\n"
+            "- Classes: '/sap/bc/adt/oo/classes/ZTEST/source/main'\n"
+            "- Programs: '/sap/bc/adt/programs/programs/ZTEST_PROG/source/main'\n"
+            "- Function Groups: '/sap/bc/adt/functions/groups/ZFIE1017_1/source/main'\n"
+            "- Function Modules: '/sap/bc/adt/functions/groups/ZFIE1017_1/fmodules/Z_FUNCTION_NAME/source/main'\n"
+            "- Includes: '/sap/bc/adt/programs/includes/ZTEST_INCLUDE/source/main'"
         ),
         version: Literal["active", "inactive"] = Field(
             default="active", description="Version to retrieve: 'active' or 'inactive'"
@@ -109,9 +139,18 @@ def register_class_tools(mcp: FastMCP, class_service: ClassService):
         This is a generic tool that can fetch source code for various ABAP object types
         when you have the specific ADT URI.
 
+        Supported object types:
+        - Classes (CLAS): /sap/bc/adt/oo/classes/{name}/source/{include_type}
+        - Programs (PROG): /sap/bc/adt/programs/programs/{name}/source/main
+        - Function Groups (FUGR): /sap/bc/adt/functions/groups/{name}/source/main
+        - Function Modules (FUNC): /sap/bc/adt/functions/groups/{group}/fmodules/{name}/source/main
+        - Includes (INCL): /sap/bc/adt/programs/includes/{name}/source/main
+        - And other ADT-supported object types
+
         Example usage:
         - get_object_source("/sap/bc/adt/oo/classes/ZTEST/source/main")
         - get_object_source("/sap/bc/adt/programs/programs/ZTEST_PROG/source/main")
+        - get_object_source("/sap/bc/adt/functions/groups/ZFIE1017_1/source/main")
         """
         return class_service.get_object_source(object_uri, version=version)
 

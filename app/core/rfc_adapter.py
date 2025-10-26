@@ -1,11 +1,17 @@
 """RFC adapter for converting HTTP-style requests to SAP RFC calls."""
 
 import logging
+import signal
 from typing import Literal, Dict, Any, Optional
 from pyrfc import Connection
 from app.core.retry_handler import retry_on_network_error, rfc_circuit_breaker
 
 logger = logging.getLogger(__name__)
+
+# Default RFC call timeout in seconds
+# Set to 30s to allow for slower network connections and complex operations
+# Balance between responsiveness and allowing time for operations to complete
+RFC_CALL_TIMEOUT = 30
 
 
 class RfcResponse:
@@ -158,11 +164,12 @@ class RfcAdapter:
     @rfc_circuit_breaker
     def _call_with_retry(self, request_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute RFC call with retry logic.
+        Execute RFC call with retry logic and timeout protection.
 
         This method is decorated with retry logic and circuit breaker.
         It will automatically retry on transient network errors with
-        exponential backoff.
+        exponential backoff. It also includes a timeout to prevent
+        hanging indefinitely on slow/non-responsive endpoints.
 
         Args:
             request_dict: RFC request dictionary
@@ -171,9 +178,26 @@ class RfcAdapter:
             Dict[str, Any]: RFC response
 
         Raises:
+            TimeoutError: If RFC call exceeds timeout
             Exception: If all retry attempts fail
         """
-        return self.conn.call("SADT_REST_RFC_ENDPOINT", REQUEST=request_dict)
+        def timeout_handler(signum, frame):
+            raise TimeoutError(
+                f"RFC call timed out after {RFC_CALL_TIMEOUT} seconds. "
+                "The SAP system may be slow, overloaded, or the endpoint may not exist."
+            )
+
+        # Set alarm for timeout (Unix only)
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(RFC_CALL_TIMEOUT)
+
+        try:
+            result = self.conn.call("SADT_REST_RFC_ENDPOINT", REQUEST=request_dict)
+            signal.alarm(0)  # Cancel alarm on success
+            return result
+        except Exception as e:
+            signal.alarm(0)  # Cancel alarm on error
+            raise
 
     def _build_uri(self, uri: str, params: Optional[Dict[str, Any]]) -> str:
         """Build full URI with query parameters."""
@@ -194,9 +218,28 @@ class RfcAdapter:
     def _build_headers(
         self, headers: Optional[Dict[str, str]], content_type: str
     ) -> Dict[str, str]:
-        """Build request headers with defaults."""
+        """
+        Build request headers with defaults.
+
+        The Accept header is automatically matched to the Content-Type for:
+        - SAP ADT-specific content types (application/vnd.sap.adt.*)
+        - Plain text requests (text/plain)
+
+        This ensures SAP returns the expected format and prevents 406 errors.
+        """
+        # Match Accept header to content_type for SAP ADT and text/plain
+        if content_type.startswith("application/vnd.sap.adt"):
+            # For SAP ADT-specific content types, use same for Accept
+            accept_type = content_type
+        elif content_type == "text/plain":
+            # For plain text, match Accept to ensure compact responses
+            accept_type = "text/plain"
+        else:
+            # For generic types, accept any format
+            accept_type = "*/*"
+
         default_headers = {
-            "Accept": "*/*",
+            "Accept": accept_type,
             "Cache-Control": "no-cache",
             "Content-Type": content_type,
             "X-sap-adt-sessiontype": self.statefulness,

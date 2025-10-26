@@ -50,9 +50,9 @@ class ClassService(BaseService):
         class_name: str,
         version: Literal["active", "inactive"] = "active",
         include_type: str = "main",
-    ) -> str:
+    ) -> Dict[str, Any]:
         """
-        Get the source code of an ABAP class.
+        Get the source code of an ABAP class with CHARACTER_LIMIT management.
 
         Args:
             class_name: Name of the ABAP class (e.g., 'ZCLCXR1002_UTIL')
@@ -60,7 +60,12 @@ class ClassService(BaseService):
             include_type: Type of include ('main', 'testclasses', 'macros', etc.)
 
         Returns:
-            str: Source code of the class
+            Dict with source code and metadata:
+                - source: Source code (potentially truncated)
+                - class_name: Class name
+                - version: Version retrieved
+                - include_type: Include type retrieved
+                - metadata: Truncation and fragmentation info
 
         Raises:
             Exception: If the request fails
@@ -68,7 +73,7 @@ class ClassService(BaseService):
         uri = f"/sap/bc/adt/oo/classes/{class_name}/source/{include_type}"
         params = {"version": version} if version else {}
 
-        logger.info(f"Fetching source for class {class_name} ({version})")
+        logger.info(f"Fetching source for class {class_name} ({version}, include: {include_type})")
 
         # Use connection pool - acquire connection per request
         with self._get_adapter() as adapter:
@@ -82,7 +87,29 @@ class ClassService(BaseService):
 
         if response.status_code == 200:
             logger.debug(f"Successfully retrieved source for {class_name}")
-            return response.text
+            source_code = response.text
+
+            # Build result structure
+            result = {
+                'source': source_code,
+                'class_name': class_name,
+                'version': version,
+                'include_type': include_type,
+                'metadata': {}
+            }
+
+            # Check response size and truncate if needed
+            suggestions = [
+                f"Use get_class_includes('{class_name}') to see available includes",
+                f"Retrieve specific includes: get_class_source('{class_name}', include_type='testclasses')",
+                "Available include types: 'main', 'implementation', 'testclasses', 'macros'",
+                f"Current include '{include_type}' is too large - try fragmenting by include type"
+            ]
+
+            result_data, truncation_info = self._check_and_truncate(result, suggestions)
+            result_data['metadata']['truncation'] = truncation_info
+
+            return result_data
         else:
             error_msg = f"{response.status_code} - Failed to get class source for {class_name}"
             logger.error(error_msg)
@@ -286,6 +313,8 @@ class ClassService(BaseService):
         """
         Get all includes of an ABAP class.
 
+        This method queries each standard include type and returns only those that exist.
+
         Args:
             class_name: Name of the class
 
@@ -296,36 +325,62 @@ class ClassService(BaseService):
             >>> service.get_class_includes("ZCL_TEST")
             [
                 {
-                    "name": "CLAS/OC",
-                    "type": "main",
-                    "uri": "/sap/bc/adt/oo/classes/zcl_test/source/main"
+                    "include_type": "definitions",
+                    "uri": "/sap/bc/adt/oo/classes/zcl_test/includes/definitions",
+                    "exists": true
                 },
                 {
-                    "name": "CLAS/OCT",
-                    "type": "testclasses",
-                    "uri": "/sap/bc/adt/oo/classes/zcl_test/source/testclasses"
+                    "include_type": "implementations",
+                    "uri": "/sap/bc/adt/oo/classes/zcl_test/includes/implementations",
+                    "exists": true
                 },
-                ...
+                {
+                    "include_type": "testclasses",
+                    "uri": "/sap/bc/adt/oo/classes/zcl_test/includes/testclasses",
+                    "exists": true
+                }
             ]
         """
         logger.info(f"Getting includes for class: {class_name}")
 
-        with self._get_adapter() as adapter:
-            response = adapter.request(
-                uri=f"/sap/bc/adt/oo/classes/{class_name.lower()}/includes",
-                method="GET",
-                params={},
-                body=""
-            )
+        # Standard ABAP class include types
+        include_types = ["definitions", "implementations", "testclasses", "macros"]
 
-        if response.status_code == 200:
-            includes = self._parse_class_includes(response.text)
-            logger.info(f"Retrieved {len(includes)} includes for class {class_name}")
-            return includes
-        else:
-            error_msg = f"{response.status_code} - Failed to get class includes"
-            logger.error(error_msg)
-            raise Exception(f"{error_msg}\n{response.text}")
+        includes = []
+        class_name_lower = class_name.lower()
+
+        with self._get_adapter() as adapter:
+            for include_type in include_types:
+                uri = f"/sap/bc/adt/oo/classes/{class_name_lower}/includes/{include_type}"
+
+                try:
+                    response = adapter.request(
+                        uri=uri,
+                        method="GET",
+                        params={},
+                        body="",
+                        content_type="text/plain"
+                    )
+
+                    if response.status_code == 200:
+                        includes.append({
+                            "include_type": include_type,
+                            "uri": uri,
+                            "exists": True,
+                            "size_bytes": len(response.text) if response.text else 0
+                        })
+                        logger.debug(f"Include '{include_type}' exists for class {class_name}")
+                    elif response.status_code == 404:
+                        logger.debug(f"Include '{include_type}' does not exist for class {class_name}")
+                    else:
+                        logger.warning(f"Unexpected status {response.status_code} for include '{include_type}'")
+
+                except Exception as e:
+                    logger.warning(f"Error checking include '{include_type}': {e}")
+                    continue
+
+        logger.info(f"Retrieved {len(includes)} includes for class {class_name}")
+        return includes
 
     def get_class_components(self, class_name: str, version: Literal["active", "inactive"] = "active") -> Dict[str, Any]:
         """
@@ -426,41 +481,6 @@ class ClassService(BaseService):
             logger.error(error_msg)
             raise Exception(f"{error_msg}\n{response.text}")
 
-    def _parse_class_includes(self, xml_text: str) -> List[Dict[str, Any]]:
-        """
-        Parse class includes XML response.
-
-        Args:
-            xml_text: XML response from SAP
-
-        Returns:
-            List of include dictionaries
-        """
-        try:
-            root = et.fromstring(xml_text)
-            includes = []
-
-            # Namespace for includes
-            ns = {
-                'class': 'http://www.sap.com/adt/oo/classes',
-                'adtcore': 'http://www.sap.com/adt/core'
-            }
-
-            # Find all include elements
-            for include in root.findall('.//class:include', ns):
-                include_info = {
-                    'type': include.get(f'{{{ns["adtcore"]}}}type', ''),
-                    'name': include.get(f'{{{ns["adtcore"]}}}name', ''),
-                    'uri': include.get(f'{{{ns["adtcore"]}}}uri', ''),
-                    'description': include.get(f'{{{ns["adtcore"]}}}description', ''),
-                }
-                includes.append(include_info)
-
-            return includes
-
-        except et.ParseError as e:
-            logger.error(f"Failed to parse class includes XML: {e}")
-            raise Exception(f"XML parsing error: {e}")
 
     def _parse_object_structure(self, xml_text: str) -> Dict[str, Any]:
         """

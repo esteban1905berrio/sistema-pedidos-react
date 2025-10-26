@@ -1,10 +1,14 @@
 """MCP tool registration for transport management operations."""
 
+import logging
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from typing import Optional
 
 from app.services.transport_service import TransportService
+from app.mcp.tool_wrapper import mcp_tool_wrapper
+
+logger = logging.getLogger(__name__)
 
 
 def register_transport_tools(mcp: FastMCP, transport_service: TransportService):
@@ -12,24 +16,91 @@ def register_transport_tools(mcp: FastMCP, transport_service: TransportService):
 
     @mcp.tool(
         name="transport_info",
-        description="Get transport information for an ABAP object. "
-                   "Returns transport number, status, lock information, and other transport metadata."
+        description="Get transport version history for an ABAP object. "
+                   "Returns all versions with associated transport requests. "
+                   "Use the /versions endpoint which returns an Atom feed with complete history."
     )
     def transport_info(
         obj_source_url: str = Field(
-            description="URI of the object (e.g., '/sap/bc/adt/oo/classes/ztest')"
+            description="URI of the object (e.g., '/sap/bc/adt/programs/includes/zsdi1038c_1' or '/sap/bc/adt/oo/classes/ztest')"
         ),
         dev_class: Optional[str] = Field(
             default=None,
-            description="Development class/package (optional)"
+            description="Development class/package (optional, not used in current implementation)"
         ),
         operation: Optional[str] = Field(
             default=None,
-            description="Operation type (optional)"
+            description="Operation type (optional, not used in current implementation)"
         )
     ) -> dict:
-        """Get transport information for an object."""
-        return transport_service.transport_info(obj_source_url, dev_class, operation)
+        """
+        Get transport version history for an object.
+
+        Returns dictionary with:
+        - object_uri: The object URI
+        - object_name: Object name
+        - total_versions: Number of versions
+        - versions: List of versions with transport info
+
+        Example:
+            >>> transport_info("/sap/bc/adt/programs/includes/zsdi1038c_1")
+            {
+                "object_name": "ZSDI1038C_1",
+                "total_versions": 5,
+                "versions": [
+                    {
+                        "version_id": "00004",
+                        "author": "JMVALENC",
+                        "transport_number": "S4DK931511",
+                        "transport_title": "DV-SD-I1038...",
+                        ...
+                    }
+                ]
+            }
+        """
+        # MCP Best Practice: ALWAYS return a response, even on timeout/error
+        logger.info(f"🔧 MCP Tool 'transport_info' called with obj_source_url={obj_source_url}")
+
+        try:
+            logger.info(f"🔧 Calling service.transport_info()...")
+            result = transport_service.transport_info(obj_source_url, dev_class, operation)
+            logger.info(f"🔧 Service call completed, returning result")
+            return result
+        except TimeoutError as e:
+            return {
+                "error": True,
+                "error_type": "TimeoutError",
+                "error_message": str(e),
+                "object_uri": obj_source_url,
+                "suggestion": (
+                    "The operation timed out after 30 seconds. This usually means:\n"
+                    "1. The SAP system is slow or overloaded - try again later\n"
+                    "2. The endpoint may not exist or is not responding\n"
+                    "3. The object may not have version history available\n"
+                    "\n"
+                    "Try:\n"
+                    "- Use search_objects() to verify the object exists\n"
+                    "- Check the object URI format is correct\n"
+                    "- Try again later when SAP system load is lower"
+                )
+            }
+        except Exception as e:
+            return {
+                "error": True,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "object_uri": obj_source_url,
+                "suggestion": (
+                    f"An error occurred: {type(e).__name__}: {str(e)}\n\n"
+                    "Common solutions:\n"
+                    "- Verify object exists using search_objects()\n"
+                    "- Check URI format:\n"
+                    "  * Includes: /sap/bc/adt/programs/includes/<name>\n"
+                    "  * Classes: /sap/bc/adt/oo/classes/<name>\n"
+                    "  * Programs: /sap/bc/adt/programs/programs/<name>\n"
+                    "- Some objects may not support version history"
+                )
+            }
 
     @mcp.tool(
         name="create_transport",

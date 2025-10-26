@@ -31,43 +31,62 @@ class TransportService(BaseService):
         operation: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Get transport information for an object.
+        Get transport version history for an object.
+
+        This method retrieves all versions of an object with associated transport
+        requests. It uses the /versions endpoint which returns an Atom feed with
+        version history and transport links.
 
         Args:
-            obj_source_url: URI of the object
-            dev_class: Development class (optional)
-            operation: Operation type (optional)
+            obj_source_url: URI of the object (e.g., /sap/bc/adt/programs/includes/zsdi1038c_1)
+            dev_class: Development class (optional, not used in current implementation)
+            operation: Operation type (optional, not used in current implementation)
 
         Returns:
-            Dictionary with transport information
+            Dictionary with transport version history containing:
+            - object_uri: The object URI
+            - object_name: Object name extracted from feed title
+            - total_versions: Number of versions found
+            - versions: List of version entries with transport details
 
         Example:
-            >>> service.transport_info("/sap/bc/adt/oo/classes/ztest")
+            >>> service.transport_info("/sap/bc/adt/programs/includes/zsdi1038c_1")
             {
-                "transport_number": "DEVK900123",
-                "status": "modifiable",
-                "locked_by": "USER01"
+                "object_uri": "/sap/bc/adt/programs/includes/zsdi1038c_1",
+                "object_name": "ZSDI1038C_1",
+                "total_versions": 5,
+                "versions": [
+                    {
+                        "version_id": "00004",
+                        "author": "JMVALENC",
+                        "updated": "2025-07-21T15:29:48Z",
+                        "transport_number": "S4DK931511",
+                        "transport_title": "DV-SD-I1038 Reporte...",
+                        ...
+                    },
+                    ...
+                ]
             }
         """
-        logger.info(f"Getting transport info for: {obj_source_url}")
+        logger.info(f"Getting transport version history for: {obj_source_url}")
 
-        params = {"uri": obj_source_url}
-        if dev_class:
-            params["devclass"] = dev_class
-        if operation:
-            params["operation"] = operation
+        # Build versions endpoint URI
+        # Examples:
+        # - Class: /sap/bc/adt/oo/classes/ztest/source/main/versions
+        # - Include: /sap/bc/adt/programs/includes/zsdi1038c_1/source/main/versions
+        versions_uri = f"{obj_source_url}/source/main/versions"
 
         with self._get_adapter() as adapter:
             response = adapter.request(
-                uri="/sap/bc/adt/cts/transportinformation",
+                uri=versions_uri,
                 method="GET",
-                params=params,
+                params={},
                 body=""
             )
 
         if response.status_code == 200:
-            transport_data = self._parse_transport_info(response.text)
-            logger.info(f"Retrieved transport info")
+            transport_data = self._parse_transport_versions(response.text, obj_source_url)
+            logger.info(f"Retrieved {transport_data.get('total_versions', 0)} versions with transport info")
             return transport_data
         else:
             error_msg = f"Failed to get transport info: {response.status_code}"
@@ -592,22 +611,88 @@ class TransportService(BaseService):
 
     # Private parsing methods
 
-    def _parse_transport_info(self, xml_text: str) -> Dict[str, Any]:
-        """Parse transport information XML."""
+    def _parse_transport_versions(self, xml_text: str, obj_source_url: str) -> Dict[str, Any]:
+        """
+        Parse Atom feed XML for object version history with transport info.
+
+        Args:
+            xml_text: Atom feed XML response from /versions endpoint
+            obj_source_url: Original object URI (for metadata)
+
+        Returns:
+            Dictionary with version history and transport details
+        """
         try:
             root = ET.fromstring(xml_text)
-            ns = {'tm': 'http://www.sap.com/adt/cts/transports'}
+            # Atom namespace
+            ns = {
+                'atom': 'http://www.w3.org/2005/Atom',
+                'adtcore': 'http://www.sap.com/adt/core'
+            }
 
-            info = {
-                'transport_number': root.findtext('.//tm:number', '', ns),
-                'status': root.findtext('.//tm:status', '', ns),
-                'locked_by': root.findtext('.//tm:locked_by', '', ns),
-                'description': root.findtext('.//tm:description', '', ns),
+            # Extract feed metadata
+            feed_title = root.findtext('atom:title', '', ns)
+            feed_updated = root.findtext('atom:updated', '', ns)
+
+            # Extract object name from title (e.g., "Version List of ZSDI1038C_1 (REPS)")
+            object_name = ''
+            if feed_title:
+                import re
+                match = re.search(r'Version List of\s+(\S+)', feed_title)
+                if match:
+                    object_name = match.group(1)
+
+            # Parse all version entries
+            versions = []
+            for entry in root.findall('atom:entry', ns):
+                version_entry = {
+                    'version_id': entry.findtext('atom:id', '', ns),
+                    'author': entry.findtext('atom:author/atom:name', '', ns),
+                    'title': entry.findtext('atom:title', '', ns),
+                    'updated': entry.findtext('atom:updated', '', ns),
+                    'content_url': entry.find('atom:content', ns).get('src', '') if entry.find('atom:content', ns) is not None else '',
+                    'transport_links': []
+                }
+
+                # Extract transport links (there can be multiple link elements)
+                for link in entry.findall('atom:link', ns):
+                    rel = link.get('rel', '')
+                    if 'transport/request' in rel:
+                        transport_link = {
+                            'transport_number': link.get(f'{{{ns["adtcore"]}}}name', ''),
+                            'href': link.get('href', ''),
+                            'type': link.get('type', ''),
+                            'title': link.get('title', '')
+                        }
+                        version_entry['transport_links'].append(transport_link)
+
+                # For convenience, extract first transport number (most common case)
+                if version_entry['transport_links']:
+                    version_entry['transport_number'] = version_entry['transport_links'][0]['transport_number']
+                    version_entry['transport_title'] = version_entry['transport_links'][0]['title']
+                else:
+                    version_entry['transport_number'] = None
+                    version_entry['transport_title'] = None
+
+                versions.append(version_entry)
+
+            result = {
+                'object_uri': obj_source_url,
+                'object_name': object_name,
+                'feed_title': feed_title,
+                'feed_updated': feed_updated,
+                'total_versions': len(versions),
+                'versions': versions,
                 'raw_xml': xml_text
             }
-            return info
+
+            return result
+
         except ET.ParseError as e:
-            logger.error(f"Failed to parse transport info XML: {e}")
+            logger.error(f"Failed to parse transport versions XML: {e}")
+            return {'raw_xml': xml_text, 'error': str(e)}
+        except Exception as e:
+            logger.error(f"Unexpected error parsing transport versions: {e}")
             return {'raw_xml': xml_text, 'error': str(e)}
 
     def _extract_transport_number(self, xml_text: str) -> str:

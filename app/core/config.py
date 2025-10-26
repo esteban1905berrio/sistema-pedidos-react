@@ -40,13 +40,21 @@ def load_config() -> SAPConfig:
     Raises:
         ValueError: If required environment variables are missing
     """
-    load_dotenv()
+    # Load .env file, but don't override existing environment variables
+    # This allows .mcp.json env vars to take precedence over .env file
+    load_dotenv(override=False)
 
     required_vars = ["SAP_ASHOST", "SAP_SYSNR", "SAP_CLIENT", "SAP_USER", "SAP_PASSWD"]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
 
     if missing_vars:
         raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+
+    # Get SAP_ROUTER and ensure it's only used if it has actual content
+    saprouter = os.getenv("SAP_ROUTER")
+    # Strip whitespace and treat empty strings as None
+    saprouter = saprouter.strip() if saprouter else None
+    saprouter = saprouter if saprouter else None  # Convert empty string to None
 
     return SAPConfig(
         ashost=os.getenv("SAP_ASHOST", ""),
@@ -55,5 +63,5 @@ def load_config() -> SAPConfig:
         user=os.getenv("SAP_USER", ""),
         passwd=os.getenv("SAP_PASSWD", ""),
         lang=os.getenv("SAP_LANG", "EN"),
-        saprouter=os.getenv("SAP_ROUTER"),
+        saprouter=saprouter,
     )
