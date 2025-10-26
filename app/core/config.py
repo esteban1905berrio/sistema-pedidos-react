@@ -33,6 +33,10 @@ def load_config() -> SAPConfig:
     - SAP_PASSWD: Password
     - SAP_LANG: Language (optional, defaults to 'EN')
     - SAP_ROUTER: SAP router string (optional)
+    - LOAD_DOTENV: Set to '1' to load .env file (optional, for local dev only)
+
+    When running as MCP server, all variables should come from .mcp.json.
+    The .env file is only loaded if LOAD_DOTENV=1 is set (for local development/testing).
 
     Returns:
         SAPConfig: Configuration object
@@ -40,9 +44,10 @@ def load_config() -> SAPConfig:
     Raises:
         ValueError: If required environment variables are missing
     """
-    # Load .env file, but don't override existing environment variables
-    # This allows .mcp.json env vars to take precedence over .env file
-    load_dotenv(override=False)
+    # Only load .env file if explicitly requested (for local development)
+    # When running as MCP server, variables come from .mcp.json
+    if os.getenv("LOAD_DOTENV") == "1":
+        load_dotenv(override=False)
 
     required_vars = ["SAP_ASHOST", "SAP_SYSNR", "SAP_CLIENT", "SAP_USER", "SAP_PASSWD"]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
