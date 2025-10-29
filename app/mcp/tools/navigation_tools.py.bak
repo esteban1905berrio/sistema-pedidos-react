@@ -1,6 +1,6 @@
 """MCP tools for ABAP repository navigation operations."""
 
-from typing import Callable, List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
@@ -13,7 +13,7 @@ def register_navigation_tools(mcp: FastMCP, service_getter: Callable[[], Navigat
 
     Args:
         mcp: FastMCP server instance
-        navigation_service: Callable that returns NavigationService instance (lazy-loaded) for repository navigation operations
+        navigation_service: NavigationService instance for repository navigation operations
     """
 
     @mcp.tool(

@@ -1,6 +1,6 @@
 """MCP tools for ABAP program operations."""
 
-from typing import Callable, Literal
+from typing import Literal
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
@@ -13,7 +13,7 @@ def register_program_tools(mcp: FastMCP, service_getter: Callable[[], ProgramSer
 
     Args:
         mcp: FastMCP server instance
-        program_service: Callable that returns ProgramService instance (lazy-loaded) for ABAP program operations
+        program_service: ProgramService instance for ABAP program operations
     """
 
     @mcp.tool(

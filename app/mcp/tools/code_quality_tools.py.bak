@@ -1,7 +1,5 @@
 """MCP tool registration for code quality operations."""
 
-from typing import Callable
-
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 

@@ -1,7 +1,5 @@
 """MCP tool registration for unit test execution operations."""
 
-from typing import Callable
-
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 

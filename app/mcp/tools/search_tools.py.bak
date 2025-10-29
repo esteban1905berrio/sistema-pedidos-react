@@ -1,6 +1,5 @@
 """MCP tools for ABAP object search operations."""
 
-from typing import Callable
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
@@ -13,7 +12,7 @@ def register_search_tools(mcp: FastMCP, service_getter: Callable[[], SearchServi
 
     Args:
         mcp: FastMCP server instance
-        search_service: Callable that returns SearchService instance (lazy-loaded) for ABAP object search
+        search_service: SearchService instance for ABAP object search
     """
 
     @mcp.tool(

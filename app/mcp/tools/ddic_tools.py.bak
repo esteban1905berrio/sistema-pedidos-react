@@ -1,6 +1,6 @@
 """MCP tools for ABAP Data Dictionary (DDIC) operations."""
 
-from typing import Callable, List, Dict, Any
+from typing import List, Dict, Any
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
@@ -13,7 +13,7 @@ def register_ddic_tools(mcp: FastMCP, service_getter: Callable[[], DdicService])
 
     Args:
         mcp: FastMCP server instance
-        ddic_service: Callable that returns DdicService instance (lazy-loaded) for DDIC operations
+        ddic_service: DdicService instance for DDIC operations
     """
 
     @mcp.tool(

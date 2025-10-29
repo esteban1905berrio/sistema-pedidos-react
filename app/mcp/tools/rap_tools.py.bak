@@ -2,7 +2,7 @@
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
-from typing import Callable, Optional
+from typing import Optional
 
 from app.services.rap_service import RAPService
 

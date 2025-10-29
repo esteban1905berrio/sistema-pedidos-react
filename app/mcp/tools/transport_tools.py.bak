@@ -3,7 +3,7 @@
 import logging
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
-from typing import Callable, Optional
+from typing import Optional
 
 from app.services.transport_service import TransportService
 from app.mcp.tool_wrapper import mcp_tool_wrapper

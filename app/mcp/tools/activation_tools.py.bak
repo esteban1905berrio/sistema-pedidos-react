@@ -2,7 +2,7 @@
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
-from typing import Callable, List, Dict
+from typing import List, Dict
 
 from app.services.activation_service import ActivationService
 

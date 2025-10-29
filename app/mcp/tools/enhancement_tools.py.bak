@@ -1,7 +1,5 @@
 """MCP tool registration for Enhancement (Ampliaciones) operations."""
 
-from typing import Callable
-
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 

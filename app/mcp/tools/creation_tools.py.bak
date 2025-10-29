@@ -2,7 +2,7 @@
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
-from typing import Callable, Optional
+from typing import Optional
 
 from app.services.creation_service import CreationService
 
@@ -99,34 +99,6 @@ def register_creation_tools(mcp: FastMCP, service_getter: Callable[[], CreationS
     ) -> dict:
         """Create a new ABAP class."""
         return service_getter().create_class(class_name, package, description, transport, class_type)
-
-    @mcp.tool(
-        name="create_interface",
-        description="Create a new ABAP interface. "
-                   "Automatically generates interface definition. "
-                   "Use $TMP for local objects or specify a package + transport for transportable objects."
-    )
-    def create_interface(
-        interface_name: str = Field(
-            description="Name of the interface (must start with Y or Z for customer namespace, e.g., 'ZIFCX_ALVGRID')"
-        ),
-        package: str = Field(
-            description="Package name (use '$TMP' for local development, or package name for transportable)"
-        ),
-        description: str = Field(
-            description="Interface description/title"
-        ),
-        transport: Optional[str] = Field(
-            default=None,
-            description="Transport number (required for transportable packages, not needed for $TMP)"
-        ),
-        interface_type: str = Field(
-            default="INTF/OI",
-            description="Interface type (default: 'INTF/OI' for standard interface)"
-        )
-    ) -> dict:
-        """Create a new ABAP interface."""
-        return service_getter().create_interface(interface_name, package, description, transport, interface_type)
 
     @mcp.tool(
         name="delete_object",

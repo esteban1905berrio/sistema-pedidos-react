@@ -23,6 +23,7 @@ from app.services.cds_service import CDSService
 from app.services.rap_service import RAPService
 from app.services.enhancement_service import EnhancementService
 from app.services.modification_service import ModificationService
+from app.services.interface_service import InterfaceService
 from app.mcp.tools.class_tools import register_class_tools
 from app.mcp.tools.search_tools import register_search_tools
 from app.mcp.tools.program_tools import register_program_tools
@@ -41,6 +42,7 @@ from app.mcp.tools.cds_tools import register_cds_tools
 from app.mcp.tools.rap_tools import register_rap_tools
 from app.mcp.tools.enhancement_tools import register_enhancement_tools
 from app.mcp.tools.modification_tools import register_modification_tools
+from app.mcp.tools.interface_tools import register_interface_tools
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +52,27 @@ logger = logging.getLogger(__name__)
 
 # Create MCP server
 mcp = FastMCP("ABAP-ADT-RFC-Server")
+
+# Global services cache (lazy-loaded)
+_services_cache = None
+
+
+def get_services():
+    """
+    Get services (lazy-loaded on first call).
+
+    Returns:
+        tuple: All initialized service instances
+    """
+    global _services_cache
+
+    if _services_cache is not None:
+        return _services_cache
+
+    logger.info("Initializing ABAP services...")
+    _services_cache = initialize_services()
+    logger.info("Services initialized successfully")
+    return _services_cache
 
 
 def initialize_services():
@@ -94,6 +117,7 @@ def initialize_services():
         rap_service = RAPService(pool)
         enhancement_service = EnhancementService(pool)
         modification_service = ModificationService(pool)
+        interface_service = InterfaceService(pool)
 
         return (
             class_service,
@@ -114,6 +138,7 @@ def initialize_services():
             rap_service,
             enhancement_service,
             modification_service,
+            interface_service,
         )
 
     except Exception as e:
@@ -121,51 +146,107 @@ def initialize_services():
         raise
 
 
-# Initialize services
-logger.info("Initializing ABAP services...")
-(
-    class_service,
-    search_service,
-    program_service,
-    discovery_service,
-    navigation_service,
-    ddic_service,
-    query_service,
-    transport_service,
-    object_service,
-    activation_service,
-    code_quality_service,
-    creation_service,
-    unittest_service,
-    whereused_service,
-    cds_service,
-    rap_service,
-    enhancement_service,
-    modification_service,
-) = initialize_services()
-logger.info("Services initialized successfully")
-
-# Register tools
+# Register tools (services will be lazy-loaded on first use)
 logger.info("Registering MCP tools...")
-register_class_tools(mcp, class_service)
-register_search_tools(mcp, search_service)
-register_program_tools(mcp, program_service)
-register_discovery_tools(mcp, discovery_service)
-register_navigation_tools(mcp, navigation_service)
-register_ddic_tools(mcp, ddic_service)
-register_query_tools(mcp, query_service)
-register_transport_tools(mcp, transport_service)
-register_object_tools(mcp, object_service)
-register_activation_tools(mcp, activation_service)
-register_code_quality_tools(mcp, code_quality_service)
-register_creation_tools(mcp, creation_service)
-register_unittest_tools(mcp, unittest_service)
-register_whereused_tools(mcp, whereused_service)
-register_cds_tools(mcp, cds_service)
-register_rap_tools(mcp, rap_service)
-register_enhancement_tools(mcp, enhancement_service)
-register_modification_tools(mcp, modification_service)
-logger.info("MCP tools registered")
+
+
+def get_class_service():
+    return get_services()[0]
+
+
+def get_search_service():
+    return get_services()[1]
+
+
+def get_program_service():
+    return get_services()[2]
+
+
+def get_discovery_service():
+    return get_services()[3]
+
+
+def get_navigation_service():
+    return get_services()[4]
+
+
+def get_ddic_service():
+    return get_services()[5]
+
+
+def get_query_service():
+    return get_services()[6]
+
+
+def get_transport_service():
+    return get_services()[7]
+
+
+def get_object_service():
+    return get_services()[8]
+
+
+def get_activation_service():
+    return get_services()[9]
+
+
+def get_code_quality_service():
+    return get_services()[10]
+
+
+def get_creation_service():
+    return get_services()[11]
+
+
+def get_unittest_service():
+    return get_services()[12]
+
+
+def get_whereused_service():
+    return get_services()[13]
+
+
+def get_cds_service():
+    return get_services()[14]
+
+
+def get_rap_service():
+    return get_services()[15]
+
+
+def get_enhancement_service():
+    return get_services()[16]
+
+
+def get_modification_service():
+    return get_services()[17]
+
+
+def get_interface_service():
+    return get_services()[18]
+
+
+# Pass getter functions instead of service instances
+register_class_tools(mcp, get_class_service)
+register_search_tools(mcp, get_search_service)
+register_program_tools(mcp, get_program_service)
+register_discovery_tools(mcp, get_discovery_service)
+register_navigation_tools(mcp, get_navigation_service)
+register_ddic_tools(mcp, get_ddic_service)
+register_query_tools(mcp, get_query_service)
+register_transport_tools(mcp, get_transport_service)
+register_object_tools(mcp, get_object_service)
+register_activation_tools(mcp, get_activation_service)
+register_code_quality_tools(mcp, get_code_quality_service)
+register_creation_tools(mcp, get_creation_service)
+register_unittest_tools(mcp, get_unittest_service)
+register_whereused_tools(mcp, get_whereused_service)
+register_cds_tools(mcp, get_cds_service)
+register_rap_tools(mcp, get_rap_service)
+register_enhancement_tools(mcp, get_enhancement_service)
+register_modification_tools(mcp, get_modification_service)
+register_interface_tools(mcp, get_interface_service)
+logger.info("MCP tools registered (services will lazy-load on first use)")
 
 
 # Add server information

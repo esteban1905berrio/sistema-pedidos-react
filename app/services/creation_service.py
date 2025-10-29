@@ -345,6 +345,72 @@ class CreationService(BaseService):
             logger.error(error_msg)
             raise Exception(f"{error_msg}\n{response.text}")
 
+    def create_interface(
+        self,
+        interface_name: str,
+        package: str,
+        description: str,
+        transport: Optional[str] = None,
+        interface_type: str = "INTF/OI"
+    ) -> Dict[str, Any]:
+        """
+        Create a new ABAP interface.
+
+        Args:
+            interface_name: Name of the interface (e.g., 'ZIFCX_ALVGRID')
+            package: Package name (e.g., '$TMP' for local, 'ZFI' for transportable)
+            description: Interface description
+            transport: Transport number (required for transportable packages)
+            interface_type: Interface type (default: 'INTF/OI')
+
+        Returns:
+            Dictionary with creation result
+
+        Example:
+            >>> result = service.create_interface(
+            ...     "ZIFCX_ALVGRID",
+            ...     "ZFI",
+            ...     "ALV Grid Interface",
+            ...     "CADK911122"
+            ... )
+            >>> print(result)
+            {"success": True, "uri": "/sap/bc/adt/oo/interfaces/zifcx_alvgrid"}
+        """
+        logger.info(f"Creating interface: {interface_name}")
+
+        # Build creation XML
+        body = self._build_create_interface_xml(interface_name, package, description, interface_type)
+
+        params = {}
+        if transport:
+            params["corrNr"] = transport
+
+        with self._get_adapter() as adapter:
+            response = adapter.request(
+                uri="/sap/bc/adt/oo/interfaces",
+                method="POST",
+                params=params,
+                body=body,
+                content_type="application/vnd.sap.adt.oo.interfaces.v2+xml"
+            )
+
+        if response.status_code in [200, 201]:
+            # Extract URI from response or build it
+            object_uri = self._extract_uri_from_response(response.text)
+            if not object_uri:
+                object_uri = f"/sap/bc/adt/oo/interfaces/{interface_name.lower()}"
+
+            logger.info(f"Interface created successfully: {object_uri}")
+            return {
+                "success": True,
+                "uri": object_uri,
+                "name": interface_name
+            }
+        else:
+            error_msg = f"Failed to create interface: {response.status_code}"
+            logger.error(error_msg)
+            raise Exception(f"{error_msg}\n{response.text}")
+
     def delete_object(
         self,
         object_uri: str,
@@ -454,6 +520,26 @@ class CreationService(BaseService):
                  adtcore:packageName="{package}">
   <adtcore:packageRef adtcore:name="{package}"/>
 </class:abapClass>"""
+
+        return xml
+
+    def _build_create_interface_xml(
+        self,
+        interface_name: str,
+        package: str,
+        description: str,
+        interface_type: str
+    ) -> str:
+        """Build XML body for interface creation."""
+        xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<intf:abapInterface xmlns:intf="http://www.sap.com/adt/oo/interfaces"
+                    xmlns:adtcore="http://www.sap.com/adt/core"
+                    adtcore:type="{interface_type}"
+                    adtcore:description="{description}"
+                    adtcore:name="{interface_name}"
+                    adtcore:packageName="{package}">
+  <adtcore:packageRef adtcore:name="{package}"/>
+</intf:abapInterface>"""
 
         return xml
 

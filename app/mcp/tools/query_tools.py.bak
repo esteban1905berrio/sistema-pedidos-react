@@ -1,6 +1,6 @@
 """MCP tools for ABAP data query and preview operations."""
 
-from typing import Callable, Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
@@ -13,7 +13,7 @@ def register_query_tools(mcp: FastMCP, service_getter: Callable[[], QueryService
 
     Args:
         mcp: FastMCP server instance
-        query_service: Callable that returns QueryService instance (lazy-loaded) for data query operations
+        query_service: QueryService instance for data query operations
     """
 
     @mcp.tool(
