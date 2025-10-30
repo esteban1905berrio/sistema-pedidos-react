@@ -191,109 +191,200 @@ class TransportService(BaseService):
             logger.error(error_msg)
             raise Exception(f"{error_msg}\n{response.text}")
 
-    def get_transport_request(self, transport_number: str) -> Dict[str, Any]:
-        """
-        Get full transport request data (general method).
-
-        This is the base method that retrieves complete transport data including
-        tasks and objects. Other methods like get_transport_tasks() and
-        get_transport_objects() use this method and extract specific data.
-
-        Args:
-            transport_number: Transport request number
-
-        Returns:
-            Dictionary with complete transport data
-
-        Example:
-            >>> service.get_transport_request("S4DK932806")
-            {
-                "number": "S4DK932806",
-                "owner": "SEBLONDO",
-                "description": "...",
-                "tasks": [...],
-                "objects": [...],
-                "raw_xml": "..."
-            }
-        """
-        logger.info(f"Getting transport request data: {transport_number}")
-
-        with self._get_adapter() as adapter:
-            response = adapter.request(
-                uri=f"/sap/bc/adt/cts/transportrequests/{transport_number}",
-                method="GET",
-                params={},
-                body=""
-            )
-
-        if response.status_code == 200:
-            transport_data = self._parse_transport_request(response.text)
-            logger.info(f"Retrieved transport data with {len(transport_data.get('tasks', []))} tasks")
-            return transport_data
-        else:
-            error_msg = f"Failed to get transport request: {response.status_code}"
-            logger.error(error_msg)
-            raise Exception(f"{error_msg}\n{response.text}")
-
     def get_transport_tasks(self, transport_number: str) -> List[Dict[str, Any]]:
         """
-        Get tasks for a transport request.
+        Get tasks for a transport request by querying E070 table directly.
+
+        This method queries E070 table to find all tasks (TRFUNCTION='S') that belong
+        to the specified main transport request, avoiding ADT API token limitations.
 
         Args:
-            transport_number: Transport request number
+            transport_number: Transport request number (main OT)
 
         Returns:
-            List of task dictionaries
+            List of task dictionaries with structure:
+            - task_number: Task transport number
+            - owner: Task owner user
+            - created_date: Creation date (YYYY-MM-DD)
+            - status: Task status (D=Modifiable, R=Released)
+            - object_count: Number of objects in the task
 
         Example:
-            >>> service.get_transport_tasks("S4DK932806")
-            [{"number": "S4DK932807", "owner": "SEBLONDO", ...}, ...]
+            >>> service.get_transport_tasks("CADK911272")
+            [
+                {
+                    "task_number": "CADK911273",
+                    "owner": "L_ABAPS_ITA",
+                    "created_date": "2025-10-29",
+                    "status": "D",
+                    "object_count": 1
+                }
+            ]
+
+        Raises:
+            Exception: If E070 query fails
         """
         logger.info(f"Getting tasks for transport: {transport_number}")
 
-        # Use general method to retrieve full transport data
-        transport_data = self.get_transport_request(transport_number)
-        tasks = transport_data.get('tasks', [])
+        try:
+            # Use the same E070 query logic as get_transport_objects
+            tasks = self._get_tasks_for_transport(transport_number)
+            logger.info(f"Found {len(tasks)} tasks for transport {transport_number}")
+            return tasks
 
-        logger.info(f"Found {len(tasks)} tasks")
-        return tasks
+        except Exception as e:
+            error_msg = f"Failed to get transport tasks from E070: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
 
     def get_transport_objects(
         self,
         transport_number: str,
         task_number: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
-        Get objects from a transport request.
+        Get objects from a transport request by querying E071 table directly.
+
+        This method queries SAP tables E070 and E071 directly to retrieve complete
+        transport information without the token limitations of ADT API endpoints.
 
         Args:
-            transport_number: Transport request number
-            task_number: Optional task number to filter objects by task
+            transport_number: Transport request number (OT principal or task)
+            task_number: Optional task number to filter objects (when transport_number is main OT)
 
         Returns:
-            List of object dictionaries
+            Dictionary with complete transport data:
+            {
+                "success": bool,
+                "transport_number": str,
+                "metadata": {
+                    "transport_type": str (K, S, etc.),
+                    "transport_type_desc": str,
+                    "status": str (D, R, etc.),
+                    "status_desc": str,
+                    "owner": str,
+                    "created_date": str (YYYY-MM-DD),
+                    "created_time": str (HH:MM:SS),
+                    "target_system": str,
+                    "category": str,
+                    "parent_transport": str or None
+                },
+                "objects": List[Dict],
+                "total_objects": int,
+                "tasks": List[Dict]  (only for main OT)
+            }
 
-        Example:
-            >>> service.get_transport_objects("S4DK932806")
-            [{"pgmid": "LIMU", "type": "METH", "name": "...", ...}, ...]
+        Examples:
+            >>> # Get all objects from main transport (includes all tasks)
+            >>> service.get_transport_objects("CADK911088")
+            {
+                "success": True,
+                "transport_number": "CADK911088",
+                "metadata": {...},
+                "total_objects": 33,
+                "objects": [...],
+                "tasks": [
+                    {"task_number": "CADK911222", "object_count": 19, ...},
+                    {"task_number": "CADK911089", "object_count": 14, ...}
+                ]
+            }
 
-            >>> service.get_transport_objects("S4DK932806", "S4DK932807")
-            [{"pgmid": "LIMU", "type": "METH", "name": "...", "task": "S4DK932807"}, ...]
+            >>> # Get objects from specific task
+            >>> service.get_transport_objects("CADK911222")
+            {
+                "success": True,
+                "transport_number": "CADK911222",
+                "metadata": {...},
+                "total_objects": 19,
+                "objects": [...],
+                "tasks": []
+            }
+
+            >>> # Filter objects by task within main transport
+            >>> service.get_transport_objects("CADK911088", task_number="CADK911222")
+            {
+                "success": True,
+                "transport_number": "CADK911088",
+                "metadata": {...},
+                "total_objects": 19,
+                "objects": [...],  # Only objects from CADK911222
+                "tasks": [...]
+            }
+
+        Raises:
+            ValueError: If transport not found in E070 table
         """
         logger.info(f"Getting objects for transport: {transport_number}")
 
-        # Use general method to retrieve full transport data
-        transport_data = self.get_transport_request(transport_number)
-        objects = transport_data.get('objects', [])
+        try:
+            # Step 1: Get transport metadata from E070
+            metadata = self._get_transport_metadata(transport_number)
 
-        # Filter by task if specified
-        if task_number:
-            objects = [obj for obj in objects if obj.get('task') == task_number]
-            logger.info(f"Found {len(objects)} objects for task {task_number}")
-        else:
-            logger.info(f"Found {len(objects)} total objects")
+            # Step 2: Get objects from E071
+            objects = self._get_transport_objects_from_e071(transport_number)
 
-        return objects
+            # Step 3: Determine if this is main transport or task
+            is_main_transport = metadata['transport_type'] == 'K'
+
+            # Step 4: If main transport, get all tasks and their objects
+            tasks = []
+            all_objects = objects.copy()  # Start with objects directly in main OT
+
+            if is_main_transport:
+                tasks = self._get_tasks_for_transport(transport_number)
+
+                # Get objects from all tasks
+                for task in tasks:
+                    task_objects = self._get_transport_objects_from_e071(task['task_number'])
+                    all_objects.extend(task_objects)
+
+                # If task_number filter specified, filter objects
+                if task_number:
+                    all_objects = [obj for obj in all_objects if obj['trkorr'] == task_number]
+                    logger.info(f"Filtered to {len(all_objects)} objects for task {task_number}")
+
+            # Step 5: Build response
+            result = {
+                "success": True,
+                "transport_number": transport_number,
+                "metadata": metadata,
+                "objects": all_objects,
+                "total_objects": len(all_objects),
+                "tasks": tasks
+            }
+
+            logger.info(
+                f"Retrieved {result['total_objects']} objects for {transport_number} "
+                f"({len(tasks)} tasks)" if tasks else
+                f"Retrieved {result['total_objects']} objects for {transport_number}"
+            )
+
+            return result
+
+        except ValueError as e:
+            # Transport not found
+            logger.error(f"Transport not found: {transport_number}")
+            return {
+                "success": False,
+                "transport_number": transport_number,
+                "error": str(e),
+                "metadata": {},
+                "objects": [],
+                "total_objects": 0,
+                "tasks": []
+            }
+        except Exception as e:
+            # Unexpected error
+            logger.error(f"Error getting transport objects: {e}")
+            return {
+                "success": False,
+                "transport_number": transport_number,
+                "error": str(e),
+                "metadata": {},
+                "objects": [],
+                "total_objects": 0,
+                "tasks": []
+            }
 
     # Sprint 3.3: Object Assignment & Release
 
@@ -608,6 +699,196 @@ class TransportService(BaseService):
             error_msg = f"Failed to get transport references: {response.status_code}"
             logger.error(error_msg)
             raise Exception(f"{error_msg}\n{response.text}")
+
+    # Private helper methods for E070/E071 table queries
+
+    def _get_transport_metadata(self, transport_number: str) -> Dict[str, Any]:
+        """
+        Get transport metadata from E070 table.
+
+        Args:
+            transport_number: Transport request number (OT or Task)
+
+        Returns:
+            Dictionary with metadata from E070:
+            - transport_number: TRKORR
+            - transport_type: TRFUNCTION (K=Workbench, S=Task)
+            - transport_type_desc: Human-readable type
+            - status: TRSTATUS (D=Modifiable, R=Released)
+            - status_desc: Human-readable status
+            - owner: AS4USER
+            - created_date: AS4DATE (formatted as YYYY-MM-DD)
+            - created_time: AS4TIME (formatted as HH:MM:SS)
+            - target_system: TARSYSTEM
+            - category: KORRDEV
+            - parent_transport: STRKORR (empty for main OT, parent OT for tasks)
+
+        Raises:
+            ValueError: If transport not found in E070
+        """
+        from app.services.query_service import QueryService
+
+        logger.debug(f"Querying E070 for transport metadata: {transport_number}")
+
+        query_service = QueryService(self.pool)
+        result = query_service.get_table_contents(
+            table_name="E070",
+            where_clause=f"TRKORR = '{transport_number}'",
+            max_rows=1
+        )
+
+        if result.get('row_count', 0) == 0:
+            raise ValueError(f"Transport {transport_number} not found in E070 table")
+
+        row = result['rows'][0]
+
+        # Map transport type
+        transport_type = row.get('TRFUNCTION', '')
+        type_map = {
+            'K': 'Workbench',
+            'S': 'Task',
+            'T': 'Transport of Copies',
+            'W': 'Workbench Request',
+            'C': 'Customizing'
+        }
+
+        # Map status
+        status = row.get('TRSTATUS', '')
+        status_map = {
+            'D': 'Modifiable',
+            'R': 'Released',
+            'L': 'Protected',
+            'N': 'Modifiable (Protected)',
+            'O': 'Released (With Import Protection)'
+        }
+
+        # Format date (YYYYMMDD → YYYY-MM-DD)
+        created_date = row.get('AS4DATE', '')
+        if len(created_date) == 8:
+            created_date = f"{created_date[:4]}-{created_date[4:6]}-{created_date[6:8]}"
+
+        # Format time (HHMMSS → HH:MM:SS)
+        created_time = row.get('AS4TIME', '')
+        if len(created_time) == 6:
+            created_time = f"{created_time[:2]}:{created_time[2:4]}:{created_time[4:6]}"
+
+        metadata = {
+            "transport_number": row.get('TRKORR', ''),
+            "transport_type": transport_type,
+            "transport_type_desc": type_map.get(transport_type, transport_type),
+            "status": status,
+            "status_desc": status_map.get(status, status),
+            "owner": row.get('AS4USER', ''),
+            "created_date": created_date,
+            "created_time": created_time,
+            "target_system": row.get('TARSYSTEM', ''),
+            "category": row.get('KORRDEV', ''),
+            "parent_transport": row.get('STRKORR', '') or None
+        }
+
+        logger.debug(f"Retrieved metadata for {transport_number}: Type={transport_type}, Status={status}")
+        return metadata
+
+    def _get_transport_objects_from_e071(
+        self,
+        transport_number: str,
+        max_rows: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """
+        Get objects from E071 table for a transport.
+
+        Args:
+            transport_number: Transport request number (can be OT or Task)
+            max_rows: Maximum objects to retrieve (default: 1000)
+
+        Returns:
+            List of object dictionaries from E071:
+            - trkorr: TRKORR (transport number)
+            - as4pos: AS4POS (sequence number)
+            - pgmid: PGMID (Program ID, e.g., R3TR, LIMU)
+            - object: OBJECT (Object type, e.g., CLAS, PROG, TABL)
+            - obj_name: OBJ_NAME (Object name)
+            - objfunc: OBJFUNC (Object function)
+            - lockflag: LOCKFLAG (Lock status, X=Locked)
+            - gennum: GENNUM
+            - lang: LANG
+            - activity: ACTIVITY
+        """
+        from app.services.query_service import QueryService
+
+        logger.debug(f"Querying E071 for objects in transport: {transport_number}")
+
+        query_service = QueryService(self.pool)
+        result = query_service.get_table_contents(
+            table_name="E071",
+            where_clause=f"TRKORR = '{transport_number}'",
+            max_rows=max_rows
+        )
+
+        objects = []
+        for row in result.get('rows', []):
+            obj = {
+                "trkorr": row.get('TRKORR', ''),
+                "as4pos": row.get('AS4POS', ''),
+                "pgmid": row.get('PGMID', ''),
+                "object": row.get('OBJECT', ''),
+                "obj_name": row.get('OBJ_NAME', ''),
+                "objfunc": row.get('OBJFUNC', ''),
+                "lockflag": row.get('LOCKFLAG', ''),
+                "gennum": row.get('GENNUM', ''),
+                "lang": row.get('LANG', ''),
+                "activity": row.get('ACTIVITY', '')
+            }
+            objects.append(obj)
+
+        logger.debug(f"Found {len(objects)} objects in E071 for {transport_number}")
+        return objects
+
+    def _get_tasks_for_transport(self, transport_number: str) -> List[Dict[str, Any]]:
+        """
+        Get all tasks (subtasks) for a main transport request.
+
+        Queries E070 where STRKORR = transport_number to find all tasks
+        that belong to the main transport.
+
+        Args:
+            transport_number: Main transport request number (OT)
+
+        Returns:
+            List of task metadata dictionaries
+        """
+        from app.services.query_service import QueryService
+
+        logger.debug(f"Querying E070 for tasks under transport: {transport_number}")
+
+        query_service = QueryService(self.pool)
+        result = query_service.get_table_contents(
+            table_name="E070",
+            where_clause=f"STRKORR = '{transport_number}' AND TRFUNCTION = 'S'",
+            max_rows=100
+        )
+
+        tasks = []
+        for row in result.get('rows', []):
+            # Get object count for this task
+            task_objects = self._get_transport_objects_from_e071(row.get('TRKORR', ''))
+
+            # Format date
+            created_date = row.get('AS4DATE', '')
+            if len(created_date) == 8:
+                created_date = f"{created_date[:4]}-{created_date[4:6]}-{created_date[6:8]}"
+
+            task = {
+                "task_number": row.get('TRKORR', ''),
+                "owner": row.get('AS4USER', ''),
+                "created_date": created_date,
+                "status": row.get('TRSTATUS', ''),
+                "object_count": len(task_objects)
+            }
+            tasks.append(task)
+
+        logger.debug(f"Found {len(tasks)} tasks for transport {transport_number}")
+        return tasks
 
     # Private parsing methods
 

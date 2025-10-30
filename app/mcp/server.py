@@ -295,9 +295,8 @@ This MCP server provides tools to interact with SAP ABAP systems via RFC.
 - **run_query**: Execute custom SQL queries or advanced data retrieval
 
 ### Transport Management Operations
-- **get_transport_request**: Get complete transport data (tasks and objects)
 - **get_transport_tasks**: Get tasks associated with a transport
-- **get_transport_objects**: Get ABAP objects from a transport or task
+- **get_transport_objects**: Get ABAP objects from a transport or task (recommended for complete data)
 - **transport_info**: Get transport information for an object
 - **create_transport**: Create a new transport request
 - **list_user_transports**: List transport requests for a user

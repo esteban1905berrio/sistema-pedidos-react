@@ -141,47 +141,51 @@ def register_transport_tools(mcp: FastMCP, service_getter: Callable[[], Transpor
         return service_getter().list_user_transports(user, status)
 
     @mcp.tool(
-        name="get_transport_request",
-        description="Get complete transport request data including tasks and objects. "
-                   "Returns full transport metadata, all tasks, and all objects in the transport."
-    )
-    def get_transport_request(
-        transport_number: str = Field(
-            description="Transport request number (e.g., 'S4DK932806')"
-        )
-    ) -> dict:
-        """Get full transport request data."""
-        return service_getter().get_transport_request(transport_number)
-
-    @mcp.tool(
         name="get_transport_tasks",
-        description="Get all tasks associated with a transport request. "
-                   "Returns a list of tasks with their numbers, owners, and descriptions."
+        description="Get all tasks associated with a transport request by querying E070 table directly. "
+                   "Returns a list of tasks with their numbers, owners, descriptions, status, and object counts. "
+                   "Uses direct E070 table queries instead of ADT API to avoid token limitations."
     )
     def get_transport_tasks(
         transport_number: str = Field(
-            description="Transport request number (e.g., 'DEVK900123')"
+            description="Transport request number (e.g., 'CADK911272')"
         )
     ) -> list:
-        """Get tasks for a transport request."""
+        """Get tasks for a transport request from E070 table."""
         return service_getter().get_transport_tasks(transport_number)
 
     @mcp.tool(
         name="get_transport_objects",
-        description="Get all ABAP objects from a transport request or task. "
-                   "Returns list of objects with their types, names, and metadata. "
-                   "Can filter by task number to get objects for a specific task."
+        description="Get all ABAP objects from a transport request or task by querying E071 table directly. "
+                   "Returns complete transport data with metadata, objects, and tasks. "
+                   "Can filter by task number to get objects for a specific task. "
+                   "Uses direct table queries (E070/E071) instead of ADT API to avoid token limitations."
     )
     def get_transport_objects(
         transport_number: str = Field(
-            description="Transport request number (e.g., 'S4DK932806')"
+            description="Transport request number (e.g., 'CADK911088' for main OT or 'CADK911222' for task)"
         ),
         task_number: Optional[str] = Field(
             default=None,
-            description="Optional task number to filter objects by task (e.g., 'S4DK932807')"
+            description="Optional task number to filter objects by task (e.g., 'CADK911222')"
         )
-    ) -> list:
-        """Get objects from a transport request."""
+    ) -> dict:
+        """
+        Get objects from a transport request with complete metadata.
+
+        Returns dictionary with:
+        - success: bool
+        - transport_number: str
+        - metadata: dict (type, status, owner, dates, etc.)
+        - objects: list (all objects from E071)
+        - total_objects: int
+        - tasks: list (task information, only for main transports)
+
+        Example:
+            get_transport_objects("CADK911088") -> All objects from main transport + tasks
+            get_transport_objects("CADK911222") -> Objects from specific task
+            get_transport_objects("CADK911088", "CADK911222") -> Filter by task
+        """
         return service_getter().get_transport_objects(transport_number, task_number)
 
     @mcp.tool(
