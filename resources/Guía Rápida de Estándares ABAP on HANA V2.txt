@@ -1,0 +1,704 @@
+﻿Guía Rápida de Estándares ABAP 
+Guía Rápida de Estándares ABAP 
+Página 1 de 9
+  
+Guía Rápida de Estándares ABAP 
+Control del Documento  
+Versión Descripción Realizado por Fecha1.0 Versión Inicial IBM - Hilatec 2007-01-01 2.0 Ajustes Yuvan D Betancur 2015-03-27 3.0 Ajustes S4/HANA Jose Miguel Valencia 2020-02-28 4.0 Ajustes nomenclatura de nombres Jose Miguel Valencia 2020-10-21 4.1 Ajustes nomenclatura de nombres Jose Miguel Valencia 2021-02-12 
+4.2 
+	Nomenclatura CDS 
+	Jose Miguel Valencia 
+	2021-02-24 
+	
+
+
+
+Página 2 de 9
+  
+Guía Rápida de Estándares ABAP 
+Tabla de Contenido  
+Control del Documento ................................................................................................................. 21. Objetivo ...................................................................................................................................... 42. Alcance ...................................................................................................................................... 43. Convenciones para Nombres ..................................................................................................... 44. Ampliaciones.............................................................................................................................. 9
+5. Convención Sub-Paquetes....................................................................................................... 155.1. Sub-Paquetes (Configuración, Enhacement, Utilidades) .................................................. 15
+6. Objetos del Diccionario de Datos ............................................................................................. 177. Table Function ......................................................................................................................... 188. Convención de Nombres Vistas CDS ....................................................................................... 199. Convenciones Generales de Programación ............................................................................. 2110. Variables y Tablas Internas ................................................................................................. 2211. Nomenclatura objetos EWM ................................................................................................ 24
+12. Utilidades de Desarrollo. ..................................................................................................... 2412.1. Gestión de Parámetros ................................................................................................ 25
+12.2. Gestion de Ampliaciones .............................................................................................. 2512.3. Clases para agilizar desarrollo ..................................................................................... 25
+13. Manejo de Log .................................................................................................................... 2613.1. Log de Aplicación ......................................................................................................... 26
+13.2. Log de Auditoria para tablas Z ..................................................................................... 2614. Plantilla de programas ......................................................................................................... 27
+15. Documentación código fuente ............................................................................................. 2815.1. Reporte o INCLUDE ..................................................................................................... 28
+15.2. Métodos de Clases / Encabezados de Módulos de función .......................................... 2916. Ingreso SOLMAN – Focused Build ...................................................................................... 30
+Página 3 de 9
+  
+Guía Rápida de Estándares ABAP 
+1. Objetivo  
+Dar una guía de los estándares de Desarrollo que conlleven a un orden y una estructura clara, organizada y homogénea de los  desarrollos en las diversas plataformas ABAP.  
+2. Alcance  
+Este documento da un resumen de las convenciones de nombres para los diversos objetos en ABAP. En todas las plataformas  ABAP (AFS, APO, BW, POSDM, etc) de Crystal se debe cumplir con el estándar.  
+RICEFWnnnnn: Identificador generado por el equipo de arquitectura de Crystal. Este identificador empieza por la inicial del  RICEFW seguido de un consecutivo de 5 digitos. Ej. R1000  
+3. Convenciones para Nombres  
+Ordenes de transporte:  
+XX-AA-RICEFW DESCRIPCION #001 
+XX = DV(Desarrollo) CT(Configuracion)  
+AA = Modulo. Ej. SD  
+Ordenes de transporte Copia:  
+TC-[NUMERO(s) ORDEN ORIGINAL] 
+Página 4 de 9 
+Guía Rápida de Estándares ABAP   
+Programas Tipo Report / Execute (SE38, SE80)  
+Códigos de Transacción (SE93)  
+Jobs (SM36)  
+Formales: ZAAFRICEW_n (En este  include se definen los eventos)  Prueba: YP_xxxxxxxxxx Includes  
+ZAAFRICEW_n  Ej: ZCXR1000_1  
+ZAAFRICEW_[DESCRIPCION_]nn  Ej:  
+ZCXR1000_PARAMETROS_01  
+ZAAFRICEWP_n (Parametros de selección),  ZAAFRICEWC_n (Declaración Clases e  Implementación de Métodos),  Nota: Estos 2 include los terminados en CD y  CI son opcionales. Esto depende si el  desarrollador considera su implementación  con base en la complejidad del desarrollo.  ZAAFRICEWCD_n (definición Métodos y  variables globales de la clase),  ZAAFRICEWCI_n (Implementación métodos)  
+Si se ejecutan varios FRICEW en mismo  JOB  
+Ej:  
+ZCXR1000_FIR1002_COMPENSACION_01 
+
+
+Programas Tipo Module Pool y Dynpros 
+SAPMZAAFRICEW_n  
+Includes de Module Pool  MZAAFRICEWV_n -> Def Var  MZAAFRICEWI_n -> PAI 
+	Módulos de Función 
+(SE37) ZAAFRICEW_[DESCRIPCION]_n(30 máx)  
+Módulos de Función
+ZAA_[DESCRIPCION]_n
+	Formularios y ADS  SapScript/SmartForms/Styl
+es (SE71 – SMARTFORMS) 
+ZAAFRICEW_n   BTE  
+Interfase para Adobe Form 
+ 
+ZAAFRICEW_n
+	
+
+
+
+ 
+ 
+ 
+MZAAFRICEWO_n -> PBO  MZAAFRICEWCD_n (definición  Métodos y variables globales de la  clase)  
+MZAAFRICEWCI_n (Implementación  Metodos)Subrutinas  
+Rangos de Números (SNRO)  ZAAFRICEW_nn  
+Objetos de Modificación  Tablas Z (transacción SCDO) Mismo nombre de la tabla  
+Ej: ZTCXR1000_1
+Donde n es un consecutivo iniciando en 1  
+Grupos de Función (SE37)  ZAAFRICEW_n  
+Variantes  ZAAVT_nnnn  
+Clases de Mensaje (SE91)  ZAAnn  
+ 
+Grupo de Función de Vista  Actualización  
+Mismo Nombre de Tabla/Vista  
+Clúster de vista SE54  
+ZAAFRICEW_n 
+	Clases e Interfaces (POO) (SE24) 
+ZCLAAFRICEW_DESCRIPCION (30 máx) Ej. ZCLSDR1000_logauditoria  
+ZIFAAFRICEW_ DESCRIPCION (30 máx) Ej. ZIFSDR1000_logauditoria 
+	Texto Estándar (SO10) ZTXTAAFRICEW_ 
+ 
+[DESCRIPCION_]n 
+ 
+	
+
+
+
+Página 5 de 9 
+  
+
+Grupo autorización SE54  Mismo Nombre de Tabla/Vista  
+LSMW  
+Guía Rápida de Estándares ABAP 
+ZCXAAFRICEW_DESCRIPCION (30 máx)  Ej. ZCXSDR1000_logauditoria  
+Proyectos de Ampliación (CMOD) y  
+SPROXY  
+Proyecto:  Subproyecto:  Objeto:  
+Productos BTE (FIBF)  ZPAAnnnn  
+Prefix --> ZPX  
+Lista de Distribucion  ZLDRICEF_n  
+NOTA: Ver sección AMPLIACIONES  
+
+
+ Enhacement Implícito  
+ZAAFRICEW_# NOTA: Ver sección AMPLIACIONES 
+	(SE20) Implementación BADI / 
+Implementación de la ampliación: 
+ZAA_[ Nombre de la BADI ]_n  (Enhacement Implementacition)  NOTA: NO crear Composite  Enhacement Implementation  
+Clase de la Implementación  ZCLAA_EXITS_[ DESCRIPCION DEL PROCESO ] (Clase Implementación BADI) 
+***Por cada RICEFW crear una clase que implemente la lógica necesaria en la ampliación. 
+Nombre Clase: ZCLAAFRICEW_[ DESCRIPCION ] NOTA: Ver sección AMPLIACIONES 
+	Quality of Service 
+Queue Name: 
+ 
+FRICEW_[QOS]
+QOS es:  EOIO -> Exactly Once In Order 
+ 
+EO --> Exactly Once 
+BE --> Best Effort 
+Para las interfaces de entreda 
+ 
+configurar en PI. 
+ 
+ 
+Para las interfaces de salida usar la sentencia: 
+ 
+DATA: o_async_messaging TYPE REF TO 
+if_wsprotocol_async_messaging.  
+ 
+o_async_messaging ?= o_material_sap->get_protocol( if_wsprotocol=>async_messaging ).  o_async_messaging-
+	
+
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Página 6 de 9 
+Guía Rápida de Estándares ABAP   
+
+
+	
+
+	>set_serialization_context(‘I1001_EO’). 
+	
+
+
+
+Página 7 de 9
+  
+Guía Rápida de Estándares ABAP Paquetes/Identificador de Aplicación (AA) Tipo de Desarrollo (T)  
+ZCO CO Control (Controlling)  ZFI FI Finanzas (Finance)  
+R Reporte M Mejora o Enhancement  E Interfaz de Entrada F Formulario  
+ZMM MM Materiales (Material Management)  
+S Interfaz de Salida XInclude usado por + 1  
+ZPP PP Producción (Production Planning)  
+prog  
+ZSD SD Ventas (Sales and Distribution) RE Retail  
+Manejo de Bodegas  
+ZWM WM  
+C
+	Conversión de Datos 
+	G 
+	 Propósito General 
+	
+
+
+
+ 
+Código de Aplicación o Sistema (SSS)  
+(Warehouse Management)  
+ZBW BW Business Warehouse  
+SEM - Manejo Estratégico  
+SE  
+(Strategic Enterprise Management)  
+XI SAP XI/PI  
+ZQM QM Gestión de Calidad  
+ZCX CX Varias aplicaciones (Cross Application) 
+$TMP 
+	
+
+	Para objetos locales  (no transportables) 
+	
+
+
+
+Página 8 de 9 
+  
+Guía Rápida de Estándares ABAP 
+4. Ampliaciones  
+Para las ampliaciones se tiene el siguiente esquema de trabajo; independiente del tipo de ampliación (BADI, BTE, Customer  Exit, Implicita)  
+Cada proceso de negocio tendrá una clase en la cual se registran todas las ampliaciones de dicho proceso de negocio y dicha  clase deberá crearse dentro del subpaquete con nombre ZAAENH del modulo al cual corresponda.  AA = Modulo. Ej. SD  
+Ejemplo:  
+  
+
+Dentro de dicha clase el Metodo a implementar deberá ser estático y deberá llamarse tal cual como se llama la ampliación,  ejemplo:  
+BADI: 
+Página 9 de 9 
+Guía Rápida de Estándares ABAP   
+  
+
+La clase general de los Exit se crea en el subpaquete de las ampliaciones. en este caso ZCARENH al igual que la ampliación    Sin embargo, vemos que la implementación de clase propia asociada al RICEF se crea en el subpaquete de RICEF 
+Página 10 de  
+9 
+Guía Rápida de Estándares ABAP   
+  
+Customer-Exit: 
+
+Página 11 de  
+9 
+Guía Rápida de Estándares ABAP 
+
+Ya dentro del método si creamos la clase propia asociada al RICEF  
+
+dicha clase estará en el subpaquete del RICEF. 
+Página 12 de  
+9 
+Guía Rápida de Estándares ABAP 
+
+Y es obligatorio dentro de dicha clase hacer referencia al metodo de control de ampliaciones  CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = ‘RICEFW’ ) = abap_true.  
+
+Este método se encarga de indicar si la clase se activa o se inactiva. Adicional se puede activar para debug en caso de ser  necesario dicha configuración se debe aplicar en la Tx ZCXR1006_1 para la tabla ZTCXR1000_3 
+Página 13 de  
+9 
+Guía Rápida de Estándares ABAP 
+
+En esta tabla se diligencia el RIFEC y el método asociado a la ampliación, es importante aclarar que para que la ampliación se  ejecute el Flag del campo ZTCXR1000_3-ACTIVO debe estar marcado en X. 
+
+Página 14 de  
+9 
+
+5. Convención Sub-Paquetes  
+Package  
+ZSDVentas (Sales and  
+Distribution) 
+Guía Rápida de Estándares ABAP 
+Subpackage Descripcion  
+Z[RICEF]
+	Proyecto/Requerimiento/Control de Cambio/Falla 
+	
+
+
+
+ 
+Package  
+ZFI Contabilidad Financiera Subpackage Descripcion  
+Z[RICEF]
+	Proyecto/Requerimiento/Control de Cambio/Falla 
+	
+
+
+
+ 
+Package  
+ZMM Gestión de Materiales 
+Subpackage Descripcion  
+Z[RICEF]
+	Proyecto/Requerimiento/Control de Cambio/Falla 
+	
+
+
+
+ 
+5.1. Sub-Paquetes (Configuración, Enhacement, Utilidades)  
+Package  
+ZMM Gestión de Materiales 
+Subpackage Descripcion  
+Proyecto/Requerimiento/Control de  
+ZMMCONFIG 
+Cambio/Falla  
+ZMMENH Gestión de ampliaciones 
+ZMMUTIL 
+	Utilidades propias del modulo 
+	
+
+
+
+Página 15 de  
+9 
+Guía Rápida de Estándares ABAP Ejemplo Paquete 
+
+Página 16 de  
+9 
+Guía Rápida de Estándares ABAP 
+6. Objetos del Diccionario de Datos  
+Estructuras / Tablas Campos Otros Tablas, Vistas, Estructuras 
+Campos 
+Ayudas o Search Help 
+ZTAAFRICEW_n  Ej. ZTCXR1000_1  
+Tipo objeto diccionario  T Tablas  V Vistas  E Estructuras  
+DESCRIPCION mnemotecnico,  
+ZHAAFRICEW_DESCRIPCION  
+hasta 15 caracteres.  
+Máx. 26 caracteres  
+Nota: Siempre tratando de utilizar  
+los nombres estandar  
+Append Structure/Campos (SE11) 
+Elemento de datos/Dominio 
+Objeto Bloqueo 
+ZAxxxxxxxx / ZZxxxxxxxx  
+ZED[DESCRIPCION] hasta 15  
+EZ_AAFRICEW_n  
+caracteres.  
+ZDMDESCRIPCION hasta 15  
+caracteres  
+Tipo Tabla 
+Clase Objeto 
+ZTTAAFRICEW_n  
+Objeto de Log SLG0  
+ZAA  
+ZAA_n 
+Objeto Inferior  
+Objeto de Autorización  ZFRICEW_n (en la clase de  
+ZRICEFW_n 
+autorización ZR1000_1  
+Clúster de Vistas 
+ 
+ZCVAAFRICEW_n  
+Índices de tabla 
+Znn 
+AMDP
+ZAMDPAAFRICEW_DESCRIPCION (30 máx)
+	 
+ 
+	
+
+	
+
+
+
+Página 17 de  
+9 
+Guía Rápida de Estándares ABAP 7. API OData  
+Para crear un API Odata tenemos 4 diferentes opciones:  
+1. Implementación basada en código – SEGW  
+2. Referencia a una fuente de datos (Reference datasource) - SEGW  
+3. OData.publish : true - Vista CDS  
+4. Odata V4, basado en código fuente - SEGW  
+Nomenclatura:  
+Servicio Odata:  
+Z[AA]API_[DESCRIPCION]  
+Clases DPC/MPC  
+ZCL[AA][RICEFW]_[DESCRIPCION]_MPC / DPC  
+Technical Model Name:  
+Z[AA][RICEFW]_[DESCRIPCION]_MDL  
+Technical Service Name  
+Z[AA]_[DESCRIPCION]_SRV  
+8. Table Function 
+Página 18 de  
+9 
+Guía Rápida de Estándares ABAP Nombre: ZTFRICEFW_n  
+9. Convención de Nombres Vistas CDS 
+Las vistas CDS se clasifican según las convenciones de nomenclatura siguientes:  
+1. Vista privada (P_)  
+2. Vista de interfaz (I_)  
+3. Vista de consumo (C_)  
+4. Vista API (A_)  
+5. Vista de inclusión de extensión (E_)  
+6. Vista de ayudas (VH_)  
+Nombre vista SQL  
+El nombre de la vista SQL puede tener un máximo de 16 caracteres. 
+Ejemplo: ZIAAFRICEW_n 
+
+Nombre vista  
+El nombre de la vista CDS puede tener un máximo de 30 caracteres. 
+La descripción debe ser CamelCase 
+Ejemplo:  
+ZIAAFRICEW_[DescripcionVista]  
+Vistas HANA  
+Vista Analitica  
+ZVA[Modulo][RICEFW]_[DescripcionVista]  
+Vista Calculation  
+ZVC[Modulo][RICEFW]_[DescripcionVista] 
+Página 19 de  
+9 
+Guía Rápida de Estándares ABAP 
+Vista Atributos  
+ZVT_[Modulo][RICEFW]_[DescripcionVista]  
+** Se sugiere utilizar la nueva definición de vista CDS view Entity.
+Página 20 de  
+9 
+Guía Rápida de Estándares ABAP 
+10. Convenciones Generales de Programación  
+Tipo Status Aplicación
+1: Reporte (ejecutable) 
+I: Include (no ejecutable) 
+M: Module Pool 
+S: Pool Subrutinas 
+Paquete:  Como se definió en el punto 3. 
+	Siempre usar K (Programas de cliente productivo) 
+ 
+ 
+ 
+ 
+	F: Finanzas  C: Costos  
+ 
+L: Logística  S: Ventas  B: Basis 
+	
+
+
+
+Página 21 de  
+9 
+Guía Rápida de Estándares ABAP 
+11. Variables y Tablas Internas  
+Locales Las variables NO se los antepondrá la letra L.  
+Globales La variable siempre tendrá la letra G.  
+Nombres
+	 deben ser descriptivos. Ej: ES_PedidosVenta 
+	
+
+
+
+Ámbito + “_” 
+Variables de propósito general. Ver los tipos y  
++ libre 
+Variable 
+ámbito en el siguiente cuadro 
+Ej: “G_CANTIDAD” 
+ “CANTIDAD” 
+Tabla 
+“GTI_” + Libre 
+Dato global  
+Interna 
+“TI_” + Libre 
+Dato local 
+Tablas Internas para guardar grupos de datos 
+(tipo registro) 
+Estructura “GES_” + libre 
+Dato global  
+“ES_” + libre 
+Dato local 
+Estructura para almacenar un solo registro de 
+datos 
+Variables para entrar datos antes de la 
+Ejecución programa. Permiten máximo 8  
+Parámetro “PA_” + libre 
+caracteres 
+Select 
+Variables (tipo tabla interna) para entrar datos de  
+Option “SO_” + libre 
+rango antes de la ejecución del programa. 
+Permite máximo 8 caracteres 
+Field 
+“<GFS_” + libre + “>” 
+Dato global  
+Symbol 
+“<FS_” + libre + “>” 
+Dato local 
+Constante “GC_” + libre 
+Dato global  
+“C_” + libre 
+Dato local 
+Variables tipo constante no pueden cambiar 
+durante la ejecución de los programas 
+Variable de 
+“GO_” + libre  
+Dato global  
+Dato local 
+referencia 
+“O_” + libre 
+Variable de referencia a objetos de clases.
+Tipo Global/ Local
+	“GTP_” + libre 
+“TP_” + libre
+ 
+	Tipo de datos global Tipo de datos local
+ 
+	
+
+
+
+Página 22 de  
+9 
+Guía Rápida de Estándares ABAP Module Pool  
+Text Field “TF_” + libre Group Box “GB_” + libre Radio Button “RB_” + libre Push Button “BT_” + libre Sub-Screen “SS_” + libre TabStrip “TS_” + libre Table Control “TC_” + libre GUI Status “GS_” + Num consecutivo (4) 
+GUI Title
+	 “GT_” + Num consecutivo (4)
+	
+
+
+
+ 
+Parámetros en métodos, Rutinas y Funciones  
+Rutinas Internas USING --> P_ + libre  CHANGING --> C_ + libre 
+ TABLES --> TI_ + libre 
+Funciones y Clases
+	 IMPORT --> ‘I_’ + libre
+ EXPORT --> ‘E_’ + libre CHANGING --> ‘C_’ + libre TABLES --> ‘TI_’ + libre
+	
+
+
+
+ 
+ 
+ 
+ 
+Nota:  
+Para los parámetros cuando son estructuras o tablas internas  Estructuras ‘I_ES_’ + Libre o ‘E_ES_’ + Libre o ‘C_ES_’ +  Libre  
+Tablas
+	 ‘I_TI_’ + Libre o ‘E_TI_’ + Libre o ‘C_TI_’ + Libre 
+	
+
+
+
+Página 23 de  
+9 
+
+12. Nomenclatura objetos EWM  
+Guía Rápida de Estándares ABAP 
+Objeto Descripción Prefijo  
+Clase de  
+Permite asociar funcionalidades  
+ZOBnnn  
+objeto  
+estándar al ALV agregado por el  
+cliente  
+En monitor EWM (/SCWM/MON) 
+Perfiles de  
+Asigna funcionalidades a las  
+ZPNnnn  
+nodo  
+opciones del monitor EWM  
+(/SCWM/MON)  
+Definición de  
+Asocia perfiles de nodos a los  
+ZNODnnn  
+nodo  
+nodos en el EWM (/SCWM/MON)  
+Jerarquía de  
+Asociar jerarquías a nodos EWM  
+nodos  
+(/SCWM/MON)  
+Métodos 
+	Funcionalidad de cliente agregados al monitor EWM (/SCWM/MON) 
+	ZMTnnn 
+ 
+	
+
+
+
+13. Utilidades de Desarrollo. 
+Con el fin de conseguir ejemplos para las siguientes funcionalidades diríjase a la documentación generada en ABAP Doc para  cada objeto.  
+** Las utilidades propias de cada modulo se deben incluir en el paquete Z[AA]UTIL, donde AA es el módulo. Dentro de cada  paquete se debe crear las funcionalidades (en lo posible clases) de tal forma que se agrupen (en la medida de lo posible) por  proceso o si una funcionalidad tiene una particularidad dentro del modulo se debe independizar del resto (Por ejemplo, la clase para  determinación de precios de SD), con el propósito de NO tener objetos con códigos muy extensos.  Ejemplo ZMMUTIL. 
+Página 24 de  
+9 
+Guía Rápida de Estándares ABAP 
+
+ 
+12.1. Gestión de Parámetros  
+Utilizar transacción ZCXR1000_1 para la gestión de parámetros y la clase ZCLCXR1000_PARAMETROS para recuperar los  valores dentro de los desarrollos.  
+12.2. Gestion de Ampliaciones  
+Utilizar la tabla ZTCX1000_3 para registrar las ampliaciones y la clase ZCLCXR1000_GESTION_AMPLIACION para validar su  estado dentro de los desarrollos.  
+12.3. Clases para agilizar desarrollo 
+Página 25 de  
+9 
+Guía Rápida de Estándares ABAP 
+Utilizar las siguientes funcionalidades para agilizar el desarrollo de programas:  
+- ZCLCXR1002_UTIL: Clase con funcionalidad tales como la generación de rangos, conversión de datos, generación de  catálogo dinámico entre otros.  
+- ZCXR1002_MOSTRARALV_01: Modulo de función para la visualización de un ALV grid de forma dinámica.  
+14. Manejo de Log  
+13.1. Log de Aplicación  
+Para el manejo de Log de aplicaciones se creo la clase ZCLCXR1002_LOG_APLICACION mediante la cual se busca recopilar  todos los eventos de un proceso y escribirlo en base de datos si es del caso.  
+Para su uso, consultar la documentación generada mediante ABAPDoc.  
+13.2. Log de Auditoria para tablas Z  
+Para el manejo de este log se tiene creada la clase abstracta ZCLCXR1000_LOG_AUDITORIA. 
+En esta clase se tiene un método abstracto llamado REGISTRAR_LOG el cual debe ser redefinido al momento de su  implementación.  
+Procedimiento:  
+- Creación del log de modificación por la transacción SCDO (Revisar estándar para el nombramiento).  
+Ejemplo: ZCX_ZTCXR1000_1 Log de Modificaciones tabla ZTCXR1000_1  
+- Crear una clase por cada tabla Z a la cual se le piense manejar el log de auditoria. Esta clase debe heredar de la clase  ZCLCXR1000_LOG_AUDITORIA para poder realizar la redefinición del método REGISTRAR_LOG. Dentro de este método se  implementa la lógica para que registre la información del log de la tabla Z.  
+Ejemplo: Tabla ZTCXR1000_1 (Parámetros desarrollos SAP-ABAP)  
+Clase: ZCLCXR1000_LOG_ZTCXR1000_1 
+Página 26 de  
+9 
+Guía Rápida de Estándares ABAP 
+
+15. Plantilla de programas 
+Programa OO con métodos de eventos esenciales  
+REPORT z_template.  
+CLASS lcl_program DEFINITION. 
+PUBLIC SECTION.  
+METHODS start_of_selection.  
+METHODS initialization.  
+METHODS end_of_selection.  
+ENDCLASS.  
+CLASS lcl_program IMPLEMENTATION. 
+METHOD initialization.  
+ENDMETHOD. 
+METHOD start_of_selection.  
+ENDMETHOD.  
+METHOD end_of_selection.  
+ENDMETHOD.  
+ENDCLASS.  
+INITIALIZATION.  
+lcl_program=>initialization( ).  
+START-OF-SELECTION.  
+lcl_program=>start_of_selection( ). 
+Página 27 de  
+9 
+END-OF-SELECTION.  
+lcl_program=>end_of_selection( ).  
+Guía Rápida de Estándares ABAP 
+16. Documentación código fuente 
+15.1. Reporte o INCLUDE  
+*&---------------------------------------------------------------------* *& Información General 
+*&---------------------------------------------------------------------* * Identificador: E00XXX 
+* Programa : ZSDXXXXXX 
+* Tipo Objeto : Reporte 
+* Descripción : 
+* 
+* Autor Prog. : Juan Perez 
+* Fecha Creac. : 20.10.2020 
+*----------------------------------------------------------------------* * Ordenes de Transporte 
+*----------------------------------------------------------------------* * Fecha | CR# | Autor | Modificación *----------------------------------------------------------------------* * 28.05.2013 D01K928334 Juan Rojas Version Inicial * 08.07.2013 D01K928660 Pedro Espinoza Agregar flojo alterno ----------------------------------------------------------------------
+Página 28 de  
+9 
+Guía Rápida de Estándares ABAP 
+15.2. Métodos de Clases / Encabezados de Módulos de función  
+La documentación de clases se realiza con AbapDoc. La estructura de la documentación para un método es la siguiente:  
+“! <strong>Descripción:</strong>  
+“! <p>  
+“! Construye un rango de forma dinamica.<br/>  
+“! La fuente de datos puede ser un valor siemple o a partir de una tabla interna  
+“! </p>  
+“! <strong>Identificador:</strong>  
+“! E00XXX <br/>  
+“! <strong>Autor:</strong>  
+“! Juan Perez  
+“! <br/>  
+“! <strong>Historial de cambios:  
+“! <br/><br/>  
+“! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\  
+“! </strong><br/>  
+“! \ 20.01.2021 \ S4DK900021 \ Juan Perez Lorca \ Creacion Inicial \ 
+“! 
+“! @parameter i_sign | Valor SIGN  
+“! @parameter i_option | Valor OPTION  
+“! @parameter i_low | Valor LOW  
+“! @parameter i_high | Valor HIGH  
+“! @parameter i_ti | Tabla interna con datos. Si suministra este parametro los anteriores seran omitidos  “! @parameter i_nombre_columna | Columna del parametro i_ti que se desea convertir a rango  “! @parameter i_convertir_in | Aplicar funcion CONVERSION_EXIT_ALPHA_INPUT a valores LOW y HIGH  “! @parameter i_convertir_out | Aplicar funcion CONVERSION_EXIT_ALPHA_OUT a valores LOW y HIGH  “! @parameter c_ti_rango | Tabla interna tipo rango. Estructura [SIGN OPTION LOW HIGH]  Solo remplazar la información diferente a los Tag HTML.  
+“ Descripción: EWM Puesta a disposición para la producción “ Colección de datos para la Puesta a disposición para la  producción y “ Archivar área de suministro de producción BAdI for Single-Order Staging.  
+ “  
+“ Identificador: E1001 
+ “  
+“ Autor: Sebastian Restrepo Villa 
+ “  
+“ Historial de cambios: 
+Página 29 de  
+9 
+Guía Rápida de Estándares ABAP 
+“ \___Fecha___\____CR#____\________Autor________\_____Modificación_____\  
+“ \ 01Marzo2021 \ S4DK900241 \ Sebastian Restrepo Villa \ Creacion Inicial \ 
+NOTA: Esto aplica solo para métodos nuevos, los métodos redefinidos no es posible aplicar el abapDoc y la documentación  debe quedar sin los signos de admiración.  
+17. Ingreso SOLMAN – Focused Build 
+ Ingreso a SOLMAN  
+https://cryap1ssm.hilanet.local:50001/sap/bc/ui2/flp?sap-client=001&sap-language=EN  Revisar requerimientos asignados  
+
+Para cargar las ET en la siguiente Ruta de SOLMAN se debe cargar el documento con base en el siguiente  procedimiento  
+https://cryap1ssm.hilanet.local:50001/sap/bc/ui2/flp?sap-client=001&sap-language=ES#Action-SolutionDocumentation
+Página 30 de  
+9 
+Guía Rápida de Estándares ABAP 
+
+Depende del proceso de negocio que se esté trabajando ubicar la RUTA  Luego en la parte inferior por medio de “Click derecho” --> nuevos --> Documentacion --> Documento (Upload) 
+Página 31 de  
+9 
+Guía Rápida de Estándares ABAP 
+
+Se localiza el documento a cargar  
+
+Se diligencian los campos resaltados 
+Página 32 de  
+9 
+Guía Rápida de Estándares ABAP 
+
+NOTA: es Obligatorio que en el campo Palabra Clave quede únicamente el RICEF  Posterior a llenar los datos se pulsa sobre el botón OK y debería visualizarse el documento cargado en el proceso 
+Página 33 de  
+9
