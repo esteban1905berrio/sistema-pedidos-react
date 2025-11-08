@@ -1,0 +1,74 @@
+# Spring AI MCP Server Configuration
+spring:
+  ai:
+    mcp:
+      server:
+        name: sap-abap-mcp-server
+        version: 0.1.0-POC
+        description: "MCP Server for SAP ABAP using Spring AI and SAP JCo"
+        vendor: Crystal
+
+  # Application Configuration
+  application:
+    name: sap-mcp-server
+
+  main:
+    web-application-type: none  # CLI mode, no embedded web server
+    banner-mode: off            # Required for STDIO transport compatibility
+
+# SAP JCo Connection Configuration
+sap:
+  jco:
+    # Connection Parameters (use environment variables in production)
+    ashost: ${SAP_ASHOST:your.sap.server.com}
+    sysnr: ${SAP_SYSNR:00}
+    client: ${SAP_CLIENT:100}
+    user: ${SAP_USER:username}
+    passwd: ${SAP_PASSWD:password}
+    lang: ${SAP_LANG:EN}
+    router: ${SAP_ROUTER:}
+
+    # Connection Pooling
+    pool-capacity: ${SAP_POOL_CAPACITY:5}
+    peak-limit: ${SAP_PEAK_LIMIT:10}
+
+    # Connection Properties
+    destination-name: SAP_SYSTEM
+
+# Logging Configuration
+# CRITICAL: STDOUT must be clean for MCP STDIO transport (JSON-RPC communication)
+# All logging goes to file only
+logging:
+  pattern:
+    console: ""  # Completely disable console pattern
+  level:
+    root: OFF    # Disable all console logging
+    com.crystal.mcp.sapserver: OFF
+    com.sap.conn.jco: OFF
+    org.springframework.ai.mcp: OFF
+    org.springframework: OFF
+  file:
+    name: logs/sap-mcp-server.log
+    max-size: 10MB
+    max-history: 7
+  loggers:
+    # File logging only (no console output)
+    com.crystal.mcp.sapserver:
+      level: DEBUG
+    com.sap.conn.jco:
+      level: INFO
+    org.springframework.ai.mcp:
+      level: DEBUG
+
+# Actuator Configuration (Health Checks)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+  health:
+    defaults:
+      enabled: true
