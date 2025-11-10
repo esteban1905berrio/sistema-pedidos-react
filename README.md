@@ -1,659 +1,461 @@
-# 🎉 MCP ABAP ADT RFC Server
+# SAP ABAP MCP Server - Java Implementation
 
-**Servidor MCP completo para operaciones ABAP via RFC - 63+ Tools Implementadas**
+**Enterprise-grade MCP server for SAP ABAP integration** using **Spring Boot 3.4.0** and **SAP JCo 3.1.x**.
 
-Servidor MCP (Model Context Protocol) que permite interactuar con sistemas SAP ABAP a través de RFC SDK. Este servidor expone **60 herramientas** organizadas en **10 categorías funcionales**, permitiendo a Claude Code y otras herramientas LLM realizar operaciones completas de desarrollo ABAP: desde búsqueda y lectura hasta modificación, activación, testing, análisis de referencias, y gestión de CDS Views, objetos RAP y enhancements.
+[![Java](https://img.shields.io/badge/Java-21+-orange)](https://adoptium.net/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.0-brightgreen)](https://spring.io/projects/spring-boot)
+[![Maven](https://img.shields.io/badge/Maven-3.9+-blue)](https://maven.apache.org/)
+[![License](https://img.shields.io/badge/License-Internal-red)](LICENSE)
 
-## ✨ Funcionalidades Principales
+---
 
-### 🔍 Repository & Source (10 tools)
-**Búsqueda y lectura de objetos ABAP**
-- `search_objects` - Búsqueda con wildcards (ej: `ZCL_*`, `*UTIL*`)
-- `get_class_source` - Código fuente completo de clases
-- `get_class_structure` - Metadata, métodos y atributos
-- `get_program_source` - Código de programas/reports
-- `get_include_source` - Código de includes
-- `get_object_source` - Código por URI genérico
-- `get_object_types` - Tipos de objetos disponibles
-- `adt_discovery` - Capacidades ADT del sistema
-- `get_node_contents` - Navegación de árbol de repositorio
-- `get_package_objects` - **NUEVO** Obtener objetos de un paquete consultando TADIR con filtros avanzados (8 campos: PGMID, OBJECT, OBJ_NAME, SRCSYSTEM, AUTHOR, DEVCLASS, CREATED_ON, CHECK_DATE). Filtros: object_types, author, created_from/to
+## Overview
 
-### 📚 DDIC & Data Dictionary (6 tools)
-**Acceso a diccionario de datos y queries**
-- `get_ddic_element` - Definiciones de tablas, estructuras, elementos
-- `ddic_repository_access` - Acceso directo a repositorio DDIC
-- `get_annotation_definitions` - Anotaciones CDS
-- `package_search_help` - Búsqueda y autocompletado de paquetes
-- `get_table_contents` - Preview de contenido de tablas
-- `run_query` - Ejecución de queries SQL personalizadas
+This project implements a **Model Context Protocol (MCP) server** that enables AI assistants like Claude Code to interact with SAP ABAP systems. It uses **Spring AI MCP SDK** for standardized MCP integration and **SAP JCo** for enterprise-grade RFC connectivity.
 
-### 🚚 Transport Management (14 tools)
-**Gestión completa de órdenes de transporte**
-- `get_transport_request` - Data completa de transporte (tasks + objects)
-- `get_transport_tasks` - Tareas del transporte
-- `get_transport_objects` - Objetos del transporte (con filtro por tarea)
-- `transport_info` - Info de transporte para un objeto
-- `create_transport` - Crear nuevo transporte
-- `list_user_transports` - Transportes del usuario
-- `add_object_to_transport` - Asignar objeto a transporte
-- `release_transport` - Liberar transporte
-- `get_transport_config` - Configuración del sistema
-- `delete_transport` - Eliminar transporte
-- `set_transport_owner` - Cambiar propietario
-- `add_transport_user` - Añadir colaborador
-- `get_system_users` - Usuarios del sistema
-- `get_transport_reference` - Referencias de transporte
+**Migration Status**: Active migration from Python (PyRFC) to Java (SAP JCo)
+- **Current**: 1/59 MCP tools implemented
+- **Legacy**: Python implementation archived in `python-legacy/` (fully functional)
+- **See Plan**: [Migration Plan](docs/requirements/mcp/migration_plan.md)
 
-### ✏️ Object Modification (6 tools)
-**Modificación completa de objetos ABAP**
-- `lock` - Bloquear objeto para edición (retorna LOCK_HANDLE)
-- `unlock` - Desbloquear objeto
-- `set_object_source` - Modificar código fuente
-- `activate` - Activar objeto individual
-- `activate_objects` - Activación en batch
-- `get_inactive_objects` - Listar objetos inactivos
+---
 
-### 🎨 Code Quality (4 tools)
-**Validación y formato de código**
-- `syntax_check` - Verificación de sintaxis ABAP
-- `prettyprint` - Formateo automático según estándares SAP
-- `get_prettyprint_settings` - Obtener configuración de formato
-- `set_prettyprint_settings` - Configurar estilo de formato
+## Features
 
-### 🚀 High-Level Modification Workflows (4 tools - NEW!)
-**Workflows completos LOCK → SYNTAX → MODIFY → UNLOCK → ACTIVATE**
-- `modify_function_module` - Workflow completo para modificar módulo de función
-- `modify_class` - Workflow completo para modificar clase ABAP
-- `modify_program` - Workflow completo para modificar programa/reporte
-- `modify_include` - Workflow completo para modificar include de programa
+### Current (Phase 0 - Complete)
 
-**Características:**
-- ✅ Sintaxis validación automática (previene código inválido)
-- ✅ Manejo de locks con try-finally (garantiza liberación)
-- ✅ Activación automática opcional
-- ✅ Reporte detallado de estado por paso
+✅ **Infrastructure**
+- Spring Boot 3.4.0 with Spring AI MCP SDK 1.1.0-M4
+- SAP JCo 3.1.x native connection pooling (5-10 concurrent connections)
+- HTTP-to-RFC adapter pattern for ADT API access
+- STDIO transport for MCP JSON-RPC communication
 
-### 🏗️ Lifecycle & Testing (4 tools)
-**Creación, eliminación y testing**
-- `create_class` - Crear nueva clase ABAP
-- `delete_object` - Eliminar objeto (⚠️ requiere lock)
-- `validate_object_name` - Validar nombre según convenciones SAP
-- `run_unit_tests` - Ejecutar unit tests con cobertura opcional
+✅ **Available Tools** (1/59)
+- `get_class_source` - Retrieve ABAP class source code
 
-### 🔎 Where-Used Analysis (2 tools)
-**Análisis de referencias y usos**
-- `get_where_used` - Encontrar dónde se usa un objeto en el sistema
-- `get_where_used_dependencies` - Obtener grafo detallado de dependencias
+### Planned (Phase 1 - Weeks 2-7)
 
-### 📊 CDS Views & Core Data Services (4 tools)
-**Gestión de CDS Views y DDL**
-- `get_cds_view_metadata` - Metadata de CDS views incluyendo SQL view name
-- `get_cds_view_source` - Código DDL de CDS views
-- `search_cds_views_by_sqlview` - Búsqueda por nombre de SQL view
-- `get_cds_view_properties` - Propiedades de package, owner y estado API
+**16 Core Tools**:
+- Repository & Source (9 tools)
+- Data Dictionary (4 tools)
+- Transport Management (3 tools)
 
-### 🏛️ RAP Objects & OData Services (8 tools)
-**Gestión completa de objetos RAP y servicios OData**
-- `get_service_binding` - Metadata de service binding (SRVB)
-- `get_service_definition_metadata` - Metadata de service definition (SRVD)
-- `get_service_definition_source` - Código fuente de service definition
-- `get_odata_service_info` - Información y endpoints de servicios OData
-- `get_metadata_extension` - Metadata extension (DDLX) para anotaciones UI
-- `get_ddlx_parser_info` - Definiciones de anotaciones disponibles
-- `get_behavior_definition` - Código fuente de behavior definition (BDEF)
-- `explore_rap_object` - Exploración inteligente de relaciones entre objetos RAP
+See [Migration Plan](docs/requirements/mcp/migration_plan.md) for complete roadmap.
 
-### 🔧 Enhancement Operations (3 tools)
-**Gestión de ampliaciones/enhancements**
-- `search_enhancements` - Búsqueda de enhancements en package (tipos ENHO)
-- `get_enhancement_metadata` - Metadata incluyendo hook implementations
-- `get_enhancement_source` - Código fuente de bloques ENHANCEMENT
+---
 
-## 🚀 Token Optimization Features
+## Architecture
 
-El servidor implementa un sistema completo de optimización de tokens para manejar respuestas grandes de SAP sin exceder límites de caracteres:
-
-### 📦 Paginación Inteligente
-- **Offset-based pagination** con metadata completa (has_more, next_offset, current_page)
-- **Default page size**: 50 objetos (configurable hasta 1000)
-- **Workflow**: Recuperación incremental guiada por metadata de paginación
-
-**Ejemplo**:
-```python
-# Primera página
-result = get_package_objects("ZFI", max_rows=50)
-# → pagination: {has_more: true, next_offset: 50}
-
-# Siguiente página
-if result["pagination"]["has_more"]:
-    next_result = get_package_objects("ZFI", offset=50)
+```
+Claude Code / Claude Desktop
+          ↓ STDIO (JSON-RPC)
+   Spring AI MCP Server
+          ↓
+   RfcAdapter (HTTP → RFC)
+          ↓
+   SAP JCo Connection Pool
+          ↓
+   SADT_REST_RFC_ENDPOINT (FM)
+          ↓
+   SAP ADT REST API
+          ↓
+   SAP ABAP System
 ```
 
-### 🎯 Formatos de Respuesta Flexibles
-- **detailed** (default): Metadata completa (100% datos)
-- **summary**: Nombres + conteos (~90% reducción)
-- **types_only**: Solo conteos (~99% reducción)
+**Key Components**:
+- **JCoConfiguration**: Thread-safe connection pool using SAP JCo native pooling
+- **RfcAdapter**: Converts HTTP-style requests to RFC function module calls
+- **Services**: Business logic for ABAP operations (ClassService, etc.)
+- **Tools**: MCP tool definitions with Spring AI annotations
 
-**Estrategia**: Start broad → Drill down
-```python
-# 1. Vista general rápida
-get_package_objects("ZFI", response_format="types_only")
-# → {CLAS: 7, PROG: 121}
+See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 
-# 2. Nombres específicos
-get_package_objects("ZFI", response_format="summary", object_types=["CLAS"])
-# → {CLAS: {count: 7, names: ["ZCLS1", "ZCLS2", ...]}}
+---
 
-# 3. Metadata completa con paginación
-get_package_objects("ZFI", response_format="detailed", object_types=["CLAS"], max_rows=20)
-```
+## Quick Start
 
-### ✂️ CHARACTER_LIMIT Automático
-- **Límite global**: 25,000 caracteres por respuesta
-- **Truncamiento inteligente** con mensajes educativos
-- **Sugerencias contextuales**: Paginación, filtros, formatos compactos
+### Prerequisites
 
-### 🔀 Fragmentación de Objetos Grandes
-Para clases grandes que exceden CHARACTER_LIMIT:
-```python
-# 1. Recuperar include principal
-result = get_class_source("ZCLCXR1002_UTIL")
+- **Java 21+** ([Adoptium OpenJDK](https://adoptium.net/))
+- **Maven 3.9+** ([Apache Maven](https://maven.apache.org/))
+- **SAP JCo 3.1.x** ([SAP Support Portal](https://support.sap.com/en/product/connectors/jco.html) - requires S-user)
 
-# 2. Si está truncado, listar includes disponibles
-includes = get_class_includes("ZCLCXR1002_UTIL")
+### Installation
 
-# 3. Recuperar includes específicos
-main = get_class_source("ZCLCXR1002_UTIL", include_type="main")
-impl = get_class_source("ZCLCXR1002_UTIL", include_type="implementation")
-tests = get_class_source("ZCLCXR1002_UTIL", include_type="testclasses")
-```
-
-**Include types disponibles**:
-- `main`: Definición de clase (PUBLIC section)
-- `implementation`: Implementaciones de métodos
-- `testclasses`: ABAP Unit tests
-- `macros`: Definiciones de macros
-
-### 📊 Métricas de Optimización
-
-| Escenario | Antes | Después | Reducción |
-|-----------|-------|---------|-----------|
-| Package ZFI (241 objetos) | 120K chars | 25K chars (detailed) | 79% |
-| Package ZFI (summary) | 120K chars | 12K chars | 90% |
-| Package ZFI (types_only) | 120K chars | 1.2K chars | 99% |
-| Clase grande (50K) | 50K chars | 4 × 12.5K (fragmentado) | Completo |
-
-**Documentación completa**: Ver `docs/architecture/token-optimization-strategy.md`
-
-## 📋 Prerequisites
-
-1. **SAP NetWeaver RFC SDK** installed
-   - Download from SAP Support Portal
-   - Install to `/usr/local/nwrfcsdk` (or configure path)
-
-2. **Python 3.11+** with `uv` package manager
-
-3. **SAP System Access**
-   - Application server host and port
-   - Valid SAP credentials
-   - ADT (ABAP Development Tools) enabled
-
-## 🔧 Installation
-
-### Automated Setup (Recommended)
-
-Use the unified setup script that handles everything automatically:
+#### 1. Clone Repository
 
 ```bash
-cd /path/to/brootpersonalagent
-
-# Run automated setup
-./setup.sh
+git clone <repository-url>
+cd brootpersonalagent
 ```
 
-**What the script does**:
-- ✅ Detects OS (macOS/Linux/Windows)
-- ✅ Configures SAP RFC SDK environment variables
-- ✅ Creates virtual environment
-- ✅ Installs all dependencies (uv or pip)
-- ✅ Compiles PyRFC automatically
-- ✅ Validates `.env` configuration
-- ✅ Configures Claude Desktop integration
-- ✅ Verifies installation
+#### 2. Install SAP JCo Libraries
 
-### Manual Dependency Installation
+⚠️ **Important**: SAP JCo libraries cannot be redistributed (SAP license).
 
-If you prefer manual installation or need to customize dependencies:
-
-**Production Dependencies:**
-```bash
-# Install from requirements.txt
-pip install -r requirements.txt
-
-# OR using uv (faster)
-uv pip install -r requirements.txt
-```
-
-**Development Dependencies (Optional):**
-```bash
-# Install development tools (pytest, ruff, pyright)
-pip install -r requirements-dev.txt
-
-# OR using uv
-uv pip install -r requirements-dev.txt
-```
-
-**PyRFC (SAP RFC SDK Binding):**
-```bash
-# IMPORTANT: PyRFC must be compiled manually
-# Requires SAP NetWeaver RFC SDK installed first
-
-# 1. Set environment variables
-export SAPNWRFC_HOME=/Users/local/nwrfcsdk  # or your SDK path
-export DYLD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$DYLD_LIBRARY_PATH  # macOS
-# OR
-export LD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$LD_LIBRARY_PATH  # Linux
-
-# 2. Compile and install PyRFC
-cd PyRFC
-python3 -m pip install .
-cd ..
-```
-
-**Core Dependencies Included:**
-- `pydantic>=2.11.0` - Data validation
-- `python-dotenv>=1.1.0` - Environment configuration
-- `mcp>=1.15.0` - Model Context Protocol framework
-- `httpx>=0.28.0` - HTTP client (MCP requirement)
-- `pytest>=8.4.0` - Testing (dev only)
-- `pyrfc==3.4` - SAP RFC SDK bindings (manual install)
-
-**Note:** See `requirements.txt` for complete dependency list with version constraints.
-
-### Configure SAP Credentials
-
-Create or edit `.env` file with your SAP credentials:
+1. Download from [SAP Support Portal](https://support.sap.com/en/product/connectors/jco.html)
+2. Extract and copy to `lib/` directory:
 
 ```bash
-# Copy example and edit
-cp .env.example .env
-code .env
+lib/
+├── sapjco3.jar                    # Platform-independent JAR
+└── libsapjco3.dylib               # Native library (macOS)
+    libsapjco3.so                  # Native library (Linux)
+    sapjco3.dll                    # Native library (Windows)
 ```
 
-```env
-# Required Settings
-SAP_ASHOST=your.sap.server.com
-SAP_SYSNR=00
-SAP_CLIENT=100
-SAP_USER=your_username
-SAP_PASSWD=your_password
+See [lib/README.md](lib/README.md) for detailed instructions.
 
-# Optional Settings
-SAP_LANG=EN
-SAP_ROUTER=/H/router.host/S/sapdp99
-
-# Test Configuration (optional)
-TEST_CLASS_NAME=CL_ABAP_CHAR_UTILITIES
-TEST_SEARCH_QUERY=CL_ABAP*
-TEST_PROGRAM_NAME=SAPBC_START_PROGRAMS
-```
-
-### Using with Claude Desktop
-
-If you used `./setup.sh`, Claude Desktop is already configured automatically.
-
-To verify the configuration:
-```bash
-# macOS
-cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
-
-# Linux
-cat ~/.config/Claude/claude_desktop_config.json
-
-# Windows
-type %APPDATA%\Claude\claude_desktop_config.json
-```
-
-**Manual Configuration** (if needed):
-
-See [INSTALLATION.md](INSTALLATION.md) for detailed manual setup instructions.
-
-## 🚀 Usage
-
-### With Claude Code
-
-1. **Restart Claude Code** to load the MCP server
-2. The server will appear as **"ABAP-ADT-RFC-Server"** with 60 available tools
-3. Ask Claude Code natural language questions:
-
-```
-🔍 Búsqueda:
-- "Search for all custom classes starting with ZCL_MM"
-- "Find all programs matching ZREP*"
-
-📖 Lectura:
-- "Show me the source code of class CL_ABAP_CHAR_UTILITIES"
-- "What methods does class CL_HTTP_CLIENT have?"
-- "Get table ZTCXR1000_1 contents"
-
-🚚 Transportes:
-- "List my transport requests"
-- "Show me objects in transport S4DK932806"
-
-🔎 Where-Used:
-- "Where is class ZCLMMI1229_SINCRONIZA_INV_MAWM being used?"
-- "Show me all references to this class in the codebase"
-
-📊 CDS Views:
-- "Get metadata for CDS view ZIFII1008_2"
-- "Show me the DDL source of CDS view ZIFII1008_2"
-
-🏛️ RAP Objects:
-- "Get the service binding for ZUI_RAP_O2_ZTCXR1003_1"
-- "Show me the behavior definition for ZC_RAP_ZTCXR1003_1"
-- "Explore all components of RAP object ZSERVICE_DEF"
-
-🔧 Enhancements:
-- "Find all enhancements in package ZI1008"
-- "Show me the source code of enhancement ZFII1008_1"
-- "What hook implementations exist in enhancement ZFII1008_1?"
-
-📦 Package Objects (con filtros avanzados):
-- "Get all objects from package ZMMI1229_0"
-- "Show me object inventory for package ZFII1008_0"
-- "What objects are in package $TMP grouped by type?"
-- "Get only classes and programs from package ZMMI1229_0"
-- "Show me objects created by author DEVELOPER in package ZFII1008_0"
-- "Get objects from $TMP created between 2025-01-01 and 2025-12-31"
-- "Show me CLAS objects by author SAP from package $TMP"
-
-✏️ Modificación completa:
-- "Read class ZCL_TEST, create transport, lock it, add a BREAK-POINT
-   to method PROCESS, check syntax, format code, activate, and unlock"
-```
-
-### Direct Testing (Phase-by-Phase)
+#### 3. Build Project
 
 ```bash
-# Run all tests
-.venv/bin/python -m pytest app/tests/ -v
+# Compile
+mvn clean compile
 
-# FASE 1: Repository & Source
-.venv/bin/python -m pytest app/tests/test_debug_search.py -v
-# Tests: search_objects, get_class_source, get_class_structure
+# Run tests (requires SAP connection)
+mvn test
 
-# FASE 2: DDIC & Data Dictionary
-.venv/bin/python -m pytest app/tests/test_debug_query.py -v
-# Tests: get_table_contents, run_query, get_ddic_element
-
-# FASE 3: Transport Management
-.venv/bin/python -m pytest app/tests/test_debug_transport_s4dk932806.py -v
-# Tests: get_transport_request, get_transport_tasks, get_transport_objects
-
-# FASE 4: Object Modification
-.venv/bin/python -m pytest app/tests/test_fase4_object_modification.py -v
-# Tests: lock, set_object_source, activate, unlock
-
-# FASE 5: Code Quality
-.venv/bin/python -m pytest app/tests/test_fase5_code_quality.py -v
-# Tests: syntax_check, prettyprint, get_prettyprint_settings
-
-# FASE 6: Lifecycle & Testing
-.venv/bin/python -m pytest app/tests/test_fase6_lifecycle.py -v
-# Tests: create_class, delete_object, run_unit_tests
-
-# FASE 7: Where-Used Analysis
-.venv/bin/python -m pytest app/tests/test_fase7_whereused.py -v
-# Tests: get_where_used, get_where_used_dependencies
-
-# New Categories: CDS Views, RAP Objects, Enhancements
-.venv/bin/python -m pytest app/tests/test_cds_category.py -v
-# Tests: get_cds_view_metadata, get_cds_view_source (2/4 passing)
-
-.venv/bin/python -m pytest app/tests/test_enhancement_category.py -v
-# Tests: search_enhancements, get_enhancement_metadata, get_enhancement_source (3/3 passing ✅)
-
-# RAP testing pending
-# .venv/bin/python -m pytest app/tests/test_rap_category.py -v
+# Build JAR
+mvn clean package
 ```
 
-## 🔧 Setup Script
+### Configuration
 
-The project includes a unified installation script:
+#### Option 1: Claude Desktop Integration (Recommended)
 
-### `setup.sh` - Complete Automated Setup
-Handles everything in a single command:
-- ✅ Detects OS (macOS/Linux/Windows)
-- ✅ Configures SAP RFC SDK environment variables
-- ✅ Creates virtual environment
-- ✅ Installs dependencies (uv or pip)
-- ✅ Compiles PyRFC automatically
-- ✅ Validates `.env` configuration
-- ✅ Configures Claude Desktop integration
-- ✅ Verifies installation
+Edit `.mcp.json` in project root:
+
+```json
+{
+  "mcpServers": {
+    "giralmcp": {
+      "command": "mvn",
+      "args": [
+        "spring-boot:run",
+        "-f",
+        "/absolute/path/to/brootpersonalagent/pom.xml"
+      ],
+      "env": {
+        "JAVA_HOME": "/path/to/jdk-21",
+        "SAP_ASHOST": "your.sap.server.com",
+        "SAP_SYSNR": "00",
+        "SAP_CLIENT": "100",
+        "SAP_USER": "your_username",
+        "SAP_PASSWD": "your_password",
+        "SAP_LANG": "EN",
+        "SAP_ROUTER": "/H/router_host/S/port",
+        "SAP_POOL_CAPACITY": "5",
+        "SAP_PEAK_LIMIT": "10"
+      }
+    }
+  }
+}
+```
+
+**Required Environment Variables**:
+- `SAP_ASHOST`: SAP application server host
+- `SAP_SYSNR`: System number (00-99)
+- `SAP_CLIENT`: Client number (e.g., 100, 200)
+- `SAP_USER`: SAP username
+- `SAP_PASSWD`: SAP password
+
+**Optional Variables**:
+- `SAP_LANG`: Language (default: EN)
+- `SAP_ROUTER`: SAP router string (if using VPN)
+- `SAP_POOL_CAPACITY`: Connection pool size (default: 5)
+- `SAP_PEAK_LIMIT`: Peak connection limit (default: 10)
+
+#### Option 2: Direct Execution
 
 ```bash
-./setup.sh
+# Via Maven
+mvn spring-boot:run
+
+# Via JAR
+java -Djava.library.path=./lib -jar target/sap-mcp-server-0.1.0-POC.jar
 ```
 
-After running the setup, you can run tests directly:
-```bash
-.venv/bin/python -m pytest app/tests/ -v
+---
+
+## Usage
+
+### With Claude Desktop
+
+After configuring `.mcp.json`, the server will be available automatically in Claude Desktop.
+
+**Example prompts**:
+
+```
+"Get the source code of class CL_ABAP_CHAR_UTILITIES"
+"Show me the implementation of class ZTEST_CLASS"
+"Retrieve ABAP class ZCL_UTIL main definition"
 ```
 
-## 📁 Project Structure
+### Direct Tool Call (JSON-RPC)
 
-```
-app/
-├── core/
-│   ├── config.py                  # SAP configuration (RFC credentials)
-│   ├── rfc_connection.py          # RFC connection pool
-│   └── rfc_adapter.py             # HTTP→RFC adapter (key component)
-│
-├── services/                       # 17 Services Implemented
-│   ├── class_service.py           # ✅ FASE 1: Class operations
-│   ├── search_service.py          # ✅ FASE 1: Search objects
-│   ├── program_service.py         # ✅ FASE 1: Program/Include ops
-│   ├── discovery_service.py       # ✅ FASE 1: ADT capabilities
-│   ├── navigation_service.py      # ✅ FASE 1: Repository tree
-│   ├── ddic_service.py            # ✅ FASE 2: DDIC elements
-│   ├── query_service.py           # ✅ FASE 2: SQL queries
-│   ├── transport_service.py       # ✅ FASE 3: Transport mgmt (14 tools)
-│   ├── object_service.py          # ✅ FASE 4: Lock/unlock/modify
-│   ├── activation_service.py      # ✅ FASE 4: Activation
-│   ├── code_quality_service.py    # ✅ FASE 5: Syntax/format
-│   ├── creation_service.py        # ✅ FASE 6: Create/delete
-│   ├── unittest_service.py        # ✅ FASE 6: Run unit tests
-│   ├── whereused_service.py       # ✅ FASE 7: Where-used analysis
-│   ├── cds_service.py             # ✅ NEW: CDS Views & DDL
-│   ├── rap_service.py             # ✅ NEW: RAP Objects & OData
-│   └── enhancement_service.py     # ✅ NEW: Enhancements/Ampliaciones
-│
-├── mcp/
-│   ├── server.py                  # Main MCP server
-│   └── tools/                     # 60 MCP Tools
-│       ├── class_tools.py         # 3 tools
-│       ├── search_tools.py        # 1 tool
-│       ├── program_tools.py       # 2 tools
-│       ├── discovery_tools.py     # 2 tools
-│       ├── navigation_tools.py    # 3 tools (get_node_contents, find_object_path, get_package_objects)
-│       ├── ddic_tools.py          # 4 tools
-│       ├── query_tools.py         # 2 tools
-│       ├── transport_tools.py     # 14 tools
-│       ├── object_tools.py        # 3 tools
-│       ├── activation_tools.py    # 3 tools
-│       ├── code_quality_tools.py  # 4 tools
-│       ├── creation_tools.py      # 3 tools
-│       ├── unittest_tools.py      # 1 tool
-│       ├── whereused_tools.py     # 2 tools
-│       ├── cds_tools.py           # 4 tools ✨ NEW
-│       ├── rap_tools.py           # 8 tools ✨ NEW
-│       └── enhancement_tools.py   # 3 tools ✨ NEW
-│
-└── tests/                          # Phase Validation Tests
-    ├── test_debug_search.py       # ✅ FASE 1 validation
-    ├── test_debug_query.py        # ✅ FASE 2 validation
-    ├── test_debug_transport_*.py  # ✅ FASE 3 validation
-    ├── test_fase4_*.py            # ✅ FASE 4 validation
-    ├── test_fase5_*.py            # ✅ FASE 5 validation
-    ├── test_fase6_*.py            # ✅ FASE 6 validation
-    ├── test_fase7_*.py            # ✅ FASE 7 validation
-    ├── test_cds_category.py       # ✅ NEW: CDS tests (2/4 passing)
-    ├── test_enhancement_category.py # ✅ NEW: Enhancement tests (3/3 passing ✅)
-    └── test_rap_category.py       # ⏳ NEW: RAP tests (pending)
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "get_class_source",
+    "arguments": {
+      "className": "CL_ABAP_CHAR_UTILITIES",
+      "version": "active",
+      "includeType": "main"
+    }
+  },
+  "id": 1
+}
 ```
 
-## 🏗️ Key Architecture: RfcAdapter
+---
 
-The **RfcAdapter** is the core component that enables HTTP-style requests to be converted to RFC calls:
+## Development
 
-```python
-# HTTP-style API
-response = adapter.request(
-    uri="/sap/bc/adt/oo/classes/ZTEST/source/main",
-    method="GET",
-    params={"version": "active"}
-)
+### Project Structure
 
-# ⬇️ Internally calls SAP RFC function:
-# CALL FUNCTION 'SADT_REST_RFC_ENDPOINT'
-#   EXPORTING
-#     URI          = '/sap/bc/adt/oo/classes/ZTEST/source/main'
-#     METHOD       = 'GET'
-#     QUERY_STRING = 'version=active'
+```
+brootpersonalagent/
+├── src/
+│   └── main/java/com/crystal/mcp/sapserver/
+│       ├── SapMcpServerApplication.java       # Main class
+│       ├── config/
+│       │   └── JCoConfiguration.java          # JCo connection config
+│       ├── service/
+│       │   ├── RfcAdapter.java               # HTTP-to-RFC adapter
+│       │   └── ClassService.java             # Business logic
+│       ├── tool/
+│       │   └── ClassTools.java               # MCP tool definitions
+│       └── model/
+│           └── ClassSourceResult.java        # DTOs
+├── lib/                                       # SAP JCo libraries
+├── python-legacy/                             # Python reference (59 tools)
+├── docs/
+│   ├── requirements/mcp/migration_plan.md     # Migration roadmap
+│   └── research/abap_mcp_tools_strategy_2025.md
+├── logs/
+│   ├── java/                                  # Java server logs
+│   └── python/                                # Python server logs
+├── pom.xml                                    # Maven configuration
+├── README.md                                  # This file
+└── CLAUDE.md                                  # Developer instructions
 ```
 
-**Benefits**:
-- ✅ Reuses logic from HTTP-based ADT projects
-- ✅ Compatible with standard ADT endpoints
-- ✅ Connection pooling for performance
-- ✅ Consistent error handling
-
-## 🧪 Testing Quick Commands
-
-### Test Individual Tools
+### Build Commands
 
 ```bash
-# Test search functionality
-uv run python app/tests/test_debug_search.py
+# Development
+mvn clean compile              # Compile
+mvn spring-boot:run            # Run server
 
-# Test query and DDIC access
-uv run python app/tests/test_debug_query.py
+# Testing
+mvn test                       # Run all tests
+mvn test -Dtest=ClassServiceTest  # Run specific test
+mvn clean test                 # Clean and test
 
-# Test transport operations with real transport
-uv run python app/tests/test_debug_transport_s4dk932806.py
+# Packaging
+mvn clean package              # Build JAR
+mvn clean install              # Install to local Maven repo
 
-# Test complete modification workflow
-uv run python app/tests/test_fase4_object_modification.py
-
-# Test code quality tools
-uv run python app/tests/test_fase5_code_quality.py
-
-# Test class creation and lifecycle
-uv run python app/tests/test_fase6_lifecycle.py
+# Code Quality
+mvn verify                     # Run verification
 ```
 
-### Run All Tests with Pytest
+### Adding New Tools
+
+See [CLAUDE.md](CLAUDE.md#adding-a-new-mcp-tool) for detailed instructions.
+
+**Quick example**:
+
+1. **Create Service** (`src/main/java/.../service/`)
+
+```java
+@Service
+public class NewService {
+    @Autowired
+    private RfcAdapter rfcAdapter;
+
+    public Result doSomething(String param) {
+        Map<String, Object> response = rfcAdapter.request(
+            "/sap/bc/adt/endpoint",
+            "GET",
+            Map.of(),
+            ""
+        );
+        return new Result(response);
+    }
+}
+```
+
+2. **Create MCP Tool** (`src/main/java/.../tool/`)
+
+```java
+@Component
+public class NewTools {
+    @Autowired
+    private NewService service;
+
+    @Tool(description = "Does something with SAP")
+    public String doSomething(
+        @Param(description = "Parameter") String param
+    ) {
+        return service.doSomething(param).toJson();
+    }
+}
+```
+
+3. **Test**
+
+```java
+@SpringBootTest
+class NewServiceTest {
+    @Autowired
+    private NewService service;
+
+    @Test
+    void testDoSomething() {
+        Result result = service.doSomething("test");
+        assertNotNull(result);
+    }
+}
+```
+
+---
+
+## Migration from Python
+
+This project is migrating from a Python implementation (PyRFC) to Java (SAP JCo).
+
+**Python Legacy**: See [python-legacy/PYTHON_LEGACY.md](python-legacy/PYTHON_LEGACY.md)
+- 59 MCP tools fully functional
+- Archived but maintained
+- Used as reference for Java implementation
+
+**Migration Progress**:
+```
+[██░░░░░░░░░░░░░░░░░░] 1/59 tools (1.7%)
+```
+
+**See**: [Migration Plan](docs/requirements/mcp/migration_plan.md) for complete roadmap.
+
+---
+
+## Troubleshooting
+
+### JCo Library Not Found
+
+```
+java.lang.UnsatisfiedLinkError: no sapjco3 in java.library.path
+```
+
+**Solution**:
+1. Verify `lib/sapjco3.jar` and native library exist
+2. Run with: `java -Djava.library.path=./lib -jar target/sap-mcp-server-0.1.0-POC.jar`
+
+### Connection Timeout
+
+```
+JCoException: Connect to SAP gateway failed
+```
+
+**Solution**:
+1. Verify VPN connection active
+2. Check `SAP_ROUTER` configuration
+3. Test: `ping <SAP_ASHOST>`
+
+### SADT_REST_RFC_ENDPOINT Not Found
+
+```
+Function module SADT_REST_RFC_ENDPOINT not found
+```
+
+**Solution**:
+- ADT not installed on SAP system
+- User lacks ADT authorization
+- Contact SAP Basis team
+
+### Maven Build Fails
+
+```bash
+# Clean and rebuild
+mvn clean install -U
+
+# Skip tests if needed
+mvn clean package -DskipTests
+```
+
+---
+
+## Testing
+
+### Run Tests
 
 ```bash
 # All tests
-uv run pytest app/tests/ -v
+mvn test
+
+# Specific test
+mvn test -Dtest=ClassServiceTest
 
 # With coverage
-uv run pytest app/tests/ --cov=app --cov-report=html
-
-# Specific test file
-uv run pytest app/tests/test_integration.py -v -s
+mvn test jacoco:report
+# Report: target/site/jacoco/index.html
 ```
 
-## 🛠️ Development
+### Test Requirements
 
-### Code Quality Tools
+- SAP connection configured via environment variables
+- 80%+ code coverage target
+- Integration tests require live SAP system
 
-```bash
-# Type checking
-uv run pyright app/
+---
 
-# Linting
-uv run ruff check app/
+## Documentation
 
-# Formatting
-uv run ruff format app/
-```
+- **Developer Guide**: [CLAUDE.md](CLAUDE.md)
+- **Migration Plan**: [docs/requirements/mcp/migration_plan.md](docs/requirements/mcp/migration_plan.md)
+- **Java Implementation Details**: [README_JAVA.md](README_JAVA.md)
+- **Python Legacy**: [python-legacy/PYTHON_LEGACY.md](python-legacy/PYTHON_LEGACY.md)
+- **SAP JCo Installation**: [lib/README.md](lib/README.md)
 
-## 🔄 Complete Workflow Example
+---
 
-```mermaid
-graph LR
-    A[🔍 Search] --> B[📖 Read Source]
-    B --> C[🚚 Create Transport]
-    C --> D[🔒 Lock Object]
-    D --> E[✏️ Modify Code]
-    E --> F[✔️ Syntax Check]
-    F --> G[🎨 Pretty Print]
-    G --> H[✨ Activate]
-    H --> I[🧪 Unit Test]
-    I --> J[🔓 Unlock]
-```
+## References
 
-**All 10 steps available through the MCP tools:**
-1. `search_objects` - Find object
-2. `get_class_source` - Read code
-3. `create_transport` - Create transport
-4. `lock` - Lock for editing
-5. `set_object_source` - Modify code
-6. `syntax_check` - Validate syntax
-7. `prettyprint` - Format code
-8. `activate` - Activate object
-9. `run_unit_tests` - Run tests
-10. `unlock` - Release lock
+- [Spring AI MCP SDK](https://spring.io/blog/2025/02/14/mcp-java-sdk-released-2)
+- [SAP JCo Documentation](https://support.sap.com/en/product/connectors/jco.html)
+- [Model Context Protocol](https://modelcontextprotocol.io)
+- [Spring Boot Documentation](https://docs.spring.io/spring-boot/docs/current/reference/html/)
 
-## ⚠️ Troubleshooting
+---
 
-### RFC Library Not Found
+## License
 
-```bash
-# Ensure environment variables are set
-export SAPNWRFC_HOME=/usr/local/nwrfcsdk
-export DYLD_LIBRARY_PATH=$SAPNWRFC_HOME/lib:$DYLD_LIBRARY_PATH
-```
+Internal use - Crystal Development Team
 
-### Connection Errors
+**SAP JCo License**: Proprietary SAP software. Cannot be redistributed. Each developer must download from SAP Support Portal.
 
-- Verify SAP credentials in `.env`
-- Check network connectivity to SAP server
-- Confirm SAP router string if using
-- Ensure ADT is enabled on target system
+---
 
-### MCP Server Not Loading
+## Contributing
 
-- Restart Claude Code completely
-- Check `.mcp.json` configuration
-- Verify `cwd` path is correct
-- Check logs: Look for Python errors in Claude Code console
+This is an internal project. For contributions:
 
-## 🔒 Security Notes
+1. Create feature branch: `git checkout -b feature/your-feature`
+2. Follow Java code style (Spring Boot conventions)
+3. Write tests (80%+ coverage)
+4. Update documentation
+5. Submit pull request
 
-- **Never commit `.env`** file with credentials
-- Use environment variables for sensitive data
-- Consider using SAP Secure Network Communication (SNC)
-- Implement proper access controls in SAP
+---
 
-## 📊 Project Metrics
+## Status
 
-- ✅ **60 tools** implemented (10 categories)
-- ✅ **17 services** created
-- ✅ **100%** implementation coverage
-- ✅ **68%** test coverage (41/60 tools fully tested)
-- 🆕 **16 new tools** added: CDS Views (4), RAP Objects (8), Enhancements (3), Package Objects (1)
-- ⏱️ **Rapid development**: 3 new categories implemented
-- 🔍 **Where-Used**: Successfully finds and displays code references with context
-- 🎯 **Enhancement testing**: 100% pass rate (3/3 tools validated)
-- 📦 **Package exploration**: TADIR-based package object inventory with 8 essential fields and advanced filtering (object_types, author, date range)
+**Phase 0**: ✅ Complete (Project Reorganization)
+**Phase 1**: ⏳ Pending (Core Tool Migration)
+**Overall**: 🚧 Active Development
 
-## 📄 Additional Documentation
-
-- [📋 Complete Implementation Plan](docs/requirements/pr_migration_plan_mcp_tools.md)
-- [🆕 New MCP Tools - CDS, RAP, Enhancements](docs/requirements/pr_new_mcp_tools_adt.md)
-- [🎉 Project Completion Report](PROYECTO_COMPLETADO.md)
+**Last Updated**: 2025-11-08
+**Version**: 0.1.0-POC
+**Contact**: Crystal Development Team

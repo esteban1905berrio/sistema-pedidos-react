@@ -56,11 +56,29 @@
       "WebFetch(domain:spring.io)",
       "WebFetch(domain:thenewstack.io)",
       "mcp__CRY__get_cds_view_source",
-      "WebFetch(domain:www.danvega.dev)"
+      "WebFetch(domain:www.danvega.dev)",
+      "Bash(chmod:*)",
+      "Bash(./test-connection.sh:*)",
+      "Bash(java -version:*)",
+      "Bash(/usr/libexec/java_home:*)",
+      "Bash(mvn clean compile:*)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home mvn clean compile:*)",
+      "WebFetch(domain:mvnrepository.com)",
+      "mcp__sap-java-server__get_class_source",
+      "Bash(mvn dependency:tree:*)",
+      "mcp__giralmcp__get_class_source",
+      "Bash(git mv:*)",
+      "Bash(PYTHONPATH=/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/python-legacy .venv/bin/python:*)",
+      "Bash(mvn clean package:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
   },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "sap-java-server"
+  ],
   "disabledMcpjsonServers": [
     "CRY",
     "GDC",

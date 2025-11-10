@@ -1,0 +1,36 @@
+# Test Configuration for Integration Tests
+
+spring:
+  ai:
+    mcp:
+      server:
+        name: sap-abap-mcp-server-test
+        version: 0.1.0-POC-TEST
+
+  main:
+    web-application-type: none
+    banner-mode: off
+
+# SAP Configuration (loaded from .env file via spring-dotenv)
+# The .env file in the project root contains the actual SAP connection credentials
+sap:
+  jco:
+    ashost: ${SAP_ASHOST}
+    sysnr: ${SAP_SYSNR}
+    client: ${SAP_CLIENT}
+    user: ${SAP_USER}
+    passwd: ${SAP_PASSWD}
+    lang: ${SAP_LANG:EN}
+    router: ${SAP_ROUTER:}
+    pool-capacity: ${SAP_POOL_CAPACITY:2}
+    peak-limit: ${SAP_PEAK_LIMIT:5}
+    destination-name: SAP_SYSTEM_TEST
+
+# Logging for tests
+logging:
+  level:
+    root: INFO
+    com.crystal.mcp.sapserver: DEBUG
+    com.sap.conn.jco: INFO
+  file:
+    name: logs/sap-mcp-server-test.log

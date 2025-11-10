@@ -14,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+python-legacy/lib/
+python-legacy/lib64/
 parts/
 sdist/
 var/
@@ -168,3 +168,62 @@ nwrfcsdk/
 # Test artifacts
 *.pyc
 test_*.db
+
+# ========================================
+# Java / Maven / Spring Boot
+# ========================================
+
+# Java compiled files
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Spring Boot
+spring-boot-devtools.properties
+
+# SAP JCo Libraries (NEVER commit - licensed by SAP)
+lib/sapjco3.jar
+lib/libsapjco3.so
+lib/libsapjco3.jnilib
+lib/libsapjco3.dylib
+lib/sapjco3.dll
+
+# Java IDE
+*.iml
+*.ipr
+*.iws
+.settings/
+.project
+.classpath
+.factorypath
+
+# Java test results
+test-output/
+*.test
+jacoco.exec
+.jacoco/
+
+# Project logs (organized by language)
+logs/python/
+logs/java/
