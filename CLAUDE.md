@@ -66,6 +66,8 @@ brootpersonalagent/
 ├── lib/                          # SAP JCo SDK (sapjco3.jar + native libs)
 │   ├── sapjco3.jar                           # Platform-independent JAR
 │   ├── libsapjco3.dylib                      # macOS native library
+│   ├── libsapjco3.so                         # Linux native library
+│   ├── sapjco3.dll                           # Windows native library
 │   └── README.md                             # JCo installation instructions
 │
 ├── python-legacy/                # 📦 Archived Python Project (REFERENCE ONLY)
@@ -89,11 +91,14 @@ brootpersonalagent/
 │
 ├── resources/                    # Reference projects and resources
 │
+├── start-mcp.bat                 # ⭐ Windows startup script (Command Prompt)
+├── start-mcp.ps1                 # ⭐ Windows startup script (PowerShell)
+├── start-mcp.sh                  # ⭐ macOS/Linux startup script
 ├── pom.xml                       # ⭐ Maven configuration (root)
 ├── README_JAVA.md                # Java project documentation (detailed)
-├── README.md                     # Main README (to be updated)
+├── README.md                     # Main README with multi-OS setup instructions
 ├── CLAUDE.md                     # This file
-└── .mcp.json                     # MCP server configuration
+└── .mcp.json                     # MCP server configuration (local, gitignored)
 ```
 
 ### File Naming Conventions
@@ -106,6 +111,28 @@ brootpersonalagent/
 ---
 
 ## Core Development Commands
+
+### Quick Start (Recommended)
+
+**Platform-specific startup scripts** handle all configuration automatically:
+
+```bash
+# Windows (Command Prompt)
+start-mcp.bat
+
+# Windows (PowerShell)
+.\start-mcp.ps1
+
+# macOS / Linux
+./start-mcp.sh
+```
+
+The scripts will:
+- ✅ Verify Java and Maven installation
+- ✅ Check for SAP JCo libraries (platform-specific)
+- ✅ Set library paths automatically
+- ✅ Display helpful error messages
+- ✅ Start the MCP server
 
 ### Java Project (Main)
 
@@ -121,7 +148,12 @@ mvn clean test                # Clean and test
 
 # Execution
 mvn spring-boot:run           # Run via Maven
-java -Djava.library.path=./lib -jar target/sap-mcp-server-0.1.0-POC.jar  # Run JAR
+
+# Run JAR (platform-specific library path)
+# Windows:
+java -Djava.library.path=.\lib -jar target\sap-mcp-server-0.1.0-POC.jar
+# macOS/Linux:
+java -Djava.library.path=./lib -jar target/sap-mcp-server-0.1.0-POC.jar
 
 # Code Quality
 mvn verify                    # Run verification (includes tests)
@@ -142,21 +174,81 @@ cd python-legacy/
 
 ### MCP Server Configuration
 
-Edit `.mcp.json` in project root:
+**Platform-Specific Configuration for Claude Desktop**:
+
+#### Windows
+
+Edit `%APPDATA%\Claude\claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "giralmcp": {
+      "command": "mvn.cmd",
+      "args": ["spring-boot:run", "-f", "C:\\path\\to\\giralmcp\\pom.xml"],
+      "env": {
+        "JAVA_HOME": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.5.11-hotspot",
+        "SAP_ASHOST": "sap.server.com",
+        "SAP_SYSNR": "00",
+        "SAP_CLIENT": "100",
+        "SAP_USER": "username",
+        "SAP_PASSWD": "password",
+        "SAP_LANG": "EN",
+        "SAP_ROUTER": "/H/router/S/port",
+        "SAP_POOL_CAPACITY": "5",
+        "SAP_PEAK_LIMIT": "10"
+      }
+    }
+  }
+}
+```
+
+**Important**: Use `mvn.cmd` on Windows (not `mvn`).
+
+#### macOS
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "giralmcp": {
       "command": "mvn",
-      "args": ["spring-boot:run", "-f", "/absolute/path/pom.xml"],
+      "args": ["spring-boot:run", "-f", "/Users/username/giralmcp/pom.xml"],
       "env": {
-        "JAVA_HOME": "/path/to/jdk-21",
+        "JAVA_HOME": "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home",
         "SAP_ASHOST": "sap.server.com",
         "SAP_SYSNR": "00",
         "SAP_CLIENT": "100",
-        "SAP_USER": "usuario",
-        "SAP_PASSWD": "contraseña",
+        "SAP_USER": "username",
+        "SAP_PASSWD": "password",
+        "SAP_LANG": "EN",
+        "SAP_ROUTER": "/H/router/S/port",
+        "SAP_POOL_CAPACITY": "5",
+        "SAP_PEAK_LIMIT": "10"
+      }
+    }
+  }
+}
+```
+
+#### Linux
+
+Edit `~/.config/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "giralmcp": {
+      "command": "mvn",
+      "args": ["spring-boot:run", "-f", "/home/username/giralmcp/pom.xml"],
+      "env": {
+        "JAVA_HOME": "/usr/lib/jvm/java-21-openjdk-amd64",
+        "SAP_ASHOST": "sap.server.com",
+        "SAP_SYSNR": "00",
+        "SAP_CLIENT": "100",
+        "SAP_USER": "username",
+        "SAP_PASSWD": "password",
         "SAP_LANG": "EN",
         "SAP_ROUTER": "/H/router/S/port",
         "SAP_POOL_CAPACITY": "5",
@@ -359,28 +451,55 @@ SAP_ROUTER=/H/router/S/port       # SAP router if needed
 SAP_POOL_CAPACITY=5               # Pool size (default: 5)
 SAP_PEAK_LIMIT=10                 # Peak limit (default: 10)
 
-# Java
-JAVA_HOME=/path/to/jdk-21
+# Java (platform-specific)
+# Windows:
+JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.5.11-hotspot
+# macOS:
+JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+# Linux:
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ```
 
 ---
 
 ## Important Development Notes
 
+### Multi-Platform Support
+
+This project supports **Windows, macOS, and Linux**:
+
+**Platform-Specific Files:**
+- **Windows**: `sapjco3.dll` (lib/), `start-mcp.bat`, `start-mcp.ps1`, `mvn.cmd`
+- **macOS**: `libsapjco3.dylib` (lib/), `start-mcp.sh`, `mvn`
+- **Linux**: `libsapjco3.so` (lib/), `start-mcp.sh`, `mvn`
+
+**Cross-Platform Compatibility:**
+- ✅ Maven automatically sets `java.library.path` via `pom.xml` configuration
+- ✅ Startup scripts handle platform-specific library detection
+- ✅ Claude Desktop config uses platform-specific paths and commands
+- ✅ Java code is 100% portable (no platform-specific code)
+
 ### SAP JCo Library Installation
 
 SAP JCo libraries **cannot be redistributed** (SAP license). Each developer must:
 
-1. Download from SAP Support Portal (requires S-user)
-2. Place files in `lib/` directory:
+1. **Download from SAP Support Portal** (requires S-user):
+   - Windows: `SAPJCO3_NTAMD64_<version>.ZIP`
+   - macOS Intel: `sapjco3-darwinintel64-<version>.tgz`
+   - macOS ARM: `sapjco3-darwinarm64-<version>.tgz`
+   - Linux x64: `sapjco3-linuxx86_64-<version>.tgz`
+   - Linux ARM: `sapjco3-linuxaarch64-<version>.tgz`
+
+2. **Place files in `lib/` directory**:
    ```
    lib/
    ├── sapjco3.jar                    # JAR (all platforms)
-   └── libsapjco3.dylib               # Native (macOS)
-       libsapjco3.so                  # Native (Linux)
-       sapjco3.dll                    # Native (Windows)
+   └── sapjco3.dll                    # Windows
+       libsapjco3.dylib               # macOS
+       libsapjco3.so                  # Linux
    ```
-3. See `lib/README.md` for detailed instructions
+
+3. **See `lib/README.md`** for detailed platform-specific installation instructions
 
 ### XML Parsing
 
@@ -437,13 +556,30 @@ ADT REST API responses are XML. Java services use:
 java.lang.UnsatisfiedLinkError: no sapjco3 in java.library.path
 ```
 
-**Solution**:
+**Solution** (platform-specific):
+
+**Windows**:
+```cmd
+REM Verify library exists
+dir lib\
+
+REM Run with library path
+java -Djava.library.path=.\lib -jar target\sap-mcp-server-0.1.0-POC.jar
+
+REM Or use startup script
+start-mcp.bat
+```
+
+**macOS/Linux**:
 ```bash
 # Verify library exists
 ls -l lib/
 
 # Run with library path
 java -Djava.library.path=./lib -jar target/sap-mcp-server-0.1.0-POC.jar
+
+# Or use startup script
+./start-mcp.sh
 ```
 
 ### Error: "Connection timeout"
