@@ -70,10 +70,12 @@
         </dependency>
 
         <!-- SAP JCo (System Dependency - must be installed manually) -->
+        <!-- Note: Using version "system" to satisfy Maven, but actual file is sapjco3.jar -->
+        <!-- SAP JCo requires the JAR to be named exactly "sapjco3.jar" -->
         <dependency>
             <groupId>com.sap.conn.jco</groupId>
             <artifactId>sapjco3</artifactId>
-            <version>${sap-jco.version}</version>
+            <version>system</version>
             <scope>system</scope>
             <systemPath>${project.basedir}/lib/sapjco3.jar</systemPath>
         </dependency>
@@ -120,8 +122,13 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
-                    <!-- Include system dependencies in JAR -->
-                    <includeSystemScope>true</includeSystemScope>
+                    <!-- Do NOT include system dependencies in JAR to avoid renaming -->
+                    <!-- SAP JCo must remain as sapjco3.jar (not sapjco3-system.jar) -->
+                    <includeSystemScope>false</includeSystemScope>
+                    <!-- Add lib folder to classpath -->
+                    <folders>
+                        <folder>lib</folder>
+                    </folders>
                 </configuration>
             </plugin>
 

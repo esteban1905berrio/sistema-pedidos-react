@@ -43,7 +43,8 @@
       "args": [
         "spring-boot:run",
         "-f",
-        "/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/pom.xml"
+        "/Users/bastianroot/CursorIDEWorkspace/giralmcp/pom.xml",
+        "-Djava.library.path=/Users/bastianroot/CursorIDEWorkspace/giralmcp/lib"
       ],
       "env": {
         "JAVA_HOME": "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home",
@@ -51,7 +52,7 @@
         "SAP_SYSNR": "00",
         "SAP_CLIENT": "100",
         "SAP_USER": "seblondo",
-        "SAP_PASSWD": "Broot022836*",
+        "SAP_PASSWD": "Broot1109*",
         "SAP_LANG": "ES",
         "SAP_ROUTER": "/H/190.145.188.150/S/sapdp99",
         "SAP_POOL_CAPACITY": "5",

@@ -70,7 +70,17 @@
       "Bash(git mv:*)",
       "Bash(PYTHONPATH=/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/python-legacy .venv/bin/python:*)",
       "Bash(mvn clean package:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(java:*)",
+      "Bash(timeout 10 mvn:*)",
+      "Bash(export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home:*)",
+      "Bash(mvn spring-boot:run:*)",
+      "Bash(find:*)",
+      "mcp__giralmcp__search_objects",
+      "mcp__giralmcp__get_object_source",
+      "Skill(sdlc)",
+      "Bash(mvn clean test:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
