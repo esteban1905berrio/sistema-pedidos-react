@@ -1,10 +1,12 @@
 package com.crystal.mcp.sapserver.service;
 
 import com.crystal.mcp.sapserver.model.PackageObjectsResult;
+import com.crystal.mcp.sapserver.model.TableContentsResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +38,7 @@ import java.util.Map;
 public class NavigationService {
 
     private final RfcAdapter rfcAdapter;
+    private final QueryService queryService;
 
     /**
      * Get ABAP objects from a package with pagination and filtering.
@@ -43,15 +46,21 @@ public class NavigationService {
      * This method retrieves objects contained in a development package
      * by querying the TADIR table (Repository Object Directory).
      *
-     * NOTE: This is a simplified implementation for Phase 1.
-     * Full implementation requires direct RFC calls to TADIR table with
-     * SELECT statements, which will be added in Phase 2.
-     *
      * Progressive Discovery Integration:
      * - Use to explore package contents
      * - Find objects by type (CLAS, PROG, FUGR, etc.)
      * - Filter by author or creation date
      * - Paginate through large packages
+     *
+     * TADIR Fields Retrieved:
+     * - PGMID: Program ID (e.g., 'R3TR' for repository objects)
+     * - OBJECT: Object type (CLAS, PROG, FUGR, TABL, etc.)
+     * - OBJ_NAME: Object name
+     * - SRCSYSTEM: Source system
+     * - AUTHOR: Author/creator
+     * - DEVCLASS: Development class (package)
+     * - CREATED_ON: Creation date
+     * - CHECK_DATE: Last verification date
      *
      * Pagination:
      * - First page: offset=0, maxRows=50 (default)
@@ -68,6 +77,8 @@ public class NavigationService {
      * 2. Claude: get_package_objects("ZMMI1229_0") → Gets first 50 objects
      * 3. User: "Show me just the classes"
      * 4. Claude: get_package_objects("ZMMI1229_0", objectTypes=["CLAS"])
+     *
+     * Reference: python-legacy/app/services/navigation_service.py:104-323
      *
      * @param packageName   package/devclass name (e.g., "ZMMI1229_0", "$TMP")
      * @param maxRows       maximum objects per page (default: 50, max: 1000)
@@ -101,33 +112,202 @@ public class NavigationService {
                         "objectTypes: {}, author: {}, createdFrom: {}, createdTo: {})",
                 packageName, actualMaxRows, actualOffset, objectTypes, author, createdFrom, createdTo);
 
-        // TODO: Full implementation requires RFC call to TADIR table with SELECT
-        // For now, return a placeholder structure
-        log.warn("get_package_objects: Full implementation pending (requires RFC table access)");
+        try {
+            // Build WHERE clause with filters
+            List<String> whereConditions = new ArrayList<>();
+            whereConditions.add("DEVCLASS = '" + packageName + "'");
 
-        Map<String, String> filters = new HashMap<>();
-        if (author != null) filters.put("author", author);
-        if (createdFrom != null) filters.put("created_from", createdFrom);
-        if (createdTo != null) filters.put("created_to", createdTo);
-        if (objectTypes != null && !objectTypes.isEmpty()) {
-            filters.put("object_types", String.join(", ", objectTypes));
+            // Filter by object types
+            if (objectTypes != null && !objectTypes.isEmpty()) {
+                String typesList = objectTypes.stream()
+                        .map(t -> "'" + t + "'")
+                        .collect(java.util.stream.Collectors.joining(", "));
+                whereConditions.add("OBJECT IN (" + typesList + ")");
+                log.debug("Filtering by object types: {}", objectTypes);
+            }
+
+            // Filter by author
+            if (author != null && !author.trim().isEmpty()) {
+                whereConditions.add("AUTHOR = '" + author.trim() + "'");
+                log.debug("Filtering by author: {}", author);
+            }
+
+            // Filter by creation date range
+            if (createdFrom != null && !createdFrom.trim().isEmpty()) {
+                // Convert YYYY-MM-DD to SAP format YYYYMMDD
+                String sapDateFrom = createdFrom.replace("-", "");
+                whereConditions.add("CREATED_ON >= '" + sapDateFrom + "'");
+                log.debug("Filtering from date: {} (SAP: {})", createdFrom, sapDateFrom);
+            }
+
+            if (createdTo != null && !createdTo.trim().isEmpty()) {
+                // Convert YYYY-MM-DD to SAP format YYYYMMDD
+                String sapDateTo = createdTo.replace("-", "");
+                whereConditions.add("CREATED_ON <= '" + sapDateTo + "'");
+                log.debug("Filtering to date: {} (SAP: {})", createdTo, sapDateTo);
+            }
+
+            // Combine all conditions with AND
+            String whereClause = String.join(" AND ", whereConditions);
+            log.debug("Final WHERE clause: {}", whereClause);
+
+            // Define fields to retrieve from TADIR
+            List<String> fields = List.of(
+                    "PGMID",
+                    "OBJECT",
+                    "OBJ_NAME",
+                    "SRCSYSTEM",
+                    "AUTHOR",
+                    "DEVCLASS",
+                    "CREATED_ON",
+                    "CHECK_DATE"
+            );
+
+            // Query TADIR table with pagination
+            // Note: We add +1 to maxRows to detect if there are more pages
+            TableContentsResult tableData = queryService.getTableContents(
+                    "TADIR",
+                    whereClause,
+                    actualMaxRows + 1,  // Request one extra row to check for more
+                    fields
+            );
+
+            // Parse and group results
+            Map<String, String> filtersApplied = new HashMap<>();
+            if (objectTypes != null && !objectTypes.isEmpty()) {
+                filtersApplied.put("object_types", String.join(", ", objectTypes));
+            }
+            if (author != null) filtersApplied.put("author", author);
+            if (createdFrom != null) filtersApplied.put("created_from", createdFrom);
+            if (createdTo != null) filtersApplied.put("created_to", createdTo);
+
+            // Check if we got more rows than requested (indicates more pages)
+            List<Map<String, String>> rows = tableData.rows();
+            boolean hasMore = rows.size() > actualMaxRows;
+
+            // If we got extra row, remove it from results
+            if (hasMore) {
+                rows = rows.subList(0, actualMaxRows);
+            }
+
+            // Group objects by type
+            PackageObjectsResult result = groupPackageObjects(
+                    rows,
+                    packageName,
+                    actualMaxRows,
+                    actualOffset,
+                    hasMore,
+                    filtersApplied
+            );
+
+            log.info("Retrieved {} objects from package '{}' ({} different types)",
+                    result.returnedObjects(), packageName, result.objectTypes().size());
+
+            return result;
+
+        } catch (Exception e) {
+            String errorMsg = String.format(
+                    "Failed to get package objects for '%s': %s",
+                    packageName,
+                    e.getMessage()
+            );
+            log.error(errorMsg, e);
+            throw new RuntimeException(errorMsg, e);
+        }
+    }
+
+    /**
+     * Group TADIR rows by object type.
+     *
+     * @param rows           List of TADIR rows
+     * @param packageName    Package name
+     * @param maxRows        Page size
+     * @param offset         Current offset
+     * @param hasMore        Whether there are more pages
+     * @param filtersApplied Applied filters
+     * @return PackageObjectsResult with grouped objects
+     */
+    private PackageObjectsResult groupPackageObjects(
+            List<Map<String, String>> rows,
+            String packageName,
+            int maxRows,
+            int offset,
+            boolean hasMore,
+            Map<String, String> filtersApplied
+    ) {
+        // Group objects by type
+        Map<String, PackageObjectsResult.ObjectTypeGroup> objectTypeGroups = new HashMap<>();
+
+        for (Map<String, String> row : rows) {
+            String objectType = row.get("OBJECT");
+            if (objectType == null || objectType.isEmpty()) {
+                continue;
+            }
+
+            // Create object info
+            PackageObjectsResult.ObjectInfo objectInfo = new PackageObjectsResult.ObjectInfo(
+                    row.get("PGMID"),
+                    objectType,
+                    row.get("OBJ_NAME"),
+                    row.get("SRCSYSTEM"),
+                    row.get("AUTHOR"),
+                    row.get("DEVCLASS"),
+                    formatSapDate(row.get("CREATED_ON")),
+                    formatSapDate(row.get("CHECK_DATE"))
+            );
+
+            // Add to type group
+            objectTypeGroups.computeIfAbsent(objectType, k ->
+                    new PackageObjectsResult.ObjectTypeGroup(0, new ArrayList<>())
+            ).objects().add(objectInfo);
         }
 
+        // Update counts for each type
+        objectTypeGroups.forEach((type, group) ->
+                objectTypeGroups.put(type,
+                        new PackageObjectsResult.ObjectTypeGroup(group.objects().size(), group.objects()))
+        );
+
+        // Calculate pagination
+        int currentPage = (offset / maxRows) + 1;
+        int nextOffset = offset + maxRows;
+
         PackageObjectsResult.Pagination pagination = new PackageObjectsResult.Pagination(
-                false,  // hasMore
-                0,      // nextOffset
-                1,      // currentPage
-                actualMaxRows,
-                1       // totalPages
+                hasMore,
+                hasMore ? nextOffset : offset,
+                currentPage,
+                maxRows,
+                -1  // Total pages unknown (would require full COUNT query)
         );
 
         return new PackageObjectsResult(
                 packageName,
-                0,  // totalObjects
-                0,  // returnedObjects
-                new HashMap<>(),  // objectTypes (empty)
+                rows.size(),  // Total objects in current page
+                rows.size(),  // Returned objects (same as total for this page)
+                objectTypeGroups,
                 pagination,
-                filters
+                filtersApplied
         );
+    }
+
+    /**
+     * Format SAP date from YYYYMMDD to YYYY-MM-DD.
+     *
+     * @param sapDate SAP date in YYYYMMDD format
+     * @return Formatted date in YYYY-MM-DD format, or original if invalid
+     */
+    private String formatSapDate(String sapDate) {
+        if (sapDate == null || sapDate.length() != 8) {
+            return sapDate;
+        }
+
+        try {
+            return sapDate.substring(0, 4) + "-" +
+                    sapDate.substring(4, 6) + "-" +
+                    sapDate.substring(6, 8);
+        } catch (Exception e) {
+            log.warn("Failed to format date: {}", sapDate);
+            return sapDate;
+        }
     }
 }

@@ -31,32 +31,46 @@ public record PackageObjectsResult(
     /**
      * Group of objects of the same type.
      *
-     * @param type    object type (CLAS, PROG, FUGR, etc.)
      * @param count   number of objects of this type
      * @param objects list of objects of this type
      */
     public record ObjectTypeGroup(
-            String type,
             int count,
-            List<PackageObject> objects
+            List<ObjectInfo> objects
     ) {
     }
 
     /**
-     * Individual ABAP object in a package.
+     * Individual ABAP object in a package (TADIR record).
      *
-     * @param objectType object type (CLAS, PROG, FUGR, TABL, etc.)
-     * @param objectName object name
-     * @param author     creator/author
-     * @param createdOn  creation date (YYYY-MM-DD)
+     * Contains all relevant fields from TADIR table:
+     * - PGMID: Program ID (e.g., 'R3TR' for repository objects)
+     * - OBJECT: Object type (CLAS, PROG, FUGR, TABL, etc.)
+     * - OBJ_NAME: Object name
+     * - SRCSYSTEM: Source system
+     * - AUTHOR: Author/creator
+     * - DEVCLASS: Development class (package)
+     * - CREATED_ON: Creation date (YYYY-MM-DD)
+     * - CHECK_DATE: Last verification date (YYYY-MM-DD)
+     *
      * @param pgmid      program ID (R3TR for repository objects)
+     * @param objectType object type (CLAS, PROG, FUGR, TABL, etc.)
+     * @param objName    object name
+     * @param srcSystem  source system
+     * @param author     creator/author
+     * @param devClass   development class (package)
+     * @param createdOn  creation date (YYYY-MM-DD)
+     * @param checkDate  last verification date (YYYY-MM-DD)
      */
-    public record PackageObject(
+    public record ObjectInfo(
+            String pgmid,
             String objectType,
-            String objectName,
+            String objName,
+            String srcSystem,
             String author,
+            String devClass,
             String createdOn,
-            String pgmid
+            String checkDate
     ) {
     }
 

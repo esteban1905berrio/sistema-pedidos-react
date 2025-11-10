@@ -129,6 +129,11 @@
                     <folders>
                         <folder>lib</folder>
                     </folders>
+                    <!-- Configure java.library.path for SAP JCo native libraries -->
+                    <!-- Works for all OS: Windows (dll), macOS (dylib), Linux (so) -->
+                    <jvmArguments>
+                        -Djava.library.path=${project.basedir}/lib
+                    </jvmArguments>
                 </configuration>
             </plugin>
 

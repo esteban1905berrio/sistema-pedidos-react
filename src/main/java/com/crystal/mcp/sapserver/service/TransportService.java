@@ -50,7 +50,7 @@ public class TransportService {
      * List transport requests for a user.
      *
      * This method retrieves transport requests from the SAP CTS system
-     * using the ADT API endpoint /sap/bc/adt/cts/transports.
+     * using the ADT API endpoint /sap/bc/adt/cts/transportrequests.
      *
      * Progressive Discovery Stage 1:
      * - Use to find available transports for a user
@@ -58,11 +58,12 @@ public class TransportService {
      * - Use get_transport_objects to fetch detailed objects
      *
      * ADT API Endpoint:
-     * /sap/bc/adt/cts/transports?user={user}&status={status}
+     * /sap/bc/adt/cts/transportrequests?targets=true&configUri=...
      *
      * Status Values:
      * - D: Modifiable (development)
      * - R: Released
+     * - O: Released (With Import Protection)
      * - (empty): All statuses
      *
      * Workflow Example:
@@ -77,16 +78,18 @@ public class TransportService {
      * @throws RuntimeException if query fails
      */
     public TransportListResult listUserTransports(String user, String status) {
-        String uri = "/sap/bc/adt/cts/transports";
+        String uri = "/sap/bc/adt/cts/transportrequests";
 
         // Build query parameters
+        // Note: configUri value comes from actual SAP system configuration
         Map<String, String> params = new HashMap<>();
-        if (user != null && !user.trim().isEmpty()) {
-            params.put("user", user);
-        }
-        if (status != null && !status.trim().isEmpty()) {
-            params.put("status", status);
-        }
+        params.put("targets", "true");
+        params.put("configUri", "/sap/bc/adt/cts/transportrequests/searchconfiguration/configurations/0050568BC3BD1EEBBC8FD791A18E5EF1");
+
+        // Build custom headers (as per ADT specification)
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "application/vnd.sap.adt.transportorganizer.v1+xml, application/vnd.sap.adt.transportorganizertree.v1+xml");
+        headers.put("User-Agent", "Eclipse/4.36.0.v20250528-1830 (macosx; aarch64; Java 21.0.9) ADT/3.50.0 (devedition)");
 
         log.info("Listing transports for user: {} (status: {})",
                 user != null ? user : "current", status != null ? status : "all");
@@ -96,7 +99,7 @@ public class TransportService {
             RfcAdapter.RfcResponse response = rfcAdapter.request(
                     uri,
                     "GET",
-                    null,
+                    headers,
                     params,
                     "",
                     "application/xml"
@@ -109,7 +112,7 @@ public class TransportService {
 
                 // Parse XML response
                 List<TransportListResult.TransportReference> transports =
-                        parseTransportList(response.text());
+                        parseTransportList(response.text(), user, status);
 
                 return new TransportListResult(
                         user,
@@ -191,26 +194,37 @@ public class TransportService {
     /**
      * Parse transport list XML response.
      *
-     * Handles SAP CTS namespace and extracts transport references.
+     * Handles SAP CTS namespace and extracts transport references from the
+     * hierarchical structure organized by category (workbench, customizing, transportofcopies).
      *
      * XML Structure:
-     * <tm:transports>
-     *   <tm:transport>
-     *     <tm:number>DEVK900123</tm:number>
-     *     <tm:description>...</tm:description>
-     *     <tm:status>D</tm:status>
-     *     <tm:owner>USER</tm:owner>
-     *   </tm:transport>
-     * </tm:transports>
+     * <tm:root>
+     *   <tm:workbench tm:category="Workbench">
+     *     <tm:target tm:name="S4Q">
+     *       <tm:modifiable tm:status="Modificable">
+     *         <tm:request tm:number="S4DK932806" tm:owner="SEBLONDO" tm:desc="..."
+     *                     tm:type="K" tm:status="D" ...>
+     *           <tm:task tm:number="S4DK932807" ...>
+     *             <tm:abap_object .../>
+     *           </tm:task>
+     *         </tm:request>
+     *       </tm:modifiable>
+     *     </tm:target>
+     *   </tm:workbench>
+     *   <tm:customizing tm:category="Customizing">...</tm:customizing>
+     *   <tm:transportofcopies tm:category="Transporte de copias">...</tm:transportofcopies>
+     * </tm:root>
      *
-     * @param xml XML response from ADT API
+     * @param xml    XML response from ADT API
+     * @param user   user filter (null for all users)
+     * @param status status filter (D=modifiable, R=released, null=all)
      * @return List of transport references
      * @throws Exception if XML parsing fails
      */
-    private List<TransportListResult.TransportReference> parseTransportList(String xml)
-            throws Exception {
+    private List<TransportListResult.TransportReference> parseTransportList(
+            String xml, String user, String status) throws Exception {
         // SAP CTS namespace
-        final String NS_TM = "http://www.sap.com/adt/cts/transports";
+        final String NS_TM = "http://www.sap.com/cts/adt/tm";
 
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
@@ -221,20 +235,16 @@ public class TransportService {
 
         List<TransportListResult.TransportReference> transports = new ArrayList<>();
 
-        // Get all transport elements
-        NodeList transportNodes = doc.getElementsByTagNameNS(NS_TM, "transport");
-        for (int i = 0; i < transportNodes.getLength(); i++) {
-            Element transportElement = (Element) transportNodes.item(i);
+        // Process each category: workbench, customizing, transportofcopies
+        String[] categories = {"workbench", "customizing", "transportofcopies"};
 
-            String number = getElementText(transportElement, "number", NS_TM);
-            String description = getElementText(transportElement, "description", NS_TM);
-            String status = getElementText(transportElement, "status", NS_TM);
-            String owner = getElementText(transportElement, "owner", NS_TM);
-            String type = getElementText(transportElement, "type", NS_TM);
+        for (String category : categories) {
+            NodeList categoryNodes = doc.getElementsByTagNameNS(NS_TM, category);
 
-            transports.add(new TransportListResult.TransportReference(
-                    number, description, status, owner, type
-            ));
+            for (int i = 0; i < categoryNodes.getLength(); i++) {
+                Element categoryElement = (Element) categoryNodes.item(i);
+                processCategory(categoryElement, transports, user, status, NS_TM);
+            }
         }
 
         log.info("Parsed {} transports from XML", transports.size());
@@ -242,20 +252,44 @@ public class TransportService {
     }
 
     /**
-     * Helper method to extract text from XML element by namespace and tag.
-     *
-     * @param parent    parent element
-     * @param tagName   tag name to search for
-     * @param namespace namespace URI
-     * @return text content or empty string if not found
+     * Process a category element (workbench, customizing, transportofcopies).
+     * Recursively processes all request elements within the category.
      */
-    private String getElementText(Element parent, String tagName, String namespace) {
-        NodeList nodes = parent.getElementsByTagNameNS(namespace, tagName);
-        if (nodes.getLength() > 0) {
-            Element element = (Element) nodes.item(0);
-            return element.getTextContent().trim();
+    private void processCategory(
+            Element categoryElement,
+            List<TransportListResult.TransportReference> transports,
+            String userFilter,
+            String statusFilter,
+            String namespace) {
+
+        // Get all request elements under this category
+        NodeList requestNodes = categoryElement.getElementsByTagNameNS(namespace, "request");
+
+        for (int i = 0; i < requestNodes.getLength(); i++) {
+            Element requestElement = (Element) requestNodes.item(i);
+
+            // Extract attributes
+            String number = requestElement.getAttribute("tm:number");
+            String owner = requestElement.getAttribute("tm:owner");
+            String description = requestElement.getAttribute("tm:desc");
+            String type = requestElement.getAttribute("tm:type");
+            String requestStatus = requestElement.getAttribute("tm:status");
+
+            // Apply filters if specified
+            if (userFilter != null && !userFilter.trim().isEmpty() &&
+                !owner.equalsIgnoreCase(userFilter)) {
+                continue;
+            }
+
+            if (statusFilter != null && !statusFilter.trim().isEmpty() &&
+                !requestStatus.equalsIgnoreCase(statusFilter)) {
+                continue;
+            }
+
+            transports.add(new TransportListResult.TransportReference(
+                    number, description, requestStatus, owner, type
+            ));
         }
-        return "";
     }
 
     /**
@@ -303,9 +337,16 @@ public class TransportService {
 
         try {
             // Step 1: Query E071 table for objects matching name pattern
+            // Note: We search by OBJ_NAME only (not by OBJECT type) because:
+            // - Classes can have related objects: METH (methods), CLSD (definition), CPUB (public section)
+            // - The class name appears in all related object names (e.g., ZCLMMI1229_SINCRONIZA_INV_MAWMPROCESAR_INFORMACION)
+            // - Filtering by OBJECT would exclude methods and other class components
             String whereClause = "OBJ_NAME LIKE '" + searchPattern + "'";
+
+            // objectType parameter is ignored intentionally
+            // We return ALL related objects (methods, definitions, etc.)
             if (objectType != null && !objectType.trim().isEmpty()) {
-                whereClause += " AND OBJECT = '" + objectType.trim() + "'";
+                log.debug("objectType parameter '{}' is ignored - searching all object types", objectType);
             }
 
             log.debug("E071 WHERE clause: {}", whereClause);
@@ -359,9 +400,70 @@ public class TransportService {
                 String date = e070Row.get("AS4DATE");
                 String time = e070Row.get("AS4TIME");
 
-                // Step 3: Filter - only keep open transports (D or L)
-                if (!"D".equals(trStatus) && !"L".equals(trStatus)) {
-                    log.debug("Skipping transport {} (status: {})", trkorr, trStatus);
+                // Step 3a: If this is a task (TRFUNCTION = 'S'), get parent transport info
+                ObjectInOpenOTResult.ParentTransportInfo parentTransport = null;
+                String effectiveStatus = trStatus;
+
+                if ("S".equals(trFunction)) {
+                    // This is a task, get parent transport
+                    String strkorr = e070Row.get("STRKORR");
+                    if (strkorr != null && !strkorr.trim().isEmpty()) {
+                        log.debug("Task {} belongs to parent transport {}", trkorr, strkorr);
+
+                        // Query E070 for parent transport
+                        TableContentsResult parentResult = queryService.getTableContents(
+                                "E070",
+                                "TRKORR = '" + strkorr + "'",
+                                1,
+                                List.of("TRFUNCTION", "TRSTATUS", "AS4USER", "AS4TEXT")
+                        );
+
+                        if (parentResult.rowCount() > 0) {
+                            Map<String, String> parentRow = parentResult.rows().get(0);
+                            String parentTrFunction = parentRow.get("TRFUNCTION");
+                            String parentTrStatus = parentRow.get("TRSTATUS");
+                            String parentOwner = parentRow.get("AS4USER");
+                            String parentDesc = parentRow.get("AS4TEXT");
+
+                            // Map parent transport type
+                            Map<String, String> typeMap = Map.of(
+                                    "K", "Workbench",
+                                    "S", "Task",
+                                    "T", "Transport of Copies",
+                                    "W", "Workbench Request",
+                                    "C", "Customizing"
+                            );
+
+                            // Map parent status
+                            Map<String, String> statusMap = Map.of(
+                                    "D", "Modifiable",
+                                    "L", "Protected",
+                                    "R", "Released",
+                                    "N", "Modifiable (Protected)",
+                                    "O", "Released (With Import Protection)"
+                            );
+
+                            parentTransport = new ObjectInOpenOTResult.ParentTransportInfo(
+                                    strkorr,
+                                    parentTrFunction,
+                                    typeMap.getOrDefault(parentTrFunction, parentTrFunction),
+                                    parentTrStatus,
+                                    statusMap.getOrDefault(parentTrStatus, parentTrStatus),
+                                    parentOwner,
+                                    parentDesc
+                            );
+
+                            // Use parent status for filtering
+                            effectiveStatus = parentTrStatus;
+                            log.debug("Parent transport {} status: {}", strkorr, parentTrStatus);
+                        }
+                    }
+                }
+
+                // Step 3b: Filter - only keep open transports (D or L)
+                // For tasks, check parent transport status
+                if (!"D".equals(effectiveStatus) && !"L".equals(effectiveStatus)) {
+                    log.debug("Skipping transport {} (effective status: {})", trkorr, effectiveStatus);
                     continue;
                 }
 
@@ -414,7 +516,8 @@ public class TransportService {
                                 formattedDate,
                                 formattedTime,
                                 "X".equals(lockFlag),
-                                objectInfo
+                                objectInfo,
+                                parentTransport
                         );
 
                 transportMap.put(trkorr, transportInfo);

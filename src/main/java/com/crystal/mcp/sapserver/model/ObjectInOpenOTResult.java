@@ -46,6 +46,7 @@ public record ObjectInOpenOTResult(
      * @param createdTime     Creation time (HH:MM:SS format)
      * @param isLocked        Whether the object is locked in this transport (LOCKFLAG = 'X')
      * @param objectInfo      Details about the object in this transport
+     * @param parentTransport Parent transport info (only for tasks, null otherwise)
      */
     public record TransportInfo(
             String transportNumber,
@@ -57,7 +58,29 @@ public record ObjectInOpenOTResult(
             String createdDate,
             String createdTime,
             boolean isLocked,
-            ObjectInfo objectInfo
+            ObjectInfo objectInfo,
+            ParentTransportInfo parentTransport
+    ) {}
+
+    /**
+     * Information about the parent transport (when object is in a task).
+     *
+     * @param transportNumber Parent transport number (STRKORR from E070)
+     * @param transportType   Parent transport type
+     * @param transportTypeDesc Human-readable parent transport type
+     * @param status          Parent transport status
+     * @param statusDesc      Human-readable parent status
+     * @param owner           Parent transport owner
+     * @param description     Parent transport description
+     */
+    public record ParentTransportInfo(
+            String transportNumber,
+            String transportType,
+            String transportTypeDesc,
+            String status,
+            String statusDesc,
+            String owner,
+            String description
     ) {}
 
     /**

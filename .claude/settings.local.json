@@ -80,7 +80,12 @@
       "mcp__giralmcp__get_object_source",
       "Skill(sdlc)",
       "Bash(mvn clean test:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__giralmcp__get_package_objects",
+      "mcp__giralmcp__list_user_transports",
+      "Bash(mvn test:*)",
+      "mcp__giralmcp__get_object_in_open_ot",
+      "mcp__giralmcp__get_transport_objects"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,225 @@
+{
+  "_comment": "MCP Server Configuration Example for SAP ABAP MCP Server",
+  "_instructions": [
+    "This file contains example configurations for different operating systems.",
+    "Copy the appropriate section to your Claude Desktop configuration file:",
+    "  - Windows: %APPDATA%\\Claude\\claude_desktop_config.json",
+    "  - macOS:   ~/Library/Application Support/Claude/claude_desktop_config.json",
+    "  - Linux:   ~/.config/Claude/claude_desktop_config.json",
+    "",
+    "Replace placeholder values with your actual SAP system credentials and paths.",
+    "DO NOT commit your actual .mcp.json file with real credentials to version control."
+  ],
+
+  "windows_example": {
+    "mcpServers": {
+      "giralmcp": {
+        "command": "mvn.cmd",
+        "args": [
+          "spring-boot:run",
+          "-f",
+          "C:\\Users\\YourUsername\\Projects\\giralmcp\\pom.xml"
+        ],
+        "env": {
+          "_comment": "IMPORTANT: Use mvn.cmd on Windows (not mvn)",
+          "JAVA_HOME": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.5.11-hotspot",
+          "SAP_ASHOST": "sap.yourcompany.com",
+          "SAP_SYSNR": "00",
+          "SAP_CLIENT": "100",
+          "SAP_USER": "your_sap_username",
+          "SAP_PASSWD": "your_sap_password",
+          "SAP_LANG": "EN",
+          "SAP_ROUTER": "/H/router.yourcompany.com/S/3299",
+          "SAP_POOL_CAPACITY": "5",
+          "SAP_PEAK_LIMIT": "10"
+        }
+      }
+    }
+  },
+
+  "macos_example": {
+    "mcpServers": {
+      "giralmcp": {
+        "command": "mvn",
+        "args": [
+          "spring-boot:run",
+          "-f",
+          "/Users/yourusername/Projects/giralmcp/pom.xml"
+        ],
+        "env": {
+          "_comment_java_home": "Use /usr/libexec/java_home -v 21 to find your Java installation",
+          "JAVA_HOME": "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home",
+          "SAP_ASHOST": "sap.yourcompany.com",
+          "SAP_SYSNR": "00",
+          "SAP_CLIENT": "100",
+          "SAP_USER": "your_sap_username",
+          "SAP_PASSWD": "your_sap_password",
+          "SAP_LANG": "EN",
+          "SAP_ROUTER": "/H/router.yourcompany.com/S/3299",
+          "SAP_POOL_CAPACITY": "5",
+          "SAP_PEAK_LIMIT": "10"
+        }
+      }
+    }
+  },
+
+  "linux_example": {
+    "mcpServers": {
+      "giralmcp": {
+        "command": "mvn",
+        "args": [
+          "spring-boot:run",
+          "-f",
+          "/home/yourusername/projects/giralmcp/pom.xml"
+        ],
+        "env": {
+          "_comment_java_home": "Common paths: /usr/lib/jvm/java-21-openjdk-amd64 (Debian/Ubuntu) or /usr/lib/jvm/java-21-openjdk (RHEL/Fedora)",
+          "JAVA_HOME": "/usr/lib/jvm/java-21-openjdk-amd64",
+          "SAP_ASHOST": "sap.yourcompany.com",
+          "SAP_SYSNR": "00",
+          "SAP_CLIENT": "100",
+          "SAP_USER": "your_sap_username",
+          "SAP_PASSWD": "your_sap_password",
+          "SAP_LANG": "EN",
+          "SAP_ROUTER": "/H/router.yourcompany.com/S/3299",
+          "SAP_POOL_CAPACITY": "5",
+          "SAP_PEAK_LIMIT": "10"
+        }
+      }
+    }
+  },
+
+  "_environment_variables_reference": {
+    "SAP_ASHOST": {
+      "required": true,
+      "description": "SAP application server hostname or IP address",
+      "example": "sap.company.com or 192.168.1.100"
+    },
+    "SAP_SYSNR": {
+      "required": true,
+      "description": "SAP system number (00-99)",
+      "example": "00"
+    },
+    "SAP_CLIENT": {
+      "required": true,
+      "description": "SAP client number (usually 100, 200, 300, etc.)",
+      "example": "100"
+    },
+    "SAP_USER": {
+      "required": true,
+      "description": "SAP username for authentication",
+      "example": "DEVELOPER"
+    },
+    "SAP_PASSWD": {
+      "required": true,
+      "description": "SAP password for authentication",
+      "example": "YourPassword123"
+    },
+    "SAP_LANG": {
+      "required": false,
+      "description": "SAP logon language (default: EN)",
+      "example": "EN, ES, DE, FR"
+    },
+    "SAP_ROUTER": {
+      "required": false,
+      "description": "SAP router string for VPN/firewall connections. Required if connecting through SAP router.",
+      "example": "/H/router.company.com/S/3299"
+    },
+    "SAP_POOL_CAPACITY": {
+      "required": false,
+      "description": "JCo connection pool size (default: 5)",
+      "example": "5"
+    },
+    "SAP_PEAK_LIMIT": {
+      "required": false,
+      "description": "JCo peak connection limit (default: 10)",
+      "example": "10"
+    },
+    "JAVA_HOME": {
+      "required": true,
+      "description": "Path to Java 21+ installation. Platform-specific.",
+      "windows_example": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.5.11-hotspot",
+      "macos_example": "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home",
+      "linux_example": "/usr/lib/jvm/java-21-openjdk-amd64"
+    }
+  },
+
+  "_quick_setup_guide": {
+    "step_1": "Choose the configuration example for your operating system (windows_example, macos_example, or linux_example)",
+    "step_2": "Copy the entire content to your Claude Desktop configuration file",
+    "step_3": "Update the file paths to match your actual project location",
+    "step_4": "Replace placeholder values with your actual SAP credentials",
+    "step_5": "Verify JAVA_HOME points to your Java 21+ installation",
+    "step_6": "Save the file and restart Claude Desktop",
+    "step_7": "The giralmcp MCP server should now appear in Claude Desktop"
+  },
+
+  "_security_notes": {
+    "warning_1": "NEVER commit files containing real SAP credentials to version control",
+    "warning_2": "Claude Desktop config files contain sensitive information - protect them accordingly",
+    "warning_3": "Use environment variables or secure credential storage in production environments",
+    "warning_4": "Ensure SAP_PASSWD is stored securely and not shared in plain text",
+    "recommendation": "Consider using a password manager or secure vault for SAP credentials"
+  },
+
+  "_troubleshooting": {
+    "server_not_starting": [
+      "Verify Java 21+ is installed: java -version",
+      "Verify Maven is installed: mvn -version",
+      "Check JAVA_HOME environment variable is correct",
+      "Ensure SAP JCo libraries are installed in lib/ directory",
+      "Verify all paths in configuration are absolute (not relative)",
+      "Check Claude Desktop logs for error messages"
+    ],
+    "connection_failed": [
+      "Verify VPN connection is active (if required)",
+      "Test network connectivity: ping <SAP_ASHOST>",
+      "Verify SAP_ROUTER configuration if using SAP router",
+      "Check firewall rules allow connection to SAP system",
+      "Verify SAP credentials are correct",
+      "Contact SAP Basis team to verify user authorization"
+    ],
+    "claude_desktop_not_detecting_server": [
+      "Verify JSON syntax is valid (use jsonlint.com)",
+      "Check file location is correct for your OS",
+      "Restart Claude Desktop completely",
+      "Review Claude Desktop logs for configuration errors",
+      "Ensure all required fields are present"
+    ]
+  },
+
+  "_platform_specific_notes": {
+    "windows": {
+      "command_note": "MUST use 'mvn.cmd' on Windows (not 'mvn')",
+      "path_separator": "Use backslashes (\\) or forward slashes (/) in paths, but escape backslashes in JSON (\\\\)",
+      "java_home_location": "Typically in C:\\Program Files\\Eclipse Adoptium\\ or C:\\Program Files\\Java\\",
+      "config_file": "%APPDATA%\\Claude\\claude_desktop_config.json",
+      "startup_script": "Use start-mcp.bat or start-mcp.ps1 for manual testing"
+    },
+    "macos": {
+      "command_note": "Use 'mvn' (without .cmd extension)",
+      "path_separator": "Use forward slashes (/) in paths",
+      "java_home_detection": "Use '/usr/libexec/java_home -v 21' to find Java installation",
+      "config_file": "~/Library/Application Support/Claude/claude_desktop_config.json",
+      "startup_script": "Use ./start-mcp.sh for manual testing",
+      "architecture_note": "Different JCo libraries for Intel (darwinintel64) vs ARM (darwinarm64)"
+    },
+    "linux": {
+      "command_note": "Use 'mvn' (without .cmd extension)",
+      "path_separator": "Use forward slashes (/) in paths",
+      "java_home_location": "/usr/lib/jvm/java-21-openjdk-amd64 (Debian/Ubuntu) or /usr/lib/jvm/java-21-openjdk (RHEL/Fedora)",
+      "config_file": "~/.config/Claude/claude_desktop_config.json",
+      "startup_script": "Use ./start-mcp.sh for manual testing",
+      "architecture_note": "Different JCo libraries for x86_64 vs aarch64"
+    }
+  },
+
+  "_version_info": {
+    "mcp_server_version": "0.1.0-POC",
+    "java_version_required": "21+",
+    "maven_version_required": "3.9+",
+    "sap_jco_version": "3.1.9+",
+    "spring_boot_version": "3.4.0",
+    "spring_ai_mcp_sdk_version": "1.1.0-M4"
+  }
+}

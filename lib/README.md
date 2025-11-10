@@ -15,7 +15,7 @@ You must manually download and place the following files in this directory:
 - `libsapjco3.so` - Native library for Linux (x86_64 or aarch64)
 
 **macOS:**
-- `libsapjco3.jnilib` - Native library for macOS (Intel or Apple Silicon)
+- `libsapjco3.dylib` - Native library for macOS (Intel or Apple Silicon)
 
 **Windows:**
 - `sapjco3.dll` - Native library for Windows (x64)
@@ -50,15 +50,25 @@ Download the appropriate package for your platform:
 Extract the downloaded archive and copy files to this directory:
 
 ```bash
-# Linux/macOS
-tar -xzf sapjco3-*.tgz
-cp sapjco3.jar /path/to/java-mcp-server/lib/
-cp libsapjco3.so /path/to/java-mcp-server/lib/  # or libsapjco3.jnilib on macOS
+# Linux
+tar -xzf sapjco3-linuxx86_64-3.1.9.tgz
+cp sapjco3.jar /path/to/giralmcp/lib/
+cp libsapjco3.so /path/to/giralmcp/lib/
+
+# macOS
+tar -xzf sapjco3-darwinintel64-3.1.9.tgz  # or darwinarm64
+cp sapjco3.jar /path/to/giralmcp/lib/
+cp libsapjco3.dylib /path/to/giralmcp/lib/
 
 # Windows (PowerShell)
-Expand-Archive sapjco3-*.zip
-Copy-Item sapjco3.jar .\java-mcp-server\lib\
-Copy-Item sapjco3.dll .\java-mcp-server\lib\
+Expand-Archive sapjco3-ntamd64-3.1.9.zip -DestinationPath .
+Copy-Item sapjco3.jar .\giralmcp\lib\
+Copy-Item sapjco3.dll .\giralmcp\lib\
+
+# Windows (Command Prompt)
+tar -xf sapjco3-ntamd64-3.1.9.zip
+copy sapjco3.jar giralmcp\lib\
+copy sapjco3.dll giralmcp\lib\
 ```
 
 ### 5. Verify Files
@@ -69,7 +79,9 @@ After copying, your `lib/` directory should look like:
 lib/
 ├── README.md (this file)
 ├── sapjco3.jar
-└── libsapjco3.so (or .jnilib, .dll)
+└── libsapjco3.so       # Linux
+    libsapjco3.dylib    # macOS
+    sapjco3.dll         # Windows
 ```
 
 ## Licensing
@@ -193,9 +205,9 @@ lib/
 │       └── libsapjco3.so
 ├── darwin/
 │   ├── amd64/
-│   │   └── libsapjco3.jnilib
+│   │   └── libsapjco3.dylib
 │   └── arm64/
-│       └── libsapjco3.jnilib
+│       └── libsapjco3.dylib
 └── windows/
     └── amd64/
         └── sapjco3.dll
@@ -205,7 +217,8 @@ Then use conditional COPY in Dockerfile:
 
 ```dockerfile
 ARG TARGETPLATFORM
-COPY lib/${TARGETPLATFORM}/libsapjco3.* /usr/lib/
+COPY lib/${TARGETPLATFORM}/libsapjco3.* /usr/lib/ 2>/dev/null || \
+     COPY lib/${TARGETPLATFORM}/sapjco3.dll /usr/lib/ 2>/dev/null || true
 ```
 
 ## References
