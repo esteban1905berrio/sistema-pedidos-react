@@ -3,18 +3,22 @@ package com.crystal.mcp.sapserver.service;
 import com.crystal.mcp.sapserver.model.IncludeSourceResult;
 import com.crystal.mcp.sapserver.model.ProgramSourceResult;
 import com.crystal.mcp.sapserver.model.ProgramModifyResult;
+import com.crystal.mcp.sapserver.model.SyntaxCheckMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
-import java.util.HashMap;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.Base64;
 
 /**
  * Service for ABAP program operations.
@@ -312,7 +316,7 @@ public class ProgramService {
             // ========================================
             // Step 1: Lock object
             // ========================================
-            log.info("Step 1/3: Locking {} '{}'", objectType, objectName);
+            log.info("Step 1/4: Locking {} '{}'", objectType, objectName);
             LockResult lockResult = lockObject(sourceUri);
             lockHandle = lockResult.lockHandle;
 
@@ -328,9 +332,45 @@ public class ProgramService {
                     "lock");
 
             // ========================================
-            // Step 2: Modify source code
+            // Step 2: Syntax Check
             // ========================================
-            log.info("Step 2/3: Modifying source code ({} bytes)", newSource.length());
+            log.info("Step 2/4: Running syntax check...");
+
+            List<SyntaxCheckMessage> syntaxMessages = syntaxCheck(
+                    objectUri,      // Object URI (without /source/main)
+                    sourceUri,      // Source URI (with /source/main)
+                    newSource,
+                    "inactive"      // Check against inactive version
+            );
+
+            // Check for errors
+            List<SyntaxCheckMessage> errors = syntaxMessages.stream()
+                    .filter(SyntaxCheckMessage::isError)
+                    .collect(Collectors.toList());
+
+            if (!errors.isEmpty()) {
+                String errorMsg = String.format(
+                        "Syntax check failed with %d error(s):", errors.size()
+                );
+                log.error(errorMsg);
+
+                for (SyntaxCheckMessage error : errors) {
+                    log.error("  {}", error.toFormattedString());
+                }
+
+                result.addMessage("error", errorMsg, "syntax_check");
+                throw new RuntimeException(errorMsg);
+            }
+
+            log.info("✓ Syntax check passed ({} message(s))", syntaxMessages.size());
+            result.addMessage("info",
+                    String.format("Syntax check passed (%d message(s))", syntaxMessages.size()),
+                    "syntax_check");
+
+            // ========================================
+            // Step 3: Modify source code
+            // ========================================
+            log.info("Step 3/4: Modifying source code ({} bytes)", newSource.length());
 
             // Use transport from lock response if not explicitly provided
             String effectiveTransport = (transport != null && !transport.isEmpty())
@@ -352,11 +392,11 @@ public class ProgramService {
 
         } finally {
             // ========================================
-            // Step 3: Unlock (ALWAYS EXECUTE)
+            // Step 4: Unlock (ALWAYS EXECUTE)
             // ========================================
             if (lockHandle != null) {
                 try {
-                    log.info("Step 3/3: Unlocking {} '{}'", objectType, objectName);
+                    log.info("Step 4/4: Unlocking {} '{}'", objectType, objectName);
                     unlockObject(sourceUri, lockHandle);
                     result.setUnlocked(true);
                     log.info("✓ {} unlocked successfully", objectType);
@@ -380,6 +420,159 @@ public class ProgramService {
         } else {
             log.error("✗✗✗ Modification workflow failed for {} '{}'",
                     objectType, objectName);
+        }
+
+        return result;
+    }
+
+    /**
+     * Complete workflow to modify a function module source code.
+     * <p>
+     * This is a workflow-based method that orchestrates the complete ADT modification flow:
+     * LOCK → MODIFY → UNLOCK
+     * <p>
+     * Similar to modifyProgramSource but specifically for function modules.
+     * Function modules have a different URI structure: /functions/groups/{fg}/fmodules/{fm}
+     * <p>
+     * Based on Python implementation: modification_service.py::modify_function_module()
+     *
+     * @param functionModuleName name of the function module (e.g., "Z_TEST_FM")
+     * @param functionGroupName  parent function group name (e.g., "ZTEST_FG")
+     * @param newSource          new source code to set
+     * @param transport          optional transport number (if null, uses system-assigned from LOCK)
+     * @return ProgramModifyResult with detailed workflow execution status
+     */
+    public ProgramModifyResult modifyFunctionModuleSource(
+            String functionModuleName,
+            String functionGroupName,
+            String newSource,
+            String transport
+    ) {
+        log.info("🔧 Starting modification workflow for function module: {} (group: {})",
+                functionModuleName, functionGroupName);
+
+        // Build function module URIs
+        String fmUri = String.format("/sap/bc/adt/functions/groups/%s/fmodules/%s",
+                functionGroupName.toLowerCase(), functionModuleName.toLowerCase());
+        String fmSourceUri = fmUri + "/source/main";
+
+        ProgramModifyResult result = new ProgramModifyResult();
+        result.setObjectName(functionModuleName);
+        result.setObjectType("function_module");
+        result.setUri(fmSourceUri);
+
+        String lockHandle = null;
+
+        try {
+            // ========================================
+            // Step 1: Lock function module
+            // ========================================
+            log.info("Step 1/4: Locking function module...");
+
+            LockResult lockResult = lockObject(fmSourceUri);
+            lockHandle = lockResult.lockHandle;
+
+            result.setLocked(true);
+            result.setLockHandle(lockHandle);
+            result.setTransportNumber(lockResult.transportNumber);
+            result.setTransportUser(lockResult.transportUser);
+            result.setTransportDescription(lockResult.transportDescription);
+
+            log.info("✓ Function module locked successfully (transport: {})", lockResult.transportNumber);
+            result.addMessage("info",
+                    String.format("Function module locked successfully. Transport: %s", lockResult.transportNumber),
+                    "lock");
+
+            // ========================================
+            // Step 2: Syntax Check
+            // ========================================
+            log.info("Step 2/4: Running syntax check...");
+
+            List<SyntaxCheckMessage> syntaxMessages = syntaxCheck(
+                    fmUri,          // Object URI (without /source/main)
+                    fmSourceUri,    // Source URI (with /source/main)
+                    newSource,
+                    "inactive"      // Check against inactive version
+            );
+
+            // Check for errors
+            List<SyntaxCheckMessage> errors = syntaxMessages.stream()
+                    .filter(SyntaxCheckMessage::isError)
+                    .collect(Collectors.toList());
+
+            if (!errors.isEmpty()) {
+                String errorMsg = String.format(
+                        "Syntax check failed with %d error(s):", errors.size()
+                );
+                log.error(errorMsg);
+
+                for (SyntaxCheckMessage error : errors) {
+                    log.error("  {}", error.toFormattedString());
+                }
+
+                result.addMessage("error", errorMsg, "syntax_check");
+                throw new RuntimeException(errorMsg);
+            }
+
+            log.info("✓ Syntax check passed ({} message(s))", syntaxMessages.size());
+            result.addMessage("info",
+                    String.format("Syntax check passed (%d message(s))", syntaxMessages.size()),
+                    "syntax_check");
+
+            // ========================================
+            // Step 3: Modify source code
+            // ========================================
+            log.info("Step 3/4: Modifying source code ({} bytes)", newSource.length());
+
+            // Use transport from lock response if not explicitly provided
+            String effectiveTransport = (transport != null && !transport.isEmpty())
+                    ? transport
+                    : lockResult.transportNumber;
+
+            boolean modified = setObjectSource(fmSourceUri, newSource, lockHandle, effectiveTransport);
+            result.setModified(modified);
+
+            log.info("✓ Source code modified successfully");
+            result.addMessage("info",
+                    String.format("Source code updated (%d bytes)", newSource.length()),
+                    "modify");
+
+        } catch (Exception e) {
+            log.error("✗ Modification workflow failed: {}", e.getMessage());
+            result.setSuccess(false);
+            result.addMessage("error", "Workflow failed: " + e.getMessage(), "workflow");
+            throw new RuntimeException("Failed to modify function module: " + e.getMessage(), e);
+
+        } finally {
+            // ========================================
+            // Step 4: Unlock (ALWAYS execute, even on error)
+            // ========================================
+            if (lockHandle != null) {
+                try {
+                    log.info("Step 4/4: Unlocking function module...");
+                    unlockObject(fmSourceUri, lockHandle);
+                    result.setUnlocked(true);
+                    log.info("✓ Function module unlocked successfully");
+                    result.addMessage("info", "Function module unlocked successfully", "unlock");
+
+                } catch (Exception unlockError) {
+                    log.error("✗ Failed to unlock function module: {}", unlockError.getMessage());
+                    result.addMessage("warning",
+                            "Failed to unlock function module: " + unlockError.getMessage(),
+                            "unlock");
+                }
+            }
+        }
+
+        // Final result
+        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked());
+
+        if (result.isSuccess()) {
+            log.info("✓✓✓ Modification workflow completed successfully for function module '{}'",
+                    functionModuleName);
+        } else {
+            log.error("✗✗✗ Modification workflow failed for function module '{}'",
+                    functionModuleName);
         }
 
         return result;
@@ -629,6 +822,211 @@ public class ProgramService {
             return element.getTextContent();
         }
         return null;
+    }
+
+    // ============================================================================
+    // SYNTAX CHECK OPERATIONS
+    // ============================================================================
+
+    /**
+     * Perform ABAP syntax check on source code.
+     *
+     * This is a REQUIRED step before modifying source code via ADT API.
+     * ADT performs syntax validation before allowing PUT operations.
+     *
+     * ADT API Endpoint:
+     * POST /sap/bc/adt/checkruns?reporters=abapCheckRun
+     *
+     * Flow:
+     * 1. Encode source code to Base64
+     * 2. Build XML body with encoded source
+     * 3. Call ADT checkruns endpoint
+     * 4. Parse response for syntax errors/warnings
+     *
+     * @param objectUri   URI of the object (without /source/main)
+     *                    Example: /sap/bc/adt/functions/groups/zfidmee_1/fmodules/zfi_dmee_bancolombia_r2
+     * @param sourceUri   URI of the source/include (with /source/main)
+     *                    Example: /sap/bc/adt/functions/groups/zfidmee_1/fmodules/zfi_dmee_bancolombia_r2/source/main
+     * @param sourceCode  Source code to validate
+     * @param version     "active" or "inactive"
+     * @return List of syntax check messages (errors, warnings, info)
+     * @throws RuntimeException if syntax check call fails
+     */
+    private List<SyntaxCheckMessage> syntaxCheck(
+            String objectUri,
+            String sourceUri,
+            String sourceCode,
+            String version
+    ) {
+        log.debug("Running syntax check on: {}", objectUri);
+
+        // 1. Encode source to Base64
+        String base64Source = Base64.getEncoder()
+                .encodeToString(sourceCode.getBytes(StandardCharsets.UTF_8));
+
+        // 2. Build XML body
+        String xmlBody = buildSyntaxCheckXml(objectUri, sourceUri, base64Source, version);
+
+        // 3. Call ADT API
+        Map<String, String> params = new HashMap<>();
+        params.put("reporters", "abapCheckRun");
+
+        // Custom headers for syntax check
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "application/vnd.sap.adt.checkmessages+xml");
+
+        try {
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    "/sap/bc/adt/checkruns",
+                    "POST",
+                    headers,  // Pass custom headers with Accept
+                    params,
+                    xmlBody,
+                    "application/vnd.sap.adt.checkobjects+xml"
+            );
+
+            // 4. Parse result
+            if (response.statusCode() == 200) {
+                List<SyntaxCheckMessage> messages = parseSyntaxCheckResult(response.text());
+                log.debug("Syntax check completed. Found {} messages", messages.size());
+                return messages;
+            } else {
+                String errorMsg = String.format(
+                        "Failed to run syntax check: HTTP %d - %s",
+                        response.statusCode(),
+                        response.text()
+                );
+                log.error(errorMsg);
+                throw new RuntimeException(errorMsg);
+            }
+
+        } catch (Exception e) {
+            log.error("Error running syntax check for '{}': {}", objectUri, e.getMessage(), e);
+            throw new RuntimeException("Failed to run syntax check", e);
+        }
+    }
+
+    /**
+     * Build XML body for syntax check request.
+     *
+     * Format:
+     * <pre>
+     * {@code
+     * <?xml version="1.0" encoding="UTF-8"?>
+     * <chkrun:checkObjectList xmlns:chkrun="http://www.sap.com/adt/checkrun"
+     *                         xmlns:adtcore="http://www.sap.com/adt/core">
+     *   <chkrun:checkObject adtcore:uri="{objectUri}" chkrun:version="{version}">
+     *     <chkrun:artifacts>
+     *       <chkrun:artifact chkrun:contentType="text/plain; charset=utf-8"
+     *                        chkrun:uri="{sourceUri}">
+     *         <chkrun:content>{base64Source}</chkrun:content>
+     *       </chkrun:artifact>
+     *     </chkrun:artifacts>
+     *   </chkrun:checkObject>
+     * </chkrun:checkObjectList>
+     * }
+     * </pre>
+     *
+     * @param objectUri    URI of object (without /source/main)
+     * @param sourceUri    URI of source (with /source/main)
+     * @param base64Source Base64-encoded source code
+     * @param version      "active" or "inactive"
+     * @return XML string
+     */
+    private String buildSyntaxCheckXml(
+            String objectUri,
+            String sourceUri,
+            String base64Source,
+            String version
+    ) {
+        return String.format(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                        "<chkrun:checkObjectList xmlns:chkrun=\"http://www.sap.com/adt/checkrun\" " +
+                        "xmlns:adtcore=\"http://www.sap.com/adt/core\">\n" +
+                        "  <chkrun:checkObject adtcore:uri=\"%s\" chkrun:version=\"%s\">\n" +
+                        "    <chkrun:artifacts>\n" +
+                        "      <chkrun:artifact chkrun:contentType=\"text/plain; charset=utf-8\" " +
+                        "chkrun:uri=\"%s\">\n" +
+                        "        <chkrun:content>%s</chkrun:content>\n" +
+                        "      </chkrun:artifact>\n" +
+                        "    </chkrun:artifacts>\n" +
+                        "  </chkrun:checkObject>\n" +
+                        "</chkrun:checkObjectList>",
+                objectUri,
+                version,
+                sourceUri,
+                base64Source
+        );
+    }
+
+    /**
+     * Parse syntax check result XML.
+     *
+     * Response format:
+     * <pre>
+     * {@code
+     * <?xml version="1.0" encoding="UTF-8"?>
+     * <chkrun:checkMessages xmlns:chkrun="http://www.sap.com/adt/checkrun">
+     *   <chkrun:messages>
+     *     <chkrun:message chkrun:type="error" chkrun:line="10" chkrun:column="5">
+     *       <chkrun:text>Syntax error in line 10</chkrun:text>
+     *     </chkrun:message>
+     *   </chkrun:messages>
+     * </chkrun:checkMessages>
+     * }
+     * </pre>
+     *
+     * @param xmlResponse XML response from checkruns endpoint
+     * @return List of syntax check messages
+     */
+    private List<SyntaxCheckMessage> parseSyntaxCheckResult(String xmlResponse) {
+        List<SyntaxCheckMessage> messages = new ArrayList<>();
+
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new InputSource(new StringReader(xmlResponse)));
+
+            // Find all message elements
+            // Note: Use namespace-aware search
+            NodeList messageNodes = doc.getElementsByTagNameNS(
+                    "http://www.sap.com/adt/checkrun",
+                    "message"
+            );
+
+            for (int i = 0; i < messageNodes.getLength(); i++) {
+                Element messageElement = (Element) messageNodes.item(i);
+
+                SyntaxCheckMessage message = new SyntaxCheckMessage();
+
+                // Extract attributes
+                message.setType(messageElement.getAttribute("chkrun:type"));
+
+                String lineStr = messageElement.getAttribute("chkrun:line");
+                message.setLine(lineStr.isEmpty() ? 0 : Integer.parseInt(lineStr));
+
+                String columnStr = messageElement.getAttribute("chkrun:column");
+                message.setColumn(columnStr.isEmpty() ? 0 : Integer.parseInt(columnStr));
+
+                // Extract text content
+                NodeList textNodes = messageElement.getElementsByTagNameNS(
+                        "http://www.sap.com/adt/checkrun",
+                        "text"
+                );
+                if (textNodes.getLength() > 0) {
+                    message.setText(textNodes.item(0).getTextContent());
+                }
+
+                messages.add(message);
+            }
+
+            return messages;
+
+        } catch (Exception e) {
+            log.error("Failed to parse syntax check result XML: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to parse syntax check result", e);
+        }
     }
 
     /**

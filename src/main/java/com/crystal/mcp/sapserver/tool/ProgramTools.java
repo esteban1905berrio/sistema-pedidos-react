@@ -255,4 +255,72 @@ public class ProgramTools {
     ) {
         return programService.modifyProgramSource(objectName, newSource, objectType, transport);
     }
+
+    /**
+     * MCP Tool: Modify a function module source code.
+     * <p>
+     * This is a workflow-based tool that orchestrates the complete ADT modification flow:
+     * LOCK → MODIFY → UNLOCK
+     * <p>
+     * Similar to modify_program_source but specifically for function modules.
+     * Function modules have a different URI structure and require both module and group names.
+     * <p>
+     * Workflow Steps:
+     * 1. LOCK: Acquires exclusive lock on the function module
+     *    - Returns transport number (system-assigned or existing)
+     *    - Fails if object is already locked by another user
+     * 2. MODIFY: Updates source code with new content
+     *    - Uses transport from LOCK response
+     *    - Validates lock handle before modification
+     * 3. UNLOCK: Releases lock (ALWAYS executed, even on failure)
+     *    - Critical step to prevent orphaned locks
+     * <p>
+     * Based on Python implementation: modification_service.py::modify_function_module()
+     *
+     * @param functionModuleName name of the function module (e.g., "Z_TEST_FM")
+     * @param functionGroupName  parent function group name (e.g., "ZTEST_FG")
+     * @param newSource          new source code to set (complete replacement)
+     * @param transport          optional transport number (if null, uses system-assigned transport from LOCK)
+     * @return ProgramModifyResult with detailed workflow execution status
+     */
+    @McpTool(
+            description = "Modify ABAP function module source code with complete workflow (LOCK → MODIFY → UNLOCK). " +
+                    "Workflow-based tool that handles locking, modification, and unlocking automatically. " +
+                    "Requires both function module name and parent function group name. " +
+                    "Returns transport number from lock operation if not provided. " +
+                    "Fails with error if object is already locked by another user. " +
+                    "Always unlocks object even on failure (prevents orphaned locks). " +
+                    "Example: modify_function_module('Z_TEST_FM', 'ZTEST_FG', new_code, null)"
+    )
+    public ProgramModifyResult modify_function_module(
+            @McpToolParam(
+                    description = "Name of the function module to modify. " +
+                            "Examples: 'Z_TEST_FM', 'Z_GET_INVOICE', 'Z_PROCESS_ORDER'",
+                    required = true
+            )
+            String functionModuleName,
+            @McpToolParam(
+                    description = "Parent function group name. " +
+                            "Examples: 'ZTEST_FG', 'ZFI_UTILS', 'ZMMI_PROCESS'",
+                    required = true
+            )
+            String functionGroupName,
+            @McpToolParam(
+                    description = "New source code to set (complete replacement). " +
+                            "Must be valid ABAP syntax. " +
+                            "Must include FUNCTION/ENDFUNCTION statements.",
+                    required = true
+            )
+            String newSource,
+            @McpToolParam(
+                    description = "Optional transport number. " +
+                            "If not provided, uses system-assigned transport from LOCK operation. " +
+                            "Example: 'CADK911122', 'DEVK900123'. " +
+                            "Leave null to use automatic transport assignment.",
+                    required = false
+            )
+            String transport
+    ) {
+        return programService.modifyFunctionModuleSource(functionModuleName, functionGroupName, newSource, transport);
+    }
 }

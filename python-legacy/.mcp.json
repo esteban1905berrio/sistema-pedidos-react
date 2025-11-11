@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "CRY": {
+      "command": "/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/python-legacy/.venv/bin/python",
+      "args": ["-m", "app.main"],
+      "cwd": "/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/python-legacy",
+      "env": {
+        "SAP_ASHOST": "172.27.154.8",
+        "SAP_SYSNR": "00",
+        "SAP_CLIENT": "100",
+        "SAP_USER": "seblondo",
+        "SAP_PASSWD": "Broot022836*",
+        "SAP_LANG": "EN",
+        "SAP_ROUTER": "/H/190.145.188.150/S/sapdp99",
+        "SAPNWRFC_HOME": "/Users/local/nwrfcsdk",
+        "DYLD_LIBRARY_PATH": "/Users/local/nwrfcsdk/lib:/usr/local/lib:/usr/lib",
+        "PYTHONPATH": "/Users/bastianroot/CursorIDEWorkspace/brootpersonalagent/python-legacy",
+        "DYLD_FALLBACK_LIBRARY_PATH": "/Users/local/nwrfcsdk/lib",
+        "MAX_CONTENT_LENGTH": "100000"
+      }
+    }
+  }
+}

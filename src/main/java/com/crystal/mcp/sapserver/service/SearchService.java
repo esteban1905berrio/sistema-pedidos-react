@@ -98,6 +98,10 @@ public class SearchService {
 
             // Check HTTP status
             if (response.statusCode() == 200) {
+                // Log raw XML response for debugging
+                log.debug("Raw XML response (first 500 chars): {}",
+                        response.text().substring(0, Math.min(500, response.text().length())));
+
                 // Parse XML response
                 List<SearchResult.ObjectReference> results = parseSearchResults(response.text());
 
