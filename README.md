@@ -32,7 +32,7 @@
 This project implements a **Model Context Protocol (MCP) server** that enables AI assistants like Claude Code to interact with SAP ABAP systems. It uses **Spring AI MCP SDK** for standardized MCP integration and **SAP JCo** for enterprise-grade RFC connectivity.
 
 **Migration Status**: Active migration from Python (PyRFC) to Java (SAP JCo)
-- **Current**: 1/59 MCP tools implemented
+- **Current**: 2/59 MCP tools implemented (3.4%)
 - **Legacy**: Python implementation archived in `python-legacy/` (fully functional)
 - **See Plan**: [Migration Plan](docs/requirements/mcp/migration_plan.md)
 
@@ -45,8 +45,9 @@ This project implements a **Model Context Protocol (MCP) server** that enables A
 - STDIO transport for MCP JSON-RPC communication
 - **Multi-platform support**: Windows, macOS, Linux
 
-✅ **Available Tools** (1/59)
+✅ **Available Tools** (2/59)
 - `get_class_source` - Retrieve ABAP class source code
+- `modify_program_source` - Modify ABAP program/include with workflow (LOCK → MODIFY → UNLOCK)
 
 ---
 

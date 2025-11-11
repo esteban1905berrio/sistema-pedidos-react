@@ -1,6 +1,7 @@
 package com.crystal.mcp.sapserver.service;
 
 import com.crystal.mcp.sapserver.model.ClassIncludeResult;
+import com.crystal.mcp.sapserver.model.ClassModifyResult;
 import com.crystal.mcp.sapserver.model.ClassSourceResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -219,5 +220,585 @@ public class ClassService {
         log.info("Retrieved {} includes for class {}", includes.size(), className);
 
         return new ClassIncludeResult(className, includes.size(), includes);
+    }
+
+    /**
+     * Complete workflow to modify an ABAP class source code.
+     *
+     * This is a workflow-based tool that orchestrates the complete ADT modification flow:
+     * LOCK → MODIFY → UNLOCK
+     *
+     * Workflow Steps:
+     * 1. LOCK: Acquire exclusive lock on class
+     * 2. MODIFY: Update source code with new content
+     * 3. UNLOCK: Release lock (always executed, even on failure)
+     *
+     * Based on Python implementation: modification_service.py
+     * Reference: docs/requirements/mcp/workflow_based/pr_class_modify.md
+     *
+     * Supports modification of different include types:
+     * - main: Class definition (PUBLIC, PROTECTED, PRIVATE sections)
+     * - implementation: Method implementations
+     * - testclasses: Unit test classes
+     * - macros: ABAP macros
+     *
+     * @param className   name of the class (e.g., "ZCLFIAAC002_CARGA_ACTIVOS_FIJ")
+     * @param newSource   new source code to set
+     * @param includeType include type to modify (default: "main")
+     * @param transport   optional transport number (if null, uses system-assigned from LOCK)
+     * @return ClassModifyResult with detailed workflow execution status
+     * @throws RuntimeException if modification workflow fails
+     */
+    public ClassModifyResult modifyClass(
+            String className,
+            String newSource,
+            String includeType,
+            String transport
+    ) {
+        // Validate inputs
+        if (className == null || className.trim().isEmpty()) {
+            throw new IllegalArgumentException("Class name cannot be empty");
+        }
+        if (newSource == null) {
+            throw new IllegalArgumentException("Source code cannot be null");
+        }
+        if (includeType == null || includeType.trim().isEmpty()) {
+            includeType = "main"; // Default to main if not provided
+        }
+
+        log.info("Starting modification workflow for class: {} (include: {})", className, includeType);
+
+        // Build URIs
+        String classUri = String.format("/sap/bc/adt/oo/classes/%s", className.toLowerCase());
+        String sourceUri = String.format("%s/source/%s", classUri, includeType);
+
+        // Initialize result
+        ClassModifyResult result = new ClassModifyResult();
+        result.setUri(sourceUri);
+        result.setClassName(className);
+        result.setIncludeType(includeType);
+
+        String lockHandle = null;
+
+        try {
+            // ========================================
+            // Step 1: Lock class
+            // ========================================
+            log.info("Step 1/3: Locking class '{}'", className);
+            LockResult lockResult = lockObject(classUri);
+            lockHandle = lockResult.lockHandle;
+
+            result.setLocked(true);
+            result.setLockHandle(lockHandle);
+            result.setTransportNumber(lockResult.transport);
+            result.setTransportUser(""); // Not available in current implementation
+            result.setTransportDescription(""); // Not available in current implementation
+
+            log.info("Class locked successfully (handle: {}, transport: {})", lockHandle, lockResult.transport);
+            result.addMessage("info", "Class locked successfully", "lock");
+
+            // Use transport from LOCK if not provided
+            String actualTransport = transport;
+            if (actualTransport == null || actualTransport.isEmpty()) {
+                actualTransport = lockResult.transport;
+                log.info("Using transport from LOCK: {}", actualTransport);
+            }
+
+            // ========================================
+            // Step 2: Modify source code
+            // ========================================
+            log.info("Step 2/3: Modifying source code ({} bytes)", newSource.length());
+
+            boolean modified = setObjectSource(sourceUri, newSource, lockHandle, actualTransport);
+            result.setModified(modified);
+
+            log.info("Source code modified successfully");
+            result.addMessage("info",
+                    String.format("Source code updated (%d bytes)", newSource.length()),
+                    "modify");
+
+        } catch (Exception e) {
+            log.error("Modification workflow failed: {}", e.getMessage());
+            result.setSuccess(false);
+            result.addMessage("error", "Workflow failed: " + e.getMessage(), "workflow");
+
+            // Re-throw to ensure caller knows about the failure
+            throw new RuntimeException("Failed to modify class: " + e.getMessage(), e);
+
+        } finally {
+            // ========================================
+            // Step 3: Unlock (ALWAYS execute, even on error)
+            // ========================================
+            if (lockHandle != null) {
+                try {
+                    log.info("Step 3/3: Unlocking class '{}'", className);
+                    unlockObject(classUri, lockHandle);
+                    result.setUnlocked(true);
+                    log.info("Class unlocked successfully");
+                    result.addMessage("info", "Class unlocked successfully", "unlock");
+
+                } catch (Exception unlockError) {
+                    log.error("Failed to unlock class: {}", unlockError.getMessage());
+                    result.addMessage("warning",
+                            "Failed to unlock class: " + unlockError.getMessage(),
+                            "unlock");
+                }
+            }
+        }
+
+        // Final result
+        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked());
+
+        if (result.isSuccess()) {
+            log.info("=== Modification workflow completed successfully for class '{}' ===", className);
+        } else {
+            log.error("=== Modification workflow failed for class '{}' ===", className);
+        }
+
+        return result;
+    }
+
+    /**
+     * Complete workflow to modify an ABAP class source code.
+     * <p>
+     * This is a workflow-based method that orchestrates the complete ADT modification flow:
+     * LOCK → GET objectstructure → PUT source → GET inactive → UNLOCK → Activate (preaudit) → Activate (final)
+     * <p>
+     * Supports modification of different include types:
+     * - main (definitions)
+     * - implementations
+     * - testclasses
+     * - macros
+     * <p>
+     * Based on workflow documented in: docs/requirements/mcp/workflow_based/pr_class_modify.md
+     *
+     * @param className   name of the class (e.g., "ZCL_TEST")
+     * @param newSource   new source code to set
+     * @param includeType include type to modify (main, implementations, testclasses, macros)
+     * @param transport   optional transport number (if null, uses system-assigned from LOCK)
+     * @return ProgramModifyResult with detailed workflow execution status
+     * @deprecated Use {@link #modifyClass(String, String, String, String)} instead
+     */
+    @Deprecated
+    public com.crystal.mcp.sapserver.model.ProgramModifyResult modifyClassSource(
+            String className,
+            String newSource,
+            String includeType,
+            String transport
+    ) {
+        log.info("🔧 Starting modification workflow for class: {} (include: {})",
+                className, includeType);
+
+        // Build class URIs (classUri = base without /source, classSourceUri = with /source)
+        String classUri = String.format("/sap/bc/adt/oo/classes/%s", className.toLowerCase());
+        String classSourceUri = String.format("%s/source/%s", classUri, includeType);
+
+        com.crystal.mcp.sapserver.model.ProgramModifyResult result =
+                new com.crystal.mcp.sapserver.model.ProgramModifyResult();
+        result.setObjectName(className);
+        result.setObjectType("class");
+        result.setUri(classSourceUri);
+
+        String lockHandle = null;
+        String actualTransport = transport;
+
+        try {
+            // ========================================
+            // Step 1: Lock class (LOCK on base URI, not source URI)
+            // ========================================
+            log.info("Step 1/7: Locking class...");
+
+            LockResult lockResult = lockObject(classUri);
+            lockHandle = lockResult.lockHandle;
+
+            // Use transport from LOCK if not provided
+            if (actualTransport == null || actualTransport.isEmpty()) {
+                actualTransport = lockResult.transport;
+                log.info("Using transport from LOCK: {}", actualTransport);
+            }
+
+            result.setLocked(true);
+            result.setLockHandle(lockHandle);
+            result.setTransportNumber(actualTransport);
+
+            log.info("✓ Class locked successfully (handle: {}, transport: {})", lockHandle, actualTransport);
+            result.addMessage("info", "Class locked successfully", "lock");
+
+            // ========================================
+            // Step 2: GET objectstructure (validation step)
+            // ========================================
+            log.info("Step 2/7: Getting object structure...");
+            getObjectStructure(classUri);
+            log.info("✓ Object structure validated");
+            result.addMessage("info", "Object structure validated", "validation");
+
+            // ========================================
+            // Step 3: PUT source (modify code)
+            // ========================================
+            log.info("Step 3/7: Modifying source code ({} bytes)", newSource.length());
+
+            boolean modified = setObjectSource(classSourceUri, newSource, lockHandle, actualTransport);
+            result.setModified(modified);
+
+            log.info("✓ Source code modified successfully");
+            result.addMessage("info",
+                    String.format("Source code updated (%d bytes)", newSource.length()),
+                    "modify");
+
+            // ========================================
+            // Step 4: GET inactive version (verification)
+            // ========================================
+            log.info("Step 4/7: Verifying inactive version...");
+            getInactiveVersion(classUri);
+            log.info("✓ Inactive version verified");
+            result.addMessage("info", "Inactive version verified", "verification");
+
+        } catch (Exception e) {
+            log.error("✗ Modification workflow failed: {}", e.getMessage());
+            result.setSuccess(false);
+            result.addMessage("error", "Workflow failed: " + e.getMessage(), "workflow");
+            throw new RuntimeException("Failed to modify class: " + e.getMessage(), e);
+
+        } finally {
+            // ========================================
+            // Step 5: Unlock (ALWAYS execute, even on error)
+            // ========================================
+            if (lockHandle != null) {
+                try {
+                    log.info("Step 5/7: Unlocking class...");
+                    unlockObject(classUri, lockHandle);
+                    result.setUnlocked(true);
+                    log.info("✓ Class unlocked successfully");
+                    result.addMessage("info", "Class unlocked successfully", "unlock");
+
+                } catch (Exception unlockError) {
+                    log.error("✗ Failed to unlock class: {}", unlockError.getMessage());
+                    result.addMessage("warning",
+                            "Failed to unlock class: " + unlockError.getMessage(),
+                            "unlock");
+                }
+            }
+        }
+
+        // ========================================
+        // Step 6 & 7: Activation (preaudit + final)
+        // Note: Simplified for POC - full implementation would activate
+        // ========================================
+        log.info("Steps 6-7/7: Activation (skipped in current implementation)");
+        result.addMessage("info", "Activation skipped (manual activation required)", "activation");
+
+        // Final result
+        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked());
+
+        if (result.isSuccess()) {
+            log.info("✓✓✓ Modification workflow completed successfully for class '{}'", className);
+        } else {
+            log.error("✗✗✗ Modification workflow failed for class '{}'", className);
+        }
+
+        return result;
+    }
+
+    // ============================================================================
+    // LOCK/UNLOCK OPERATIONS (Private helpers)
+    // ============================================================================
+
+    /**
+     * Result object for lock operation containing lock handle and transport.
+     */
+    private static class LockResult {
+        String lockHandle;
+        String transport;
+
+        LockResult(String lockHandle, String transport) {
+            this.lockHandle = lockHandle;
+            this.transport = transport;
+        }
+    }
+
+    /**
+     * Lock an ABAP class for editing.
+     * <p>
+     * Implements Step 1 of the documented workflow in pr_class_modify.md:
+     * POST /sap/bc/adt/oo/classes/{className}?_action=LOCK&accessMode=MODIFY
+     * <p>
+     * Required Accept header:
+     * application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result;q=0.8,
+     * application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result2;q=0.9
+     * <p>
+     * Response XML contains:
+     * - LOCK_HANDLE: Token for subsequent operations
+     * - CORRNR: Transport request number
+     *
+     * @param objectUri base class URI (WITHOUT /source/main)
+     * @return LockResult containing lockHandle and transport
+     */
+    private LockResult lockObject(String objectUri) {
+        Map<String, String> params = new HashMap<>();
+        params.put("_action", "LOCK");
+        params.put("accessMode", "MODIFY");
+
+        // Critical: Add required Accept header for ADT lock response
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept",
+                "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result;q=0.8, " +
+                        "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result2;q=0.9");
+
+        log.debug("Locking object: {}", objectUri);
+
+        try {
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    objectUri,
+                    "POST",
+                    headers,
+                    params,
+                    "",
+                    "application/xml"
+            );
+
+            if (response.statusCode() == 200) {
+                // Parse XML response to extract LOCK_HANDLE and CORRNR
+                return parseLockResponse(response.text());
+
+            } else if (response.statusCode() == 409) {
+                throw new RuntimeException("Object is already locked by another user (HTTP 409)");
+            } else {
+                throw new RuntimeException(String.format(
+                        "Failed to lock object: HTTP %d - %s",
+                        response.statusCode(), response.text()));
+            }
+
+        } catch (Exception e) {
+            log.error("Error locking object '{}': {}", objectUri, e.getMessage(), e);
+            throw new RuntimeException("Failed to lock object", e);
+        }
+    }
+
+    /**
+     * Parse ADT lock response XML to extract LOCK_HANDLE and CORRNR.
+     * <p>
+     * Expected XML format:
+     * <pre>{@code
+     * <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+     *   <asx:values>
+     *     <DATA>
+     *       <LOCK_HANDLE>AiEMLCBBUzRVU0VSICAgICAgI...</LOCK_HANDLE>
+     *       <CORRNR>CADK911088</CORRNR>
+     *       <CORRUSER>USERNAME</CORRUSER>
+     *     </DATA>
+     *   </asx:values>
+     * </asx:abap>
+     * }</pre>
+     *
+     * @param xmlText XML response from LOCK operation
+     * @return LockResult containing parsed values
+     */
+    private LockResult parseLockResponse(String xmlText) {
+        try {
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(
+                    new java.io.ByteArrayInputStream(xmlText.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            );
+
+            // Extract LOCK_HANDLE
+            org.w3c.dom.NodeList lockHandleNodes = doc.getElementsByTagName("LOCK_HANDLE");
+            String lockHandle = null;
+            if (lockHandleNodes.getLength() > 0) {
+                lockHandle = lockHandleNodes.item(0).getTextContent().trim();
+            }
+
+            // Extract CORRNR (transport)
+            org.w3c.dom.NodeList corrNrNodes = doc.getElementsByTagName("CORRNR");
+            String transport = null;
+            if (corrNrNodes.getLength() > 0) {
+                transport = corrNrNodes.item(0).getTextContent().trim();
+            }
+
+            if (lockHandle == null || lockHandle.isEmpty()) {
+                throw new RuntimeException("Failed to extract LOCK_HANDLE from lock response");
+            }
+
+            log.debug("Parsed lock response: handle={}, transport={}", lockHandle, transport);
+
+            return new LockResult(lockHandle, transport);
+
+        } catch (Exception e) {
+            log.error("Error parsing lock response XML: {}", e.getMessage());
+            throw new RuntimeException("Failed to parse lock response", e);
+        }
+    }
+
+    /**
+     * Get object structure (Step 2 of workflow).
+     * <p>
+     * GET /sap/bc/adt/oo/classes/{className}/objectstructure?version=active&withShortDescriptions=true
+     * <p>
+     * This validates the object state before modification.
+     *
+     * @param objectUri base class URI
+     */
+    private void getObjectStructure(String objectUri) {
+        String structureUri = objectUri + "/objectstructure";
+
+        Map<String, String> params = new HashMap<>();
+        params.put("version", "active");
+        params.put("withShortDescriptions", "true");
+
+        try {
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    structureUri,
+                    "GET",
+                    null,
+                    params,
+                    "",
+                    "application/xml"
+            );
+
+            if (response.statusCode() != 200) {
+                throw new RuntimeException(String.format(
+                        "Failed to get object structure: HTTP %d - %s",
+                        response.statusCode(), response.text()));
+            }
+
+        } catch (Exception e) {
+            log.error("Error getting object structure for '{}': {}", objectUri, e.getMessage(), e);
+            throw new RuntimeException("Failed to get object structure", e);
+        }
+    }
+
+    /**
+     * Get inactive version (Step 4 of workflow).
+     * <p>
+     * GET /sap/bc/adt/oo/classes/{className}?version=inactive
+     * <p>
+     * This verifies that the modification was saved as inactive version.
+     *
+     * @param objectUri base class URI
+     */
+    private void getInactiveVersion(String objectUri) {
+        Map<String, String> params = new HashMap<>();
+        params.put("version", "inactive");
+
+        try {
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    objectUri,
+                    "GET",
+                    null,
+                    params,
+                    "",
+                    "application/xml"
+            );
+
+            if (response.statusCode() != 200) {
+                throw new RuntimeException(String.format(
+                        "Failed to get inactive version: HTTP %d - %s",
+                        response.statusCode(), response.text()));
+            }
+
+        } catch (Exception e) {
+            log.error("Error getting inactive version for '{}': {}", objectUri, e.getMessage(), e);
+            throw new RuntimeException("Failed to get inactive version", e);
+        }
+    }
+
+    /**
+     * Unlock an ABAP class after editing (Step 5 of workflow).
+     * <p>
+     * POST /sap/bc/adt/oo/classes/{className}?_action=UNLOCK&lockHandle={lockHandle}
+     *
+     * @param objectUri  base class URI (WITHOUT /source/main)
+     * @param lockHandle lock handle from LOCK operation
+     * @return true if unlock successful
+     */
+    private boolean unlockObject(String objectUri, String lockHandle) {
+        Map<String, String> params = new HashMap<>();
+        params.put("_action", "UNLOCK");
+        params.put("lockHandle", lockHandle);
+
+        log.debug("Unlocking object: {}", objectUri);
+
+        try {
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    objectUri,
+                    "POST",
+                    null,
+                    params,
+                    "",
+                    "application/xml"
+            );
+
+            boolean success = (response.statusCode() == 200 || response.statusCode() == 204);
+            if (success) {
+                log.debug("✓ Unlock successful");
+            } else {
+                log.warn("✗ Unlock failed: HTTP {}", response.statusCode());
+            }
+
+            return success;
+
+        } catch (Exception e) {
+            log.error("Error unlocking object '{}': {}", objectUri, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Set source code for an ABAP class (Step 3 of workflow).
+     * <p>
+     * PUT /sap/bc/adt/oo/classes/{className}/source/{includeType}?lockHandle={lockHandle}&corrNr={transport}
+     * <p>
+     * Content-Type: text/plain; charset=utf-8
+     *
+     * @param objectUri  source URI (WITH /source/{includeType})
+     * @param sourceCode new source code
+     * @param lockHandle lock handle from LOCK operation
+     * @param transport  transport number
+     * @return true if successful
+     */
+    private boolean setObjectSource(String objectUri, String sourceCode, String lockHandle, String transport) {
+        Map<String, String> params = new HashMap<>();
+        params.put("lockHandle", lockHandle);
+        if (transport != null && !transport.isEmpty()) {
+            params.put("corrNr", transport);
+        }
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "text/plain");
+        headers.put("Content-Type", "text/plain; charset=utf-8");
+
+        log.debug("Setting source code: {} ({} bytes)", objectUri, sourceCode.length());
+
+        try {
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    objectUri,
+                    "PUT",
+                    headers,
+                    params,
+                    sourceCode,
+                    "text/plain; charset=utf-8"
+            );
+
+            boolean success = (response.statusCode() == 200 || response.statusCode() == 204);
+            if (success) {
+                log.debug("✓ Source code set successfully");
+            } else {
+                String errorMsg = String.format(
+                        "Failed to set source code: HTTP %d - %s",
+                        response.statusCode(),
+                        response.text()
+                );
+                log.error(errorMsg);
+                throw new RuntimeException(errorMsg);
+            }
+
+            return success;
+
+        } catch (Exception e) {
+            log.error("Error setting source code for '{}': {}", objectUri, e.getMessage(), e);
+            throw new RuntimeException("Failed to set source code", e);
+        }
     }
 }

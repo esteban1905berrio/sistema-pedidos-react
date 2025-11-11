@@ -131,4 +131,80 @@ public class ClassTools {
     ) {
         return classService.getClassIncludes(className);
     }
+
+    /**
+     * MCP Tool: Modify an ABAP class source code.
+     * <p>
+     * This is a workflow-based tool that orchestrates the complete ADT modification flow:
+     * LOCK → MODIFY → UNLOCK
+     * <p>
+     * Similar to modify_program_source but specifically for ABAP classes.
+     * Supports modification of different include types (main/definitions, implementations, testclasses, macros).
+     * <p>
+     * Workflow Steps:
+     * 1. LOCK: Acquires exclusive lock on the class
+     *    - Returns transport number (system-assigned or existing)
+     *    - Fails if object is already locked by another user
+     * 2. MODIFY: Updates source code with new content
+     *    - Uses transport from LOCK response
+     *    - Validates lock handle before modification
+     * 3. UNLOCK: Releases lock (ALWAYS executed, even on failure)
+     *    - Critical step to prevent orphaned locks
+     * <p>
+     * Based on Python implementation: modification_service.py::modify_class()
+     *
+     * @param className   name of the class (e.g., "ZCL_TEST")
+     * @param newSource   new source code to set (complete replacement)
+     * @param includeType include type to modify (main, implementations, testclasses, macros)
+     * @param transport   optional transport number (if null, uses system-assigned transport from LOCK)
+     * @return ProgramModifyResult with detailed workflow execution status
+     */
+    @McpTool(
+            description = "Modify ABAP class source code with complete workflow (LOCK → MODIFY → UNLOCK). " +
+                    "Workflow-based tool that handles locking, modification, and unlocking automatically. " +
+                    "Supports modification of different include types (main, implementations, testclasses, macros). " +
+                    "Returns transport number from lock operation if not provided. " +
+                    "Fails with error if object is already locked by another user. " +
+                    "Always unlocks object even on failure (prevents orphaned locks). " +
+                    "Example: modify_class('ZCL_TEST', new_code, 'main', null)"
+    )
+    public com.crystal.mcp.sapserver.model.ProgramModifyResult modify_class(
+            @McpToolParam(
+                    description = "Name of the class to modify. " +
+                            "Examples: 'ZCL_TEST', 'ZCL_INVOICE_PROCESSOR', 'YCL_UTILS'",
+                    required = true
+            )
+            String className,
+            @McpToolParam(
+                    description = "New source code to set (complete replacement). " +
+                            "Must be valid ABAP syntax. " +
+                            "For main: Include CLASS/ENDCLASS statements. " +
+                            "For implementations: Include METHOD/ENDMETHOD statements.",
+                    required = true
+            )
+            String newSource,
+            @McpToolParam(
+                    description = "Include type to modify. " +
+                            "'main' for class definition (PUBLIC, PROTECTED, PRIVATE sections), " +
+                            "'implementations' for method implementations, " +
+                            "'testclasses' for unit test classes, " +
+                            "'macros' for ABAP macro definitions. " +
+                            "Default: 'main'",
+                    required = false
+            )
+            String includeType,
+            @McpToolParam(
+                    description = "Optional transport number. " +
+                            "If not provided, uses system-assigned transport from LOCK operation. " +
+                            "Example: 'CADK911122', 'DEVK900123'. " +
+                            "Leave null to use automatic transport assignment.",
+                    required = false
+            )
+            String transport
+    ) {
+        // Apply default for includeType
+        String actualIncludeType = (includeType != null && !includeType.isEmpty()) ? includeType : "main";
+
+        return classService.modifyClassSource(className, newSource, actualIncludeType, transport);
+    }
 }

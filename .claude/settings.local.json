@@ -85,7 +85,22 @@
       "mcp__giralmcp__list_user_transports",
       "Bash(mvn test:*)",
       "mcp__giralmcp__get_object_in_open_ot",
-      "mcp__giralmcp__get_transport_objects"
+      "mcp__giralmcp__get_transport_objects",
+      "mcp__gdcmcp__search_objects",
+      "mcp__gdcmcp__get_program_source",
+      "mcp__gdcmcp__get_include_source",
+      "mcp__gdcmcp__get_object_structure",
+      "mcp__gdcmcp__get_object_source",
+      "mcp__giralmcp__get_program_source",
+      "mcp__giralmcp__get_include_source",
+      "mcp__gdcmcp__get_class_source",
+      "mcp__gdcmcp__modify_class",
+      "mcp__gdcmcp__list_user_transports",
+      "mcp__giralmcp__create_function_group",
+      "mcp__gdcmcp__create_function_module",
+      "mcp__gdcmcp__get_object_in_open_ot",
+      "mcp__gdcmcp__modify_function_module",
+      "mcp__gdcmcp__modify_program_source"
     ],
     "deny": [],
     "ask": []
