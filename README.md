@@ -525,6 +525,84 @@ When the server starts successfully, you should see:
 
 ---
 
+## Architecture: Stateful Connections for Reliable Modifications
+
+### Why Stateful Connections Matter
+
+When modifying ABAP objects (classes, programs, function modules), the server uses a **stateful connection approach** to ensure **data integrity and prevent concurrent modifications**.
+
+#### The Problem with Stateless Connections
+
+Standard RFC connections are **stateless** by default - each operation uses a different connection from the pool:
+
+```
+❌ Stateless Problem:
+LOCK (connection A)  → Acquires lock in SAP session A
+MODIFY (connection B) → SAP session B doesn't have the lock
+Result: Modification fails or bypasses lock protection
+```
+
+**Consequence**: Lost locks lead to data corruption and concurrent modification conflicts.
+
+#### The Solution: Stateful Sessions
+
+The SAP MCP Server uses **JCoContext** to maintain the same SAP session throughout the entire modification workflow:
+
+```
+✅ Stateful Solution:
+BEGIN SESSION  → Opens stateful SAP session
+  ├─ LOCK      → Acquires lock in session
+  ├─ MODIFY    → Modification in SAME session (lock persists)
+  └─ UNLOCK    → Releases lock in SAME session
+END SESSION    → Closes stateful session
+```
+
+**Benefit**: The lock persists throughout the workflow, ensuring safe modifications.
+
+### When Stateful Connections Are Used
+
+The server automatically uses the appropriate connection type based on the operation:
+
+| Operation Type | Connection Mode | Examples |
+|----------------|-----------------|----------|
+| **Modifications** | **Stateful** ✅ | `modify_class`, `modify_program_source`, `modify_function_module` |
+| **Read Operations** | Stateless | `get_class_source`, `search_objects`, `get_program_source` |
+| **Create Operations** | Stateless | `create_class`, `create_function_group` |
+| **Queries** | Stateless | `list_user_transports`, `get_transport_objects` |
+
+**Key Insight**: You don't need to think about this - the server handles it automatically. Just know that **modifications are protected by persistent locks** that guarantee data integrity.
+
+### How It Works (High-Level)
+
+1. **You request**: "Modify function module ZFI_DMEE_ITAU_R6"
+2. **Server opens stateful session**: Reserves one SAP connection
+3. **Server locks object**: Acquires ENQUEUE lock in that session
+4. **Server modifies code**: Changes code while lock is active
+5. **Server unlocks object**: Releases ENQUEUE lock
+6. **Server closes session**: Returns connection to pool
+
+**Total time**: Typically 2-5 seconds (lock held only during modification).
+
+### Benefits
+
+✅ **Data Integrity**: Prevents concurrent modifications and data corruption
+✅ **Automatic**: No user configuration needed - works transparently
+✅ **Thread-Safe**: Multiple users can modify different objects simultaneously
+✅ **Resource Efficient**: Stateful sessions used only when necessary
+✅ **Compliant**: Follows SAP best practices for lock management
+
+### Technical Implementation
+
+For developers interested in the technical details:
+- **RfcAdapter**: Provides `beginStatefulContext()` and `endStatefulContext()` using SAP JCoContext API
+- **StatefulModificationService**: Centralized orchestration of LOCK → MODIFY → UNLOCK workflows
+- **ThreadLocal Context**: Thread-safe isolation (each user request is independent)
+- **Graceful Error Handling**: Locks always released, even if modification fails
+
+See [CLAUDE.md](CLAUDE.md) for complete implementation details.
+
+---
+
 ## Troubleshooting
 
 ### Common Issues

@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Slf4j
 @SpringBootTest
-//@Disabled("Manual test - requires SAP connection and user permissions")
+@Disabled("Manual test - requires SAP connection and user permissions")
 class ManualClassModifyTest {
 
     @Autowired
