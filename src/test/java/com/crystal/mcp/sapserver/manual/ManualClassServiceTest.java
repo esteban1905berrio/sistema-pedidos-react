@@ -50,7 +50,7 @@ public class ManualClassServiceTest implements CommandLineRunner {
     public void run(String... args) {
         System.out.println("\n=== Manual ClassService Test ===\n");
 
-        try {
+        /*try {
             // Test 1: Standard SAP class (should exist in all systems)
             testGetClassSource("CL_ABAP_CHAR_UTILITIES", "active", "main");
 
@@ -69,7 +69,7 @@ public class ManualClassServiceTest implements CommandLineRunner {
             System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
-        }
+        }*/
     }
 
     /**

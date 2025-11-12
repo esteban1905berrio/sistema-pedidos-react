@@ -24,7 +24,14 @@ import java.util.Map;
  * This design allows the service layer to use familiar HTTP patterns while communicating
  * with SAP via RFC, maintaining compatibility with the Python implementation's architecture.
  *
- * Thread Safety: This class is thread-safe because JCoDestination is thread-safe.
+ * Stateful Connection Support (Phase 1 Implementation):
+ * - Supports stateful workflows via JCoContext (SAP JCo feature)
+ * - Required for LOCK → MODIFY → UNLOCK workflows
+ * - Uses ThreadLocal to track active contexts per thread
+ * - Prevents nested contexts and memory leaks
+ *
+ * Thread Safety: This class is thread-safe because JCoDestination is thread-safe
+ * and stateful contexts are isolated per thread via ThreadLocal.
  */
 @Slf4j
 @Component
@@ -32,6 +39,133 @@ import java.util.Map;
 public class RfcAdapter {
 
     private final JCoDestination destination;
+
+    /**
+     * ThreadLocal para rastrear contextos stateful activos.
+     *
+     * Cada thread mantiene su propio flag booleano indicando si tiene
+     * un contexto JCoContext activo. Esto previene:
+     * - Contextos anidados (no permitidos en JCo)
+     * - Memory leaks por contextos no cerrados
+     * - Confusión de estado entre threads
+     */
+    private static final ThreadLocal<Boolean> statefulContextActive =
+            ThreadLocal.withInitial(() -> false);
+
+    /**
+     * Inicia un contexto stateful para workflows que requieren sesión única SAP.
+     *
+     * Un contexto stateful garantiza que todas las llamadas RFC ejecutadas después
+     * de beginStatefulContext() usan la MISMA sesión SAP hasta que se llame
+     * endStatefulContext().
+     *
+     * Casos de Uso:
+     * - LOCK → MODIFY → UNLOCK workflows (requiere mantener bloqueo)
+     * - Transacciones multi-paso
+     * - Cualquier workflow que requiera estado persistente entre llamadas
+     *
+     * Patrón de Uso (OBLIGATORIO):
+     * <pre>
+     * {@code
+     * rfcAdapter.beginStatefulContext();
+     * try {
+     *     // Todas las llamadas aquí usan la MISMA sesión SAP
+     *     rfcAdapter.request(...);  // Llamada 1
+     *     rfcAdapter.request(...);  // Llamada 2 (misma sesión que 1)
+     *     rfcAdapter.request(...);  // Llamada 3 (misma sesión que 1 y 2)
+     * } finally {
+     *     // SIEMPRE terminar el contexto
+     *     rfcAdapter.endStatefulContext();
+     * }
+     * }
+     * </pre>
+     *
+     * IMPORTANTE:
+     * - SIEMPRE usar try-finally para garantizar endStatefulContext()
+     * - NO llamar para operaciones de solo lectura (get*, search*, list*)
+     * - NO anidar contextos (lanza IllegalStateException)
+     * - Contexto es Thread-Local (cada thread tiene su propio contexto)
+     *
+     * @throws IllegalStateException si ya existe un contexto activo en este thread
+     * @throws JCoException si falla la inicialización del contexto JCo
+     *
+     * @see #endStatefulContext()
+     * @see JCoContext#begin(JCoDestination)
+     */
+    public void beginStatefulContext() throws JCoException {
+        if (statefulContextActive.get()) {
+            throw new IllegalStateException(
+                    "Stateful context already active in this thread. " +
+                    "Nested stateful contexts are not allowed. " +
+                    "Ensure endStatefulContext() was called before starting a new context."
+            );
+        }
+
+        log.debug("Beginning stateful context (thread: {})",
+                Thread.currentThread().getName());
+
+        JCoContext.begin(destination);
+        statefulContextActive.set(true);
+
+        log.debug("Stateful context started successfully");
+    }
+
+    /**
+     * Finaliza el contexto stateful y libera la sesión SAP.
+     *
+     * CRÍTICO: Este método SIEMPRE debe llamarse en un bloque finally para
+     * evitar memory leaks y sesiones SAP huérfanas.
+     *
+     * El método es graceful - si no hay contexto activo, simplemente registra
+     * un warning y retorna sin error. Esto permite usar safely en finally
+     * incluso si beginStatefulContext() nunca se llamó.
+     *
+     * Comportamiento:
+     * - Si hay contexto activo: lo termina y libera sesión SAP
+     * - Si NO hay contexto activo: warning y retorna (no falla)
+     * - SIEMPRE limpia el ThreadLocal flag (previene memory leaks)
+     *
+     * @throws JCoException si falla la finalización del contexto JCo
+     *
+     * @see #beginStatefulContext()
+     * @see JCoContext#end(JCoDestination)
+     */
+    public void endStatefulContext() throws JCoException {
+        if (!statefulContextActive.get()) {
+            log.warn("Attempted to end stateful context when none is active " +
+                    "(thread: {}). This is safe but indicates a logic issue.",
+                    Thread.currentThread().getName());
+            return; // Graceful degradation
+        }
+
+        try {
+            log.debug("Ending stateful context (thread: {})",
+                    Thread.currentThread().getName());
+
+            JCoContext.end(destination);
+
+            log.debug("Stateful context ended successfully");
+
+        } finally {
+            // SIEMPRE limpiar flag, incluso si end() falla
+            // Esto previene memory leaks en ThreadLocal
+            statefulContextActive.set(false);
+        }
+    }
+
+    /**
+     * Verifica si hay un contexto stateful activo en el thread actual.
+     *
+     * Útil para:
+     * - Debugging de workflows complejos
+     * - Validación en tests unitarios
+     * - Logging condicional
+     *
+     * @return true si hay un contexto JCoContext activo, false si no
+     */
+    public boolean isStatefulContextActive() {
+        return statefulContextActive.get();
+    }
 
     /**
      * Execute HTTP-style request via RFC SADT_REST_RFC_ENDPOINT.
@@ -167,9 +301,9 @@ public class RfcAdapter {
                 : "*/*";
 
         requestHeaders.put("Accept", acceptType);
-        requestHeaders.put("Cache-Control", "no-cache");
-        requestHeaders.put("Content-Type", contentType);
-        requestHeaders.put("X-sap-adt-sessiontype", "stateless");
+        //requestHeaders.put("Cache-Control", "no-cache");
+        //requestHeaders.put("Content-Type", contentType);
+        //requestHeaders.put("X-sap-adt-sessiontype", "stateless");
 
         // Merge custom headers (overrides defaults)
         if (headers != null) {

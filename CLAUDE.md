@@ -417,17 +417,142 @@ SAP ABAP System
 - Converts HTTP-style requests to RFC calls
 - Calls `SADT_REST_RFC_ENDPOINT` function module
 - Handles request/response transformation
+- **Stateful Context Management**: Provides `beginStatefulContext()` and `endStatefulContext()` for workflows that require session persistence (e.g., LOCK → MODIFY → UNLOCK)
+
+**StatefulModificationService** (`src/main/java/.../service/StatefulModificationService.java`):
+- Centralized service for all modification workflows requiring stateful connections
+- Manages LOCK/UNLOCK operations with automatic context handling
+- Parses ADT XML responses (LOCK_HANDLE, transport info)
+- Provides `executeStatefulWorkflow()` wrapper for automatic begin/end context
+- **Why needed**: SAP locks (ENQUEUE) must persist in the same session throughout the workflow. Stateless connections lose locks between calls.
 
 **Services** (`src/main/java/.../service/`):
 - Business logic for ABAP operations
 - Use `RfcAdapter` to call ADT REST APIs
 - Parse XML/JSON responses
 - Provide clean interfaces for MCP tools
+- **Modification operations** delegate to `StatefulModificationService` for centralized lock management
 
 **Tools** (`src/main/java/.../tool/`):
 - MCP tool definitions using Spring AI MCP annotations
 - Registered automatically via component scan
 - Return JSON-formatted responses
+
+---
+
+## Stateful Connections for Lock Management
+
+### Problem Statement
+
+SAP ABAP modifications require a **LOCK → MODIFY → UNLOCK** workflow to prevent concurrent modifications. However, **stateless connections** (default in JCo connection pooling) cause locks to be lost between calls:
+
+```
+Stateless Problem:
+LOCK (connection A)  → Acquires lock in SAP session A
+MODIFY (connection B) → SAP session B doesn't have the lock ❌
+Result: Modification fails or bypasses lock
+```
+
+### Solution: JCoContext for Stateful Sessions
+
+SAP JCo provides `JCoContext` to maintain the **same session** across multiple RFC calls:
+
+```
+Stateful Solution:
+JCoContext.begin()
+  ├─→ LOCK (session A)   → Acquires lock
+  ├─→ MODIFY (session A)  → Same session, lock persists ✅
+  └─→ UNLOCK (session A)  → Release lock
+JCoContext.end()
+```
+
+### Implementation Architecture
+
+**Layer 1: RfcAdapter** - Low-level stateful context management
+```java
+// Thread-safe context tracking
+private static final ThreadLocal<Boolean> statefulContextActive;
+
+public void beginStatefulContext() throws JCoException {
+    JCoContext.begin(destination);  // Start stateful session
+    statefulContextActive.set(true);
+}
+
+public void endStatefulContext() throws JCoException {
+    try {
+        JCoContext.end(destination);  // End stateful session
+    } finally {
+        statefulContextActive.set(false);  // Always cleanup
+    }
+}
+```
+
+**Layer 2: StatefulModificationService** - High-level workflow orchestration
+```java
+public <T> T executeStatefulWorkflow(String objectName, StatefulWorkflow<T> workflow) {
+    rfcAdapter.beginStatefulContext();  // Start stateful session
+    try {
+        // All operations here use SAME SAP session
+        LockResult lock = lockObject(uri);
+        // ... modifications ...
+        unlockObject(uri, lock.lockHandle());
+        return result;
+    } finally {
+        rfcAdapter.endStatefulContext();  // Always end session
+    }
+}
+```
+
+**Layer 3: Services** - Business logic
+```java
+public ProgramModifyResult modifyFunctionModuleSource(...) {
+    return statefulModificationService.executeStatefulWorkflow(
+        functionModuleName,
+        () -> {
+            // LOCK → MODIFY → UNLOCK all in same session
+            LockResult lock = statefulModificationService.lockObject(fmUri);
+            try {
+                setObjectSource(..., lock.lockHandle(), ...);
+                return result;
+            } finally {
+                statefulModificationService.unlockObject(fmUri, lock.lockHandle());
+            }
+        }
+    );
+}
+```
+
+### When to Use Stateful vs Stateless
+
+| Operation Type | Connection Mode | Reason |
+|----------------|-----------------|--------|
+| **Read operations** (get_class_source, search_objects) | Stateless | No locks needed, better concurrency |
+| **Create operations** (create_class, create_function_module) | Stateless | No locks needed (new objects) |
+| **Modify operations** (modify_class, modifyFunctionModuleSource) | **Stateful** | Requires LOCK persistence |
+| **Transport operations** (list_user_transports, get_transport_objects) | Stateless | Read-only queries |
+
+### Benefits
+
+✅ **Lock Persistence**: Locks maintained throughout workflow
+✅ **Thread Safety**: ThreadLocal isolates contexts per thread
+✅ **Centralized Logic**: All lock/unlock code in one service
+✅ **Automatic Cleanup**: Finally blocks prevent memory leaks
+✅ **No Code Duplication**: Services delegate to StatefulModificationService
+
+### Critical Implementation Rules
+
+1. **ALWAYS use try-finally** for `endStatefulContext()` - prevents memory leaks
+2. **NO nested contexts** - JCo doesn't support, validated with flag
+3. **MINIMIZE time in stateful context** - reserves pool connection
+4. **ThreadLocal cleanup** - ALWAYS set false in finally block
+5. **Only for modifications** - Read operations stay stateless
+
+### References
+
+- **Investigation**: `docs/research/jco_stateful_connections_analysis.md`
+- **Architecture Design**: `docs/requirements/mcp/workflow_based/pr_centralized_stateful_architecture.md`
+- **Implementation**: `docs/implementation/stateful_modification_implementation_complete.md`
+- **JCo Examples**: `resources/jco/examples/.../StatefulCalls.java`, `StatefulJob.java`
 
 ---
 

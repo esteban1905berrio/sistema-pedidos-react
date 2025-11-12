@@ -18,7 +18,6 @@ import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Base64;
 
 /**
  * Service for ABAP program operations.
@@ -51,6 +50,7 @@ import java.util.Base64;
 public class ProgramService {
 
     private final RfcAdapter rfcAdapter;
+    private final StatefulModificationService statefulModificationService;
 
     /**
      * Get source code for an ABAP program.
@@ -442,13 +442,37 @@ public class ProgramService {
      * @param transport          optional transport number (if null, uses system-assigned from LOCK)
      * @return ProgramModifyResult with detailed workflow execution status
      */
+    /**
+     * Modify function module source code using stateful workflow.
+     *
+     * This method now uses StatefulModificationService to execute the complete
+     * LOCK → MODIFY → UNLOCK workflow with stateful connection support.
+     *
+     * Workflow:
+     * 1. Begin stateful context (JCoContext)
+     * 2. Lock function module (stateful session)
+     * 3. Syntax check (optional, stateful session)
+     * 4. Modify source code (stateful session)
+     * 5. Unlock function module (stateful session)
+     * 6. End stateful context (JCoContext)
+     *
+     * The stateful context ensures that all operations use the same SAP session,
+     * which is critical for maintaining the lock throughout the workflow.
+     *
+     * @param functionModuleName name of the function module (e.g., "Z_TEST_FM")
+     * @param functionGroupName  parent function group name (e.g., "ZTEST_FG")
+     * @param newSource          new source code
+     * @param transport          transport number (optional, uses lock response if null)
+     * @return ProgramModifyResult with status and metadata
+     * @throws RuntimeException if workflow fails
+     */
     public ProgramModifyResult modifyFunctionModuleSource(
             String functionModuleName,
             String functionGroupName,
             String newSource,
             String transport
     ) {
-        log.info("🔧 Starting modification workflow for function module: {} (group: {})",
+        log.info("🔧 Starting stateful modification workflow for function module: {} (group: {})",
                 functionModuleName, functionGroupName);
 
         // Build function module URIs
@@ -456,126 +480,121 @@ public class ProgramService {
                 functionGroupName.toLowerCase(), functionModuleName.toLowerCase());
         String fmSourceUri = fmUri + "/source/main";
 
-        ProgramModifyResult result = new ProgramModifyResult();
-        result.setObjectName(functionModuleName);
-        result.setObjectType("function_module");
-        result.setUri(fmSourceUri);
+        // Execute workflow in stateful context
+        ProgramModifyResult workflowResult = statefulModificationService.executeStatefulWorkflow(
+                functionModuleName,
+                () -> {
+                    // Initialize result object
+                    ProgramModifyResult result = new ProgramModifyResult();
+                    result.setObjectName(functionModuleName);
+                    result.setObjectType("function_module");
+                    result.setUri(fmSourceUri);
 
-        String lockHandle = null;
+                    // ========================================
+                    // Step 1: Lock function module (in stateful session)
+                    // ========================================
+                    log.info("Step 1/4: Locking function module...");
 
-        try {
-            // ========================================
-            // Step 1: Lock function module
-            // ========================================
-            log.info("Step 1/4: Locking function module...");
+                    StatefulModificationService.LockResult lock =
+                            statefulModificationService.lockObject(fmUri);
 
-            LockResult lockResult = lockObject(fmSourceUri);
-            lockHandle = lockResult.lockHandle;
+                    result.setLocked(true);
+                    result.setLockHandle(lock.lockHandle());
+                    result.setTransportNumber(lock.transportNumber());
+                    result.setTransportUser(lock.transportUser());
+                    result.setTransportDescription(lock.transportDescription());
 
-            result.setLocked(true);
-            result.setLockHandle(lockHandle);
-            result.setTransportNumber(lockResult.transportNumber);
-            result.setTransportUser(lockResult.transportUser);
-            result.setTransportDescription(lockResult.transportDescription);
+                    log.info("✓ Function module locked successfully (transport: {})",
+                            lock.transportNumber());
+                    result.addMessage("info",
+                            String.format("Function module locked successfully. Transport: %s",
+                                    lock.transportNumber()),
+                            "lock");
 
-            log.info("✓ Function module locked successfully (transport: {})", lockResult.transportNumber);
-            result.addMessage("info",
-                    String.format("Function module locked successfully. Transport: %s", lockResult.transportNumber),
-                    "lock");
+                    try {
+                        // ========================================
+                        // Step 2: Syntax Check (in stateful session)
+                        // ========================================
+                        log.info("Step 2/4: Running syntax check...");
 
-            // ========================================
-            // Step 2: Syntax Check
-            // ========================================
-            log.info("Step 2/4: Running syntax check...");
+                        List<SyntaxCheckMessage> syntaxMessages = syntaxCheck(
+                                fmUri,          // Object URI (without /source/main)
+                                fmSourceUri,    // Source URI (with /source/main)
+                                newSource,
+                                "inactive"      // Check against inactive version
+                        );
 
-            List<SyntaxCheckMessage> syntaxMessages = syntaxCheck(
-                    fmUri,          // Object URI (without /source/main)
-                    fmSourceUri,    // Source URI (with /source/main)
-                    newSource,
-                    "inactive"      // Check against inactive version
-            );
+                        // Check for errors
+                        List<SyntaxCheckMessage> errors = syntaxMessages.stream()
+                                .filter(SyntaxCheckMessage::isError)
+                                .collect(Collectors.toList());
 
-            // Check for errors
-            List<SyntaxCheckMessage> errors = syntaxMessages.stream()
-                    .filter(SyntaxCheckMessage::isError)
-                    .collect(Collectors.toList());
+                        if (!errors.isEmpty()) {
+                            String errorMsg = String.format(
+                                    "Syntax check failed with %d error(s):", errors.size()
+                            );
+                            log.error(errorMsg);
 
-            if (!errors.isEmpty()) {
-                String errorMsg = String.format(
-                        "Syntax check failed with %d error(s):", errors.size()
-                );
-                log.error(errorMsg);
+                            for (SyntaxCheckMessage error : errors) {
+                                log.error("  {}", error.toFormattedString());
+                            }
 
-                for (SyntaxCheckMessage error : errors) {
-                    log.error("  {}", error.toFormattedString());
+                            result.addMessage("error", errorMsg, "syntax_check");
+                            throw new RuntimeException(errorMsg);
+                        }
+
+                        log.info("✓ Syntax check passed ({} message(s))", syntaxMessages.size());
+                        result.addMessage("info",
+                                String.format("Syntax check passed (%d message(s))", syntaxMessages.size()),
+                                "syntax_check");
+
+                        // ========================================
+                        // Step 3: Modify source code (in stateful session)
+                        // ========================================
+                        log.info("Step 3/4: Modifying source code ({} bytes)", newSource.length());
+
+                        // Use transport from lock response if not explicitly provided
+                        String effectiveTransport = (transport != null && !transport.isEmpty())
+                                ? transport
+                                : lock.transportNumber();
+
+                        boolean modified = setObjectSource(
+                                fmSourceUri,
+                                newSource,
+                                lock.lockHandle(),
+                                effectiveTransport
+                        );
+                        result.setModified(modified);
+
+                        log.info("✓ Source code modified successfully");
+                        result.addMessage("info",
+                                String.format("Source code updated (%d bytes)", newSource.length()),
+                                "modify");
+
+                        return result;
+
+                    } finally {
+                        // ========================================
+                        // Step 4: Unlock (ALWAYS execute, even on error, in stateful session)
+                        // ========================================
+                        log.info("Step 4/4: Unlocking function module...");
+                        statefulModificationService.unlockObject(fmUri, lock.lockHandle());
+                        result.setUnlocked(true);
+                        log.info("✓ Function module unlocked successfully");
+                        result.addMessage("info", "Function module unlocked successfully", "unlock");
+                    }
                 }
+        );
 
-                result.addMessage("error", errorMsg, "syntax_check");
-                throw new RuntimeException(errorMsg);
-            }
+        // Set overall success based on workflow steps
+        workflowResult.setSuccess(workflowResult.isLocked()
+                && workflowResult.isModified()
+                && workflowResult.isUnlocked());
 
-            log.info("✓ Syntax check passed ({} message(s))", syntaxMessages.size());
-            result.addMessage("info",
-                    String.format("Syntax check passed (%d message(s))", syntaxMessages.size()),
-                    "syntax_check");
+        log.info("🎯 Function module modification workflow completed: {} (success: {})",
+                functionModuleName, workflowResult.isSuccess());
 
-            // ========================================
-            // Step 3: Modify source code
-            // ========================================
-            log.info("Step 3/4: Modifying source code ({} bytes)", newSource.length());
-
-            // Use transport from lock response if not explicitly provided
-            String effectiveTransport = (transport != null && !transport.isEmpty())
-                    ? transport
-                    : lockResult.transportNumber;
-
-            boolean modified = setObjectSource(fmSourceUri, newSource, lockHandle, effectiveTransport);
-            result.setModified(modified);
-
-            log.info("✓ Source code modified successfully");
-            result.addMessage("info",
-                    String.format("Source code updated (%d bytes)", newSource.length()),
-                    "modify");
-
-        } catch (Exception e) {
-            log.error("✗ Modification workflow failed: {}", e.getMessage());
-            result.setSuccess(false);
-            result.addMessage("error", "Workflow failed: " + e.getMessage(), "workflow");
-            throw new RuntimeException("Failed to modify function module: " + e.getMessage(), e);
-
-        } finally {
-            // ========================================
-            // Step 4: Unlock (ALWAYS execute, even on error)
-            // ========================================
-            if (lockHandle != null) {
-                try {
-                    log.info("Step 4/4: Unlocking function module...");
-                    unlockObject(fmSourceUri, lockHandle);
-                    result.setUnlocked(true);
-                    log.info("✓ Function module unlocked successfully");
-                    result.addMessage("info", "Function module unlocked successfully", "unlock");
-
-                } catch (Exception unlockError) {
-                    log.error("✗ Failed to unlock function module: {}", unlockError.getMessage());
-                    result.addMessage("warning",
-                            "Failed to unlock function module: " + unlockError.getMessage(),
-                            "unlock");
-                }
-            }
-        }
-
-        // Final result
-        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked());
-
-        if (result.isSuccess()) {
-            log.info("✓✓✓ Modification workflow completed successfully for function module '{}'",
-                    functionModuleName);
-        } else {
-            log.error("✗✗✗ Modification workflow failed for function module '{}'",
-                    functionModuleName);
-        }
-
-        return result;
+        return workflowResult;
     }
 
     // ============================================================================
@@ -615,11 +634,29 @@ public class ProgramService {
 
         log.debug("Locking object: {}", objectUri);
 
+        // Build ADT-specific headers for LOCK operation
+        // Based on Eclipse ADT client behavior (from PR documentation)
+        Map<String, String> headers = new HashMap<>();
+
+        // Accept header with ADT lock result versions
+        // Supports both lock result formats (v1 and v2)
+        headers.put("Accept",
+            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result;q=0.8, " +
+            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result2;q=0.9");
+
+        // User-Agent matching Eclipse ADT
+        headers.put("User-Agent",
+            "Eclipse/4.36.0.v20250528-1830 (Java " + System.getProperty("java.version") + ") " +
+            "ADT/3.50.0 (JavaMCP)");
+
+        // Profiling header (optional but recommended)
+        headers.put("X-sap-adt-profiling", "server-time");
+
         try {
             RfcAdapter.RfcResponse response = rfcAdapter.request(
                     objectUri,
                     "POST",
-                    null,
+                    headers,  // Pass custom headers
                     params,
                     "",
                     "application/vnd.sap.as+xml;charset=UTF-8"
@@ -731,11 +768,24 @@ public class ProgramService {
 
         log.debug("Setting source for object: {} ({} bytes)", objectUri, sourceCode.length());
 
+        Map<String, String> headers = new HashMap<>();
+
+        // Accept header with ADT lock result versions
+        // Supports both lock result formats (v1 and v2)
+        headers.put("Accept", "text/plain");
+        headers.put("Content-Type", "text/plain; charset=utf-8");
+        // User-Agent matching Eclipse ADT
+        headers.put("User-Agent",
+            "Eclipse/4.36.0.v20250528-1830 (Java " + System.getProperty("java.version") + ") " +
+            "ADT/3.50.0 (JavaMCP)");
+        // Profiling header (optional but recommended)
+        headers.put("X-sap-adt-profiling", "server-time");
+
         try {
             RfcAdapter.RfcResponse response = rfcAdapter.request(
                     objectUri,
                     "PUT",
-                    null,
+                    headers,
                     params,
                     sourceCode,
                     "text/plain; charset=utf-8"
@@ -874,6 +924,10 @@ public class ProgramService {
         // Custom headers for syntax check
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "application/vnd.sap.adt.checkmessages+xml");
+        headers.put("Content-Type", "application/vnd.sap.adt.checkobjects+xml");
+        headers.put("User-Agent", "Eclipse/4.36.0.v20250528-1830 (Java " + System.getProperty("java.version") + ") " +
+            "ADT/3.50.0 (JavaMCP)");
+        headers.put("X-sap-adt-profiling", "server-time");
 
         try {
             RfcAdapter.RfcResponse response = rfcAdapter.request(

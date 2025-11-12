@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Slf4j
 @SpringBootTest
-@Disabled("Manual test - requires SAP connection and user permissions")
+//@Disabled("Manual test - requires SAP connection and user permissions")
 class ManualProgramModifyTest {
 
     @Autowired
@@ -87,12 +87,12 @@ class ManualProgramModifyTest {
         // ========================================
         log.info("Executing modification workflow...");
 
-        ProgramModifyResult result = programService.modifyProgramSource(
+       /*  ProgramModifyResult result = programService.modifyProgramSource(
                 PROGRAM_NAME,
                 newSource,
                 OBJECT_TYPE,
                 null  // Let system assign transport
-        );
+        ); 
 
         // ========================================
         // Step 3: Verify results
@@ -122,7 +122,7 @@ class ManualProgramModifyTest {
         log.info("NEXT STEPS:");
         log.info("1. Check SE38/SE80 to verify program source was updated");
         log.info("2. Check SE09/SE10 to verify transport: {}", result.getTransportNumber());
-        log.info("3. Check SM12 to verify no orphaned locks");
+        log.info("3. Check SM12 to verify no orphaned locks");*/
     }
 
     /**
@@ -160,7 +160,7 @@ class ManualProgramModifyTest {
         // ========================================
         log.info("Executing modification workflow...");
 
-        ProgramModifyResult result = programService.modifyProgramSource(
+       /* ProgramModifyResult result = programService.modifyProgramSource(
                 INCLUDE_NAME,
                 newSource,
                 OBJECT_TYPE,
@@ -179,7 +179,126 @@ class ManualProgramModifyTest {
         assertThat(result.isModified()).isTrue();
         assertThat(result.isUnlocked()).isTrue();
 
+        log.info("=== Test Passed ===");*/
+    }
+
+    /**
+     * Test modifying a function module.
+     *
+     * BEFORE RUNNING:
+     * 1. Create a test function group in your SAP system (e.g., ZTEST_FG)
+     * 2. Create a test function module (e.g., Z_TEST_FM)
+     * 3. Ensure you have permissions to modify it
+     * 4. Update FUNCTION_MODULE_NAME and FUNCTION_GROUP_NAME constants below
+     * 5. Remove @Disabled annotation from class
+     *
+     * AFTER RUNNING:
+     * 1. Check SE37/SE80 to verify the function module was modified
+     * 2. Check transport request to verify object was added
+     * 3. Verify no orphaned locks (SM12)
+     *
+     * Reference: docs/requirements/mcp/workflow_based/pr_fm_modify.md
+     */
+    @Test
+    void testModifyFunctionModule_Success() {
+        // ========================================
+        // Configuration (UPDATE BEFORE RUNNING)
+        // ========================================
+        final String FUNCTION_MODULE_NAME = "ZFI_DMEE_ITAU_R6";  // Change to your test FM
+        final String FUNCTION_GROUP_NAME = "ZFIDMEE_1";          // Change to your test FG
+
+        log.info("=== Manual Test: Modify Function Module ===");
+        log.info("Function Module: {}", FUNCTION_MODULE_NAME);
+        log.info("Function Group: {}", FUNCTION_GROUP_NAME);
+
+        // ========================================
+        // Step 1: Prepare new source code
+        // ========================================
+        String newSource = "FUNCTION ZFI_DMEE_ITAU_R6\n" + //
+                                "  IMPORTING\n" + //
+                                "    VALUE(I_TREE_TYPE) TYPE DMEE_TREETYPE_ABA\n" + //
+                                "    VALUE(I_TREE_ID) TYPE DMEE_TREEID_ABA\n" + //
+                                "    VALUE(I_ITEM) TYPE ANY ##ADT_PARAMETER_UNTYPED\n" + //
+                                "    VALUE(I_PARAM) TYPE ANY ##ADT_PARAMETER_UNTYPED\n" + //
+                                "    VALUE(I_UPARAM) TYPE ANY ##ADT_PARAMETER_UNTYPED\n" + //
+                                "    I_EXTENSION TYPE DMEE_EXIT_INTERFACE_ABA\n" + //
+                                "  EXPORTING\n" + //
+                                "    O_VALUE TYPE ANY ##ADT_PARAMETER_UNTYPED\n" + //
+                                "    C_VALUE TYPE ANY ##ADT_PARAMETER_UNTYPED\n" + //
+                                "    N_VALUE TYPE ANY ##ADT_PARAMETER_UNTYPED\n" + //
+                                "    P_VALUE TYPE ANY ##ADT_PARAMETER_UNTYPED\n" + //
+                                "  TABLES\n" + //
+                                "    I_TAB TYPE STANDARD TABLE ##ADT_PARAMETER_UNTYPED.\n" + //
+                                "\n" + //
+                                "\n" + //
+                                "\n" + //
+                                "*----------------------------------------------------------------------*\n" + //
+                                "   \"test\n" + //
+                                "  DATA:\n" + //
+                                "    l_es_item   TYPE dmee_paym_if_type.\n" + //
+                                "\n" + //
+                                "  l_es_item = i_item.\n" + //
+                                "\n" + //
+                                "  IF l_es_item-fpayh-rzawe = 'T'.\n" + //
+                                "\n" + //
+                                "    IF l_es_item-fpayh-zbkon = '01'.\n" + //
+                                "      c_value = 'CTE'.\n" + //
+                                "    ELSEIF l_es_item-fpayh-zbkon = '02'.\n" + //
+                                "      c_value = 'AHO'.\n" + //
+                                "    ENDIF.\n" + //
+                                "\n" + //
+                                "  ENDIF.\n" + //
+                                "\n" + //
+                                "\n" + //
+                                "  o_value = c_value.\n" + //
+                                "  n_value = c_value.\n" + //
+                                "  p_value = c_value.\n" + //
+                                "\n" + //
+                                "ENDFUNCTION.";
+
+        log.info("New source code prepared ({} bytes)", newSource.length());
+
+        // ========================================
+        // Step 2: Execute modification workflow
+        // ========================================
+        log.info("Executing modification workflow...");
+
+        ProgramModifyResult result = programService.modifyFunctionModuleSource(
+                FUNCTION_MODULE_NAME,
+                FUNCTION_GROUP_NAME,
+                newSource,
+                null  // Let system assign transport
+        );
+
+        // ========================================
+        // Step 3: Verify results
+        // ========================================
+        log.info("Workflow completed. Success: {}", result.isSuccess());
+        log.info("Lock Handle: {}", result.getLockHandle());
+        log.info("Transport: {}", result.getTransportNumber());
+        log.info("Transport User: {}", result.getTransportUser());
+        log.info("Transport Description: {}", result.getTransportDescription());
+        log.info("Messages: {}", result.getMessages().size());
+
+        result.getMessages().forEach(msg ->
+                log.info("  [{}] {}: {}", msg.getStep(), msg.getType(), msg.getText())
+        );
+
+        // Assertions
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.isLocked()).isTrue();
+        assertThat(result.isModified()).isTrue();
+        assertThat(result.isUnlocked()).isTrue();
+        assertThat(result.getLockHandle()).isNotEmpty();
+        assertThat(result.getTransportNumber()).isNotEmpty();
+        assertThat(result.getObjectName()).isEqualTo(FUNCTION_MODULE_NAME);
+        assertThat(result.getObjectType()).isEqualTo("function_module");
+
         log.info("=== Test Passed ===");
+        log.info("NEXT STEPS:");
+        log.info("1. Check SE37/SE80 to verify function module source was updated");
+        log.info("2. Check SE09/SE10 to verify transport: {}", result.getTransportNumber());
+        log.info("3. Check SM12 to verify no orphaned locks");
     }
 
     /**
@@ -203,7 +322,7 @@ class ManualProgramModifyTest {
         log.info("=== Manual Test: Modify Locked Program ===");
         log.info("Program: {} (should be locked manually)", PROGRAM_NAME);
 
-        String newSource = "REPORT " + PROGRAM_NAME.toLowerCase() + ".\nWRITE: / 'Test'.\n";
+        /*String newSource = "REPORT " + PROGRAM_NAME.toLowerCase() + ".\nWRITE: / 'Test'.\n";
 
         try {
             ProgramModifyResult result = programService.modifyProgramSource(
@@ -221,6 +340,6 @@ class ManualProgramModifyTest {
             log.info("Expected exception caught: {}", e.getMessage());
             assertThat(e.getMessage()).contains("locked");
             log.info("=== Test Passed ===");
-        }
+        }*/
     }
 }

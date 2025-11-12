@@ -42,6 +42,7 @@ import java.util.Map;
 public class ClassService {
 
     private final RfcAdapter rfcAdapter;
+    private final StatefulModificationService statefulModificationService;
 
     /**
      * Get ABAP class source code.
@@ -266,96 +267,94 @@ public class ClassService {
             includeType = "main"; // Default to main if not provided
         }
 
-        log.info("Starting modification workflow for class: {} (include: {})", className, includeType);
+        log.info("🔧 Starting stateful modification workflow for class: {} (include: {})",
+                className, includeType);
 
         // Build URIs
         String classUri = String.format("/sap/bc/adt/oo/classes/%s", className.toLowerCase());
         String sourceUri = String.format("%s/source/%s", classUri, includeType);
 
-        // Initialize result
-        ClassModifyResult result = new ClassModifyResult();
-        result.setUri(sourceUri);
-        result.setClassName(className);
-        result.setIncludeType(includeType);
+        // Capture includeType for lambda (must be effectively final)
+        final String finalIncludeType = includeType;
 
-        String lockHandle = null;
+        // Execute workflow in stateful context
+        ClassModifyResult workflowResult = statefulModificationService.executeStatefulWorkflow(
+                className,
+                () -> {
+                    // Initialize result object
+                    ClassModifyResult result = new ClassModifyResult();
+                    result.setUri(sourceUri);
+                    result.setClassName(className);
+                    result.setIncludeType(finalIncludeType);
 
-        try {
-            // ========================================
-            // Step 1: Lock class
-            // ========================================
-            log.info("Step 1/3: Locking class '{}'", className);
-            LockResult lockResult = lockObject(classUri);
-            lockHandle = lockResult.lockHandle;
+                    // ========================================
+                    // Step 1: Lock class (in stateful session)
+                    // ========================================
+                    log.info("Step 1/3: Locking class '{}'", className);
 
-            result.setLocked(true);
-            result.setLockHandle(lockHandle);
-            result.setTransportNumber(lockResult.transport);
-            result.setTransportUser(""); // Not available in current implementation
-            result.setTransportDescription(""); // Not available in current implementation
+                    StatefulModificationService.LockResult lock =
+                            statefulModificationService.lockObject(classUri);
 
-            log.info("Class locked successfully (handle: {}, transport: {})", lockHandle, lockResult.transport);
-            result.addMessage("info", "Class locked successfully", "lock");
+                    result.setLocked(true);
+                    result.setLockHandle(lock.lockHandle());
+                    result.setTransportNumber(lock.transportNumber());
+                    result.setTransportUser(lock.transportUser());
+                    result.setTransportDescription(lock.transportDescription());
 
-            // Use transport from LOCK if not provided
-            String actualTransport = transport;
-            if (actualTransport == null || actualTransport.isEmpty()) {
-                actualTransport = lockResult.transport;
-                log.info("Using transport from LOCK: {}", actualTransport);
-            }
+                    log.info("✓ Class locked successfully (transport: {})", lock.transportNumber());
+                    result.addMessage("info",
+                            String.format("Class locked successfully. Transport: %s",
+                                    lock.transportNumber()),
+                            "lock");
 
-            // ========================================
-            // Step 2: Modify source code
-            // ========================================
-            log.info("Step 2/3: Modifying source code ({} bytes)", newSource.length());
+                    try {
+                        // ========================================
+                        // Step 2: Modify source code (in stateful session)
+                        // ========================================
+                        log.info("Step 2/3: Modifying source code ({} bytes)", newSource.length());
 
-            boolean modified = setObjectSource(sourceUri, newSource, lockHandle, actualTransport);
-            result.setModified(modified);
+                        // Use transport from lock response if not explicitly provided
+                        String effectiveTransport = (transport != null && !transport.isEmpty())
+                                ? transport
+                                : lock.transportNumber();
 
-            log.info("Source code modified successfully");
-            result.addMessage("info",
-                    String.format("Source code updated (%d bytes)", newSource.length()),
-                    "modify");
+                        boolean modified = setObjectSource(
+                                sourceUri,
+                                newSource,
+                                lock.lockHandle(),
+                                effectiveTransport
+                        );
+                        result.setModified(modified);
 
-        } catch (Exception e) {
-            log.error("Modification workflow failed: {}", e.getMessage());
-            result.setSuccess(false);
-            result.addMessage("error", "Workflow failed: " + e.getMessage(), "workflow");
+                        log.info("✓ Source code modified successfully");
+                        result.addMessage("info",
+                                String.format("Source code updated (%d bytes)", newSource.length()),
+                                "modify");
 
-            // Re-throw to ensure caller knows about the failure
-            throw new RuntimeException("Failed to modify class: " + e.getMessage(), e);
+                        return result;
 
-        } finally {
-            // ========================================
-            // Step 3: Unlock (ALWAYS execute, even on error)
-            // ========================================
-            if (lockHandle != null) {
-                try {
-                    log.info("Step 3/3: Unlocking class '{}'", className);
-                    unlockObject(classUri, lockHandle);
-                    result.setUnlocked(true);
-                    log.info("Class unlocked successfully");
-                    result.addMessage("info", "Class unlocked successfully", "unlock");
-
-                } catch (Exception unlockError) {
-                    log.error("Failed to unlock class: {}", unlockError.getMessage());
-                    result.addMessage("warning",
-                            "Failed to unlock class: " + unlockError.getMessage(),
-                            "unlock");
+                    } finally {
+                        // ========================================
+                        // Step 3: Unlock (ALWAYS execute, even on error, in stateful session)
+                        // ========================================
+                        log.info("Step 3/3: Unlocking class '{}'", className);
+                        statefulModificationService.unlockObject(classUri, lock.lockHandle());
+                        result.setUnlocked(true);
+                        log.info("✓ Class unlocked successfully");
+                        result.addMessage("info", "Class unlocked successfully", "unlock");
+                    }
                 }
-            }
-        }
+        );
 
-        // Final result
-        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked());
+        // Set overall success based on workflow steps
+        workflowResult.setSuccess(workflowResult.isLocked()
+                && workflowResult.isModified()
+                && workflowResult.isUnlocked());
 
-        if (result.isSuccess()) {
-            log.info("=== Modification workflow completed successfully for class '{}' ===", className);
-        } else {
-            log.error("=== Modification workflow failed for class '{}' ===", className);
-        }
+        log.info("🎯 Class modification workflow completed: {} (success: {})",
+                className, workflowResult.isSuccess());
 
-        return result;
+        return workflowResult;
     }
 
     /**
