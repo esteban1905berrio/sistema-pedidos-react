@@ -8,9 +8,9 @@ import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
 
 /**
- * MCP Tools for ABAP Object Creation and Deletion.
+ * MCP Tools for ABAP Object Creation.
  * <p>
- * This component provides tools for creating and deleting ABAP objects:
+ * This component provides tools for creating ABAP objects:
  * - Function Groups (FUGR/F)
  * - Function Modules (FUGR/FF)
  * - Classes (CLAS/OC)
@@ -20,12 +20,13 @@ import org.springframework.stereotype.Component;
  * <p>
  * Based on Python implementation: creation_service.py
  * <p>
- * Phase 1 Tools (5 tools):
+ * Phase 1 Tools (4 tools):
  * - create_function_group: Create new function group
  * - create_function_module: Create new function module in function group
  * - create_class: Create new ABAP class
  * - create_interface: Create new ABAP interface
- * - delete_object: Delete any ABAP object
+ * <p>
+ * NOTE: Object deletion has been moved to {@link DeletionTools}
  */
 @Component
 @RequiredArgsConstructor
@@ -285,21 +286,14 @@ public class CreationTools {
     }
 
     /**
-     * MCP Tool: Delete an ABAP object.
-     * <p>
-     * Supports deletion of any object type that can be deleted via ADT API:
-     * - Classes (CLAS)
-     * - Interfaces (INTF)
-     * - Function Groups (FUGR)
-     * - Function Modules (FMOD)
-     * - Programs (PROG)
-     * <p>
-     * Based on Python: creation_service.py::delete_object()
+     * DEPRECATED: Use DeletionTools.delete_object() instead.
      *
-     * @param objectUri ADT URI of the object to delete
-     * @param transport transport number (required for non-local objects)
-     * @return CreationResult with success status and details
+     * This method has been replaced by a superior implementation in DeletionTools
+     * that uses stateful workflows and builds URIs automatically.
+     *
+     * @deprecated Use {@link com.crystal.mcp.sapserver.tool.DeletionTools#delete_object(String, String, String, String)}
      */
+    /*
     @McpTool(
             description = "Delete an ABAP object via ADT API. " +
                     "Supports: classes, interfaces, function groups, function modules, programs. " +
@@ -329,4 +323,5 @@ public class CreationTools {
     ) {
         return creationService.deleteObject(objectUri, transport);
     }
+    */
 }
