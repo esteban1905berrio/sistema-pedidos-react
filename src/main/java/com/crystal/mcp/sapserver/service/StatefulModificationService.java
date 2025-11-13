@@ -415,6 +415,284 @@ public class StatefulModificationService {
     }
 
     /**
+     * Transport check information result.
+     *
+     * Contains metadata about the object for transport and locking operations:
+     * - pgmid: Program ID (e.g., "LIMU" for modifiable objects)
+     * - object: Object type (e.g., "CLAS", "FUNC", "PROG")
+     * - objectName: Full object name
+     * - devclass: Development package
+     * - korrflag: Correction flag ('X' if object requires transport)
+     *
+     * @param pgmid Program ID
+     * @param object Object type
+     * @param objectName Full object name
+     * @param devclass Development package
+     * @param korrflag Correction flag
+     * @param result Result status (S=success, E=error)
+     */
+    public record TransportCheckResult(
+            String pgmid,
+            String object,
+            String objectName,
+            String devclass,
+            String korrflag,
+            String result
+    ) {}
+
+    /**
+     * Verifica información de transporte para un objeto.
+     *
+     * Ejecuta POST /sap/bc/adt/cts/transportchecks
+     * Este endpoint retorna metadata del objeto (PGMID, OBJECT, DEVCLASS, etc.)
+     * necesaria para operaciones de transporte y borrado.
+     *
+     * Headers ADT requeridos:
+     * - Accept: com.sap.adt.transport.service.checkData
+     * - Content-Type: com.sap.adt.transport.service.checkData
+     *
+     * Request body (XML):
+     * <pre>
+     * {@code
+     * <asx:abap>
+     *   <asx:values>
+     *     <DATA>
+     *       <URI>/sap/bc/adt/oo/classes/zcl_test</URI>
+     *     </DATA>
+     *   </asx:values>
+     * </asx:abap>
+     * }
+     * </pre>
+     *
+     * Response (XML):
+     * <pre>
+     * {@code
+     * <asx:abap>
+     *   <asx:values>
+     *     <DATA>
+     *       <PGMID>LIMU</PGMID>
+     *       <OBJECT>CLAS</OBJECT>
+     *       <OBJECTNAME>ZCL_TEST</OBJECTNAME>
+     *       <DEVCLASS>ZPACKAGE</DEVCLASS>
+     *       <KORRFLAG>X</KORRFLAG>
+     *       <RESULT>S</RESULT>
+     *     </DATA>
+     *   </asx:values>
+     * </asx:abap>
+     * }
+     * </pre>
+     *
+     * @param objectUri URI del objeto ADT
+     * @return TransportCheckResult con metadata del objeto
+     * @throws RuntimeException si falla el check
+     */
+    public TransportCheckResult transportCheck(String objectUri) {
+        log.debug("Checking transport information for: {}", objectUri);
+
+        String endpoint = "/sap/bc/adt/cts/transportchecks";
+
+        // Headers ADT
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept",
+                "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.transport.service.checkData");
+        headers.put("Content-Type",
+                "application/vnd.sap.as+xml; charset=UTF-8; dataname=com.sap.adt.transport.service.checkData");
+
+        // Request body
+        String requestBody = String.format(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                        "<asx:abap xmlns:asx=\"http://www.sap.com/abapxml\" version=\"1.0\">" +
+                        "<asx:values>" +
+                        "<DATA>" +
+                        "<PGMID/>" +
+                        "<OBJECT/>" +
+                        "<OBJECTNAME/>" +
+                        "<DEVCLASS/>" +
+                        "<SUPER_PACKAGE/>" +
+                        "<OPERATION/>" +
+                        "<URI>%s</URI>" +
+                        "</DATA>" +
+                        "</asx:values>" +
+                        "</asx:abap>",
+                objectUri
+        );
+
+        try {
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    endpoint,
+                    "POST",
+                    headers,
+                    null,  // No query params
+                    requestBody,
+                    "application/xml"
+            );
+
+            if (response.statusCode() == 200) {
+                return parseTransportCheckResponse(response.text());
+            } else {
+                throw new RuntimeException(
+                        String.format("Transport check failed: HTTP %d - %s",
+                                response.statusCode(), response.text())
+                );
+            }
+
+        } catch (JCoException e) {
+            log.error("RFC error during transport check: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to check transport for: " + objectUri, e);
+        }
+    }
+
+    /**
+     * Elimina un objeto ABAP.
+     *
+     * Ejecuta DELETE {uri}?lockHandle={handle}&corrNr={transport}
+     *
+     * IMPORTANTE: Este método debe ser llamado SOLO dentro de un workflow stateful
+     * y después de haber bloqueado el objeto con lockObject().
+     *
+     * Workflow completo:
+     * <pre>
+     * {@code
+     * executeStatefulWorkflow(objectName, () -> {
+     *     TransportCheckResult check = transportCheck(uri);
+     *     LockResult lock = lockObject(uri);
+     *     try {
+     *         deleteObject(uri, lock.lockHandle(), lock.transportNumber());
+     *         return success();
+     *     } finally {
+     *         unlockObject(uri, lock.lockHandle());
+     *     }
+     * });
+     * }
+     * </pre>
+     *
+     * @param objectUri URI del objeto ADT
+     * @param lockHandle handle obtenido del LOCK
+     * @param corrNr número de transport (puede venir del LOCK o del parámetro del tool)
+     * @throws RuntimeException si falla el delete
+     */
+    public void deleteObject(String objectUri, String lockHandle, String corrNr) {
+        log.debug("Deleting object: {} (lockHandle: {}, transport: {})",
+                objectUri, lockHandle, corrNr);
+
+        Map<String, String> params = new HashMap<>();
+        params.put("lockHandle", lockHandle);
+        if (corrNr != null && !corrNr.isEmpty()) {
+            params.put("corrNr", corrNr);
+        }
+
+        try {
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    objectUri,
+                    "DELETE",
+                    null,  // No custom headers
+                    params,
+                    "",
+                    "application/xml"
+            );
+
+            if (response.statusCode() == 200 || response.statusCode() == 204) {
+                log.info("Successfully deleted object: {}", objectUri);
+            } else {
+                throw new RuntimeException(
+                        String.format("Delete failed: HTTP %d - %s",
+                                response.statusCode(), response.text())
+                );
+            }
+
+        } catch (JCoException e) {
+            log.error("RFC error during delete: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to delete object: " + objectUri, e);
+        }
+    }
+
+    /**
+     * Construye URI ADT según el tipo de objeto.
+     *
+     * Mapping de tipos de objeto a URIs ADT:
+     * - CLAS: /sap/bc/adt/oo/classes/{name}
+     * - INTF: /sap/bc/adt/oo/interfaces/{name}
+     * - FUGR: /sap/bc/adt/functions/groups/{name}
+     * - FUNC: /sap/bc/adt/functions/groups/{fgname}/fmodules/{name}
+     * - PROG: /sap/bc/adt/programs/programs/{name}
+     *
+     * @param objectType tipo de objeto (CLAS, INTF, FUGR, FUNC, PROG)
+     * @param objectName nombre del objeto
+     * @param functionGroupName nombre del grupo de funciones (solo para FUNC)
+     * @return URI ADT del objeto
+     * @throws IllegalArgumentException si el tipo de objeto no es soportado
+     */
+    public static String buildObjectUri(String objectType, String objectName, String functionGroupName) {
+        String normalizedType = objectType.toUpperCase();
+        String lowerName = objectName.toLowerCase();
+
+        return switch (normalizedType) {
+            case "CLAS" -> "/sap/bc/adt/oo/classes/" + lowerName;
+            case "INTF" -> "/sap/bc/adt/oo/interfaces/" + lowerName;
+            case "FUGR" -> "/sap/bc/adt/functions/groups/" + lowerName;
+            case "FUNC" -> {
+                if (functionGroupName == null || functionGroupName.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "functionGroupName is required for FUNC object type");
+                }
+                yield "/sap/bc/adt/functions/groups/" +
+                        functionGroupName.toLowerCase() + "/fmodules/" + lowerName;
+            }
+            case "PROG" -> "/sap/bc/adt/programs/programs/" + lowerName;
+            default -> throw new IllegalArgumentException(
+                    "Unsupported object type: " + objectType +
+                            ". Supported types: CLAS, INTF, FUGR, FUNC, PROG");
+        };
+    }
+
+    /**
+     * Parsea respuesta XML de transport check.
+     *
+     * @param xmlResponse respuesta XML de ADT
+     * @return TransportCheckResult parseado
+     * @throws RuntimeException si falla el parsing
+     */
+    private TransportCheckResult parseTransportCheckResponse(String xmlResponse) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(
+                    new ByteArrayInputStream(xmlResponse.getBytes(StandardCharsets.UTF_8))
+            );
+
+            Element dataElement = (Element) doc.getElementsByTagName("DATA").item(0);
+
+            if (dataElement == null) {
+                throw new RuntimeException("Invalid transport check response: DATA element not found");
+            }
+
+            String pgmid = getElementText(dataElement, "PGMID");
+            String object = getElementText(dataElement, "OBJECT");
+            String objectName = getElementText(dataElement, "OBJECTNAME");
+            String devclass = getElementText(dataElement, "DEVCLASS");
+            String korrflag = getElementText(dataElement, "KORRFLAG");
+            String result = getElementText(dataElement, "RESULT");
+
+            log.debug("Transport check result: pgmid={}, object={}, name={}, package={}, result={}",
+                    pgmid, object, objectName, devclass, result);
+
+            return new TransportCheckResult(
+                    pgmid,
+                    object,
+                    objectName,
+                    devclass,
+                    korrflag,
+                    result
+            );
+
+        } catch (Exception e) {
+            log.error("Failed to parse transport check response: {}", e.getMessage(), e);
+            log.error("XML Response: {}", xmlResponse);
+            throw new RuntimeException("Failed to parse transport check response", e);
+        }
+    }
+
+    /**
      * Helper para extraer texto de elemento XML.
      *
      * Retorna string vacío si el elemento no existe (en lugar de null).

@@ -100,7 +100,8 @@
       "mcp__gdcmcp__create_function_module",
       "mcp__gdcmcp__get_object_in_open_ot",
       "mcp__gdcmcp__modify_function_module",
-      "mcp__gdcmcp__modify_program_source"
+      "mcp__gdcmcp__modify_program_source",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
