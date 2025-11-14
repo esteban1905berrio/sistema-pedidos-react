@@ -3,6 +3,9 @@ package com.crystal.mcp.sapserver.service;
 import com.crystal.mcp.sapserver.model.ClassIncludeResult;
 import com.crystal.mcp.sapserver.model.ClassModifyResult;
 import com.crystal.mcp.sapserver.model.ClassSourceResult;
+import com.crystal.mcp.sapserver.model.DdicSourceResult;
+import com.sap.conn.jco.JCoDestination;
+import com.sap.conn.jco.JCoFunction;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,6 +46,7 @@ public class ClassService {
 
     private final RfcAdapter rfcAdapter;
     private final StatefulModificationService statefulModificationService;
+    private final JCoDestination destination;
 
     /**
      * Get ABAP class source code.
@@ -496,6 +500,109 @@ public class ClassService {
         }
 
         return result;
+    }
+
+    /**
+     * Get DDIC object structure (table/structure/view) from DD03L.
+     *
+     * <p>This method calls the custom Function Module ZCX_GETDDICSOURCE to retrieve
+     * metadata about database tables, structures, and views by querying DD03L.
+     *
+     * <p>FM Signature:
+     * <pre>
+     * IMPORTING:
+     *   OBJECT_NAME TYPE TABNAME
+     * EXPORTING:
+     *   OBJECT_TYPE TYPE CHAR10       (TABLE/STRUCTURE/VIEW/APPEND)
+     *   OBJECT_STATUS TYPE CHAR10     (ACTIVE/INACTIVE)
+     *   FIELDS_JSON TYPE STRING       (Field metadata in JSON format)
+     * EXCEPTIONS:
+     *   OBJECT_NOT_FOUND
+     *   INVALID_OBJECT_TYPE
+     * </pre>
+     *
+     * <p>Field metadata includes:
+     * - fieldname: Field name
+     * - position: Position in table
+     * - rollname: Data element
+     * - mandatory: 'X' if mandatory
+     * - checktable: Foreign key table
+     * - inttype: Internal type (C, N, D, etc.)
+     * - intlen: Internal length
+     * - datatype: ABAP data type
+     * - keyflag: 'X' if key field
+     * - reffield: Reference field
+     *
+     * @param objectName name of table/structure/view (e.g., "MARA", "DD03L", "V_T001")
+     * @return DdicSourceResult containing object metadata and field list
+     * @throws RuntimeException if FM call fails or object not found
+     */
+    public DdicSourceResult getDdicSource(String objectName) {
+        // Validate inputs
+        if (objectName == null || objectName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Object name cannot be empty");
+        }
+
+        log.info("Getting DDIC source for object: {}", objectName);
+
+        try {
+            // Get function module from repository
+            JCoFunction function = destination.getRepository().getFunction("ZCX_GETDDICSOURCE");
+
+            if (function == null) {
+                throw new RuntimeException("Function module ZCX_GETDDICSOURCE not found in SAP system");
+            }
+
+            // Set import parameters
+            function.getImportParameterList().setValue("OBJECT_NAME", objectName.toUpperCase());
+
+            // Execute function module
+            function.execute(destination);
+
+            // Get export parameters
+            String objectType = function.getExportParameterList().getString("OBJECT_TYPE");
+            String objectStatus = function.getExportParameterList().getString("OBJECT_STATUS");
+            String fieldsJson = function.getExportParameterList().getString("FIELDS_JSON");
+
+            log.debug("FM returned: type={}, status={}, fieldsJson length={}",
+                    objectType, objectStatus, fieldsJson != null ? fieldsJson.length() : 0);
+
+            // Parse fields JSON
+            List<DdicSourceResult.DdicField> fields = DdicSourceResult.parseFieldsJson(fieldsJson);
+
+            // Build result
+            DdicSourceResult result = new DdicSourceResult(
+                    objectName.toUpperCase(),
+                    objectType,
+                    objectStatus,
+                    fields
+            );
+            result.setRawJson(fieldsJson);
+
+            log.info("Successfully retrieved DDIC source for {} ({} fields, type: {})",
+                    objectName, fields.size(), objectType);
+
+            return result;
+
+        } catch (com.sap.conn.jco.JCoException e) {
+            // Check for ABAP exceptions
+            if (e.getMessage().contains("OBJECT_NOT_FOUND")) {
+                String errorMsg = String.format("Object '%s' not found in DD02L", objectName);
+                log.error(errorMsg);
+                throw new RuntimeException(errorMsg, e);
+            } else if (e.getMessage().contains("INVALID_OBJECT_TYPE")) {
+                String errorMsg = String.format("No fields found for object '%s' in DD03L", objectName);
+                log.error(errorMsg);
+                throw new RuntimeException(errorMsg, e);
+            } else {
+                log.error("JCo error calling ZCX_GETDDICSOURCE for {}: {}",
+                        objectName, e.getMessage(), e);
+                throw new RuntimeException("Failed to get DDIC source: " + e.getMessage(), e);
+            }
+        } catch (Exception e) {
+            log.error("Error getting DDIC source for {}: {}", objectName, e.getMessage(), e);
+            throw new RuntimeException("Failed to get DDIC source", e);
+        }
     }
 
     // ============================================================================
