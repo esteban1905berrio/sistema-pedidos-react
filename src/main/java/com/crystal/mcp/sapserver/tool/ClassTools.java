@@ -2,6 +2,7 @@ package com.crystal.mcp.sapserver.tool;
 
 import com.crystal.mcp.sapserver.model.ClassIncludeResult;
 import com.crystal.mcp.sapserver.model.ClassSourceResult;
+import com.crystal.mcp.sapserver.model.DdicSourceResult;
 import com.crystal.mcp.sapserver.service.ClassService;
 import lombok.RequiredArgsConstructor;
 import org.springaicommunity.mcp.annotation.McpTool;
@@ -130,6 +131,69 @@ public class ClassTools {
             String className
     ) {
         return classService.getClassIncludes(className);
+    }
+
+    /**
+     * MCP Tool: Get DDIC object structure (table/structure/view) from DD03L.
+     *
+     * This tool retrieves metadata about database tables, structures, and views
+     * by calling the custom Function Module ZCX_GETDDICSOURCE, which queries DD03L.
+     *
+     * Use Cases:
+     * - Understand table structure before writing code
+     * - Discover field names, types, and key fields
+     * - Identify foreign key relationships (check tables)
+     * - Analyze data element usage (rollname)
+     * - Generate code templates based on structure
+     *
+     * Returned Field Metadata:
+     * - fieldname: Field name
+     * - position: Position in table
+     * - rollname: Data element (type)
+     * - mandatory: 'X' if required field
+     * - checktable: Foreign key table (if any)
+     * - inttype: Internal type (C=char, N=numeric, D=date, etc.)
+     * - intlen: Internal length
+     * - datatype: ABAP data type
+     * - keyflag: 'X' if primary key field
+     * - reffield: Reference field (for foreign keys)
+     *
+     * Object Types:
+     * - TABLE: Transparent tables (database tables)
+     * - STRUCTURE: Internal structures (no database persistence)
+     * - VIEW: Database views
+     * - APPEND: Append structures
+     *
+     * Examples:
+     * - get_ddic_source("MARA") → Material master table structure
+     * - get_ddic_source("DD03L") → Table field definition structure
+     * - get_ddic_source("T001") → Company codes table
+     * - get_ddic_source("V_T001") → Company codes view
+     *
+     * Note: Requires FM ZCX_GETDDICSOURCE to be activated in SAP system.
+     * See docs/abap/FM_ZCX_GETDDICSOURCE_SIGNATURE.md for setup instructions.
+     *
+     * @param objectName name of table/structure/view (e.g., "MARA", "DD03L", "V_T001")
+     * @return DdicSourceResult containing object metadata and field list
+     */
+    @McpTool(
+            description = "Get DDIC object structure (table/structure/view) from DD03L. " +
+                    "Retrieves field metadata by calling FM ZCX_GETDDICSOURCE, which queries DD03L system table. " +
+                    "Returns object type, status, and detailed field list with names, types, keys, and foreign key relationships. " +
+                    "Useful for understanding table structures before writing code, discovering field definitions, and analyzing data models. " +
+                    "Supports tables (MARA), structures (DD03L), views (V_T001), and append structures. " +
+                    "Example: get_ddic_source('MARA') returns material master table structure with all fields."
+    )
+    public DdicSourceResult get_ddic_source(
+            @McpToolParam(
+                    description = "Name of the table, structure, or view to retrieve. " +
+                            "Examples: 'MARA' (material master), 'DD03L' (table fields), 'T001' (company codes), 'V_T001' (view). " +
+                            "Case-insensitive (will be converted to uppercase).",
+                    required = true
+            )
+            String objectName
+    ) {
+        return classService.getDdicSource(objectName);
     }
 
     /**

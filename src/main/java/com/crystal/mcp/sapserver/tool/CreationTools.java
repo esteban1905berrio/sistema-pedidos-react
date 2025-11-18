@@ -121,7 +121,11 @@ public class CreationTools {
                     "Workflow: VALIDATE → VERIFY_GROUP → REGISTER → CREATE. " +
                     "Name must start with letter, max 30 chars, only A-Z0-9_. " +
                     "Function group must exist before creating function module. " +
-                    "Example: create_function_module('Z_TEST_FM', 'ZTEST_FG', 'Test Function Module', null)"
+                    "\n\n⚠️ CRITICAL: Function module signatures MUST be configured manually in SE37 after creation. " +
+                    "ADT API does not support signature definition via source code. " +
+                    "Signatures must NEVER include comments (*\" blocks). " +
+                    "See docs/development_rules/abap_function_module_rules.md for correct signature format. " +
+                    "\n\nExample: create_function_module('Z_TEST_FM', 'ZTEST_FG', 'Test Function Module', null)"
     )
     public CreationResult create_function_module(
             @McpToolParam(

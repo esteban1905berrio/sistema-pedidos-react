@@ -589,6 +589,65 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
 ## Important Development Notes
 
+### ⚠️ CRITICAL: ABAP Function Module Signatures
+
+**REGLA FUNDAMENTAL**: Las firmas de Function Modules NUNCA deben incluir comentarios.
+
+**❌ NUNCA HACER ESTO**:
+```abap
+FUNCTION ZCX_GETDDICSOURCE.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(OBJECT_NAME) TYPE  TABNAME
+*"----------------------------------------------------------------------
+```
+
+**✅ SIEMPRE HACER ESTO**:
+```abap
+FUNCTION ZCX_GETDDICSOURCE
+  IMPORTING
+    VALUE(OBJECT_NAME) TYPE TABNAME
+  EXPORTING
+    VALUE(OBJECT_TYPE) TYPE CHAR10
+    VALUE(FIELDS_JSON) TYPE STRING
+  EXCEPTIONS
+    OBJECT_NOT_FOUND.
+```
+
+**Por qué**: SAP ADT API rechaza firmas con comentarios (HTTP 400: "Parameter comment blocks are not allowed")
+
+**Documentación completa**: `docs/development_rules/abap_function_module_rules.md`
+
+**Formato correcto**:
+- Sin comentarios `*"` en sección de parámetros
+- Sin bloques decorativos `*"----`
+- Solo keywords (IMPORTING, EXPORTING, EXCEPTIONS) y parámetros
+- Punto final (`.`) después de firma
+- Indentación de 2-4 espacios
+
+**Ejemplo completo**:
+```abap
+FUNCTION Z_MI_FUNCION
+  IMPORTING
+    VALUE(IV_PARAM1) TYPE STRING
+    VALUE(IV_PARAM2) TYPE MATNR
+  EXPORTING
+    VALUE(EV_RESULT) TYPE CHAR10
+  CHANGING
+    VALUE(CV_STATUS) TYPE CHAR1
+  TABLES
+    ET_DATA STRUCTURE SFLIGHT
+  EXCEPTIONS
+    INPUT_INVALID
+    NO_DATA_FOUND
+    SYSTEM_ERROR.
+
+  " Implementación aquí
+
+ENDFUNCTION.
+```
+
 ### Multi-Platform Support
 
 This project supports **Windows, macOS, and Linux**:

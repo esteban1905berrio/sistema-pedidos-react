@@ -290,7 +290,12 @@ public class ProgramTools {
                     "Returns transport number from lock operation if not provided. " +
                     "Fails with error if object is already locked by another user. " +
                     "Always unlocks object even on failure (prevents orphaned locks). " +
-                    "Example: modify_function_module('Z_TEST_FM', 'ZTEST_FG', new_code, null)"
+                    "\n\n⚠️ CRITICAL: Function module signatures cannot be modified via ADT API. " +
+                    "Signatures must be configured manually in SE37 transaction. " +
+                    "Signatures must NEVER include comments (*\" blocks). " +
+                    "This tool modifies implementation code only, not the signature. " +
+                    "See docs/development_rules/abap_function_module_rules.md for correct signature format. " +
+                    "\n\nExample: modify_function_module('Z_TEST_FM', 'ZTEST_FG', new_code, null)"
     )
     public ProgramModifyResult modify_function_module(
             @McpToolParam(
@@ -308,7 +313,9 @@ public class ProgramTools {
             @McpToolParam(
                     description = "New source code to set (complete replacement). " +
                             "Must be valid ABAP syntax. " +
-                            "Must include FUNCTION/ENDFUNCTION statements.",
+                            "Must include FUNCTION/ENDFUNCTION statements. " +
+                            "⚠️ IMPORTANT: Do NOT include signature definition or comments (*\") in source. " +
+                            "Signatures must be configured separately in SE37.",
                     required = true
             )
             String newSource,
