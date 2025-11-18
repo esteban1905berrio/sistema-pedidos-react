@@ -1,5 +1,7 @@
 package com.crystal.mcp.sapserver.model;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,17 +33,21 @@ public record TransportObjectsResult(
     /**
      * Individual ABAP object in a transport.
      *
+     * @param trkorr       transport/task number containing this object
+     * @param pgmid        program ID (R3TR, LIMU, etc.)
      * @param objectType   object type (CLAS, PROG, FUGR, TABL, etc.)
      * @param objectName   object name
-     * @param lockType     lock type (M=Modifiable, X=Deleted, etc.)
-     * @param function     function (K=New, D=Delete, etc.)
+     * @param lockFlag     lock flag (X = locked)
+     * @param gennum       generation number
      * @param tabKey       table key (for table entries)
      */
     public record TransportObject(
+            String trkorr,
+            String pgmid,
             String objectType,
             String objectName,
-            String lockType,
-            String function,
+            String lockFlag,
+            String gennum,
             String tabKey
     ) {
     }
@@ -52,15 +58,64 @@ public record TransportObjectsResult(
      * @param taskNumber   task transport number
      * @param owner        task owner
      * @param createdDate  creation date (YYYY-MM-DD)
-     * @param status       task status (D=Modifiable, R=Released)
+     * @param createdTime  creation time (HH:MM:SS)
+     * @param status       task status code (D, R, L, etc.)
+     * @param statusDesc   task status description
+     * @param description  task description text
      * @param objectCount  number of objects in task
      */
     public record Task(
             String taskNumber,
             String owner,
             String createdDate,
+            String createdTime,
             String status,
+            String statusDesc,
+            String description,
             int objectCount
     ) {
+    }
+
+    /**
+     * Create a "not found" result when transport doesn't exist.
+     *
+     * @param transportNumber Transport number that was not found
+     * @return TransportObjectsResult indicating transport not found
+     */
+    public static TransportObjectsResult notFound(String transportNumber) {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("transport_number", transportNumber);
+        metadata.put("error", "Transport not found in E070 table");
+
+        return new TransportObjectsResult(
+                false,
+                transportNumber,
+                metadata,
+                new ArrayList<>(),
+                0,
+                new ArrayList<>()
+        );
+    }
+
+    /**
+     * Create a "failure" result when an error occurs.
+     *
+     * @param transportNumber Transport number
+     * @param errorMessage    Error message
+     * @return TransportObjectsResult indicating failure
+     */
+    public static TransportObjectsResult failure(String transportNumber, String errorMessage) {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("transport_number", transportNumber);
+        metadata.put("error", errorMessage);
+
+        return new TransportObjectsResult(
+                false,
+                transportNumber,
+                metadata,
+                new ArrayList<>(),
+                0,
+                new ArrayList<>()
+        );
     }
 }

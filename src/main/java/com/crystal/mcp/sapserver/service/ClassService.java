@@ -228,6 +228,60 @@ public class ClassService {
     }
 
     /**
+     * Normalize and validate includeType for class modification.
+     *
+     * Valid include types:
+     * - main: Class definition (PUBLIC, PROTECTED, PRIVATE sections)
+     * - implementations: Method implementations
+     * - testclasses: Unit test classes
+     * - macros: ABAP macros
+     *
+     * Normalizes common variants:
+     * - "implementation" → "implementations"
+     * - "includes/testclasses" → "testclasses"
+     *
+     * @param includeType the include type to normalize and validate
+     * @return normalized includeType
+     * @throws IllegalArgumentException if includeType is invalid
+     */
+    private String normalizeAndValidateIncludeType(String includeType) {
+        // Default to "main" if null or empty
+        if (includeType == null || includeType.trim().isEmpty()) {
+            return "main";
+        }
+
+        // Trim and convert to lowercase for comparison
+        String normalized = includeType.trim().toLowerCase();
+
+        // Normalize common variants
+        switch (normalized) {
+            case "main":
+            case "definition":
+            case "definitions":
+                return "main";
+
+            case "implementation":
+            case "implementations":
+                return "implementations";
+
+            case "testclass":
+            case "testclasses":
+            case "includes/testclasses":
+                return "testclasses";
+
+            case "macro":
+            case "macros":
+                return "macros";
+
+            default:
+                throw new IllegalArgumentException(
+                    String.format("Invalid includeType '%s'. Must be one of: main, implementations, testclasses, macros",
+                                  includeType)
+                );
+        }
+    }
+
+    /**
      * Complete workflow to modify an ABAP class source code.
      *
      * This is a workflow-based tool that orchestrates the complete ADT modification flow:
@@ -243,15 +297,16 @@ public class ClassService {
      *
      * Supports modification of different include types:
      * - main: Class definition (PUBLIC, PROTECTED, PRIVATE sections)
-     * - implementation: Method implementations
+     * - implementations: Method implementations
      * - testclasses: Unit test classes
      * - macros: ABAP macros
      *
      * @param className   name of the class (e.g., "ZCLFIAAC002_CARGA_ACTIVOS_FIJ")
      * @param newSource   new source code to set
-     * @param includeType include type to modify (default: "main")
+     * @param includeType include type to modify (must be: main, implementations, testclasses, or macros)
      * @param transport   optional transport number (if null, uses system-assigned from LOCK)
      * @return ClassModifyResult with detailed workflow execution status
+     * @throws IllegalArgumentException if includeType is invalid
      * @throws RuntimeException if modification workflow fails
      */
     public ClassModifyResult modifyClass(
@@ -267,9 +322,9 @@ public class ClassService {
         if (newSource == null) {
             throw new IllegalArgumentException("Source code cannot be null");
         }
-        if (includeType == null || includeType.trim().isEmpty()) {
-            includeType = "main"; // Default to main if not provided
-        }
+
+        // Normalize and validate includeType
+        includeType = normalizeAndValidateIncludeType(includeType);
 
         log.info("🔧 Starting stateful modification workflow for class: {} (include: {})",
                 className, includeType);
@@ -361,146 +416,6 @@ public class ClassService {
         return workflowResult;
     }
 
-    /**
-     * Complete workflow to modify an ABAP class source code.
-     * <p>
-     * This is a workflow-based method that orchestrates the complete ADT modification flow:
-     * LOCK → GET objectstructure → PUT source → GET inactive → UNLOCK → Activate (preaudit) → Activate (final)
-     * <p>
-     * Supports modification of different include types:
-     * - main (definitions)
-     * - implementations
-     * - testclasses
-     * - macros
-     * <p>
-     * Based on workflow documented in: docs/requirements/mcp/workflow_based/pr_class_modify.md
-     *
-     * @param className   name of the class (e.g., "ZCL_TEST")
-     * @param newSource   new source code to set
-     * @param includeType include type to modify (main, implementations, testclasses, macros)
-     * @param transport   optional transport number (if null, uses system-assigned from LOCK)
-     * @return ProgramModifyResult with detailed workflow execution status
-     * @deprecated Use {@link #modifyClass(String, String, String, String)} instead
-     */
-    @Deprecated
-    public com.crystal.mcp.sapserver.model.ProgramModifyResult modifyClassSource(
-            String className,
-            String newSource,
-            String includeType,
-            String transport
-    ) {
-        log.info("🔧 Starting modification workflow for class: {} (include: {})",
-                className, includeType);
-
-        // Build class URIs (classUri = base without /source, classSourceUri = with /source)
-        String classUri = String.format("/sap/bc/adt/oo/classes/%s", className.toLowerCase());
-        String classSourceUri = String.format("%s/source/%s", classUri, includeType);
-
-        com.crystal.mcp.sapserver.model.ProgramModifyResult result =
-                new com.crystal.mcp.sapserver.model.ProgramModifyResult();
-        result.setObjectName(className);
-        result.setObjectType("class");
-        result.setUri(classSourceUri);
-
-        String lockHandle = null;
-        String actualTransport = transport;
-
-        try {
-            // ========================================
-            // Step 1: Lock class (LOCK on base URI, not source URI)
-            // ========================================
-            log.info("Step 1/7: Locking class...");
-
-            LockResult lockResult = lockObject(classUri);
-            lockHandle = lockResult.lockHandle;
-
-            // Use transport from LOCK if not provided
-            if (actualTransport == null || actualTransport.isEmpty()) {
-                actualTransport = lockResult.transport;
-                log.info("Using transport from LOCK: {}", actualTransport);
-            }
-
-            result.setLocked(true);
-            result.setLockHandle(lockHandle);
-            result.setTransportNumber(actualTransport);
-
-            log.info("✓ Class locked successfully (handle: {}, transport: {})", lockHandle, actualTransport);
-            result.addMessage("info", "Class locked successfully", "lock");
-
-            // ========================================
-            // Step 2: GET objectstructure (validation step)
-            // ========================================
-            log.info("Step 2/7: Getting object structure...");
-            getObjectStructure(classUri);
-            log.info("✓ Object structure validated");
-            result.addMessage("info", "Object structure validated", "validation");
-
-            // ========================================
-            // Step 3: PUT source (modify code)
-            // ========================================
-            log.info("Step 3/7: Modifying source code ({} bytes)", newSource.length());
-
-            boolean modified = setObjectSource(classSourceUri, newSource, lockHandle, actualTransport);
-            result.setModified(modified);
-
-            log.info("✓ Source code modified successfully");
-            result.addMessage("info",
-                    String.format("Source code updated (%d bytes)", newSource.length()),
-                    "modify");
-
-            // ========================================
-            // Step 4: GET inactive version (verification)
-            // ========================================
-            log.info("Step 4/7: Verifying inactive version...");
-            getInactiveVersion(classUri);
-            log.info("✓ Inactive version verified");
-            result.addMessage("info", "Inactive version verified", "verification");
-
-        } catch (Exception e) {
-            log.error("✗ Modification workflow failed: {}", e.getMessage());
-            result.setSuccess(false);
-            result.addMessage("error", "Workflow failed: " + e.getMessage(), "workflow");
-            throw new RuntimeException("Failed to modify class: " + e.getMessage(), e);
-
-        } finally {
-            // ========================================
-            // Step 5: Unlock (ALWAYS execute, even on error)
-            // ========================================
-            if (lockHandle != null) {
-                try {
-                    log.info("Step 5/7: Unlocking class...");
-                    unlockObject(classUri, lockHandle);
-                    result.setUnlocked(true);
-                    log.info("✓ Class unlocked successfully");
-                    result.addMessage("info", "Class unlocked successfully", "unlock");
-
-                } catch (Exception unlockError) {
-                    log.error("✗ Failed to unlock class: {}", unlockError.getMessage());
-                    result.addMessage("warning",
-                            "Failed to unlock class: " + unlockError.getMessage(),
-                            "unlock");
-                }
-            }
-        }
-
-        // ========================================
-        // Step 6 & 7: Activation (preaudit + final)
-        // Note: Simplified for POC - full implementation would activate
-        // ========================================
-        log.info("Steps 6-7/7: Activation (skipped in current implementation)");
-        result.addMessage("info", "Activation skipped (manual activation required)", "activation");
-
-        // Final result
-        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked());
-
-        if (result.isSuccess()) {
-            log.info("✓✓✓ Modification workflow completed successfully for class '{}'", className);
-        } else {
-            log.error("✗✗✗ Modification workflow failed for class '{}'", className);
-        }
-
-        return result;
-    }
 
     /**
      * Get DDIC object structure (table/structure/view) from DD03L.
@@ -875,7 +790,12 @@ public class ClassService {
         headers.put("Accept", "text/plain");
         headers.put("Content-Type", "text/plain; charset=utf-8");
 
-        log.debug("Setting source code: {} ({} bytes)", objectUri, sourceCode.length());
+        log.info("💾 SET SOURCE | URI: {} | Lock Handle: {} | Transport: {} | Size: {} bytes | Stateful: {}",
+                objectUri,
+                lockHandle.substring(0, Math.min(16, lockHandle.length())) + "...",
+                transport,
+                sourceCode.length(),
+                rfcAdapter.isStatefulContextActive());
 
         try {
             RfcAdapter.RfcResponse response = rfcAdapter.request(

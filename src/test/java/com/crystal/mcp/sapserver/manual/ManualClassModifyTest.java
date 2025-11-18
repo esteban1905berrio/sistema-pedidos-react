@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Slf4j
 @SpringBootTest
-@Disabled("Manual test - requires SAP connection and user permissions")
+//@Disabled("Manual test - requires SAP connection and user permissions")
 class ManualClassModifyTest {
 
     @Autowired
@@ -66,8 +66,8 @@ class ManualClassModifyTest {
         // ========================================
         // Configuration (UPDATE BEFORE RUNNING)
         // ========================================
-        final String CLASS_NAME = "ZCLFIAAC002_CARGA_ACTIVOS_FIJ";
-        final String INCLUDE_TYPE = "implementation";
+        final String CLASS_NAME = "zclcx_transport_management";
+        final String INCLUDE_TYPE = "main";
         final String TRANSPORT_NUMBER = null;  // Set to "CADK911122" or leave null for auto-assignment
 
         log.info("=== Manual Test: Modify Class - Remove cumulatedvalues Parameter ===");
@@ -213,39 +213,21 @@ class ManualClassModifyTest {
      */
     private String getModifiedClassSource() {
         return """
-CLASS zclfiaac002_carga_activos_fij IMPLEMENTATION.
+CLASS zclcx_transport_management DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
 
-  METHOD ejecutar_bapi_crear.
-    CALL FUNCTION 'BAPI_FIXEDASSET_OVRTAKE_CREATE'
-      EXPORTING
-        key                 = i_es_key
-*       reference           =
-        createsubnumber     = i_createsubnumber
-        creategroupasset    = i_creategroupasset
-        testrun             = i_testrun
-        generaldata         = i_es_generaldata
-        generaldatax        = i_es_generaldatax
-        inventory           = i_es_inventory
-        inventoryx          = i_es_inventoryx
-        postinginformation  = i_es_postinginformation
-        postinginformationx = i_es_postinginformationx
-        timedependentdata   = i_es_timedependentdata
-        timedependentdatax  = i_es_timedependentdatax
-        allocations         = i_es_allocations
-        allocationsx        = i_es_allocationsx
-        origin              = i_es_origin
-        originx             = i_es_originx
-      IMPORTING
-        companycode         = e_companycode
-        asset               = e_asset
-        subnumber           = e_subnumber
-        assetcreated        = e_assetcreated
-      TABLES
-        depreciationareas   = i_ti_depreciationareas
-        depreciationareasx  = i_ti_depreciationareasx
-        "cumulatedvalues     = i_ti_cumulatedvalues "ELIMINADO - No enviar para cargas iniciales
-        "postedvalues        = i_ti_postedvalues "NO APLICA PARA CARGAS INICIALES
-        return              = e_ti_return.
+  PUBLIC SECTION.
+    methods: get_data.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclcx_transport_management IMPLEMENTATION.
+  METHOD get_data.
+
   ENDMETHOD.
 
 ENDCLASS.

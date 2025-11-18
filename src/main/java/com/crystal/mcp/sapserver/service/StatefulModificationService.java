@@ -235,7 +235,8 @@ public class StatefulModificationService {
      * @throws RuntimeException si falla el lock (objeto ya bloqueado, sin permisos, etc.)
      */
     public LockResult lockObject(String objectUri) {
-        log.debug("Locking object: {}", objectUri);
+        log.info("🔒 LOCK REQUEST | URI: {} | Stateful active: {}",
+                objectUri, rfcAdapter.isStatefulContextActive());
 
         // Query parameters
         Map<String, String> params = new HashMap<>();
@@ -263,7 +264,12 @@ public class StatefulModificationService {
             );
 
             if (response.statusCode() == 200) {
-                return parseLockResponse(response.text());
+                LockResult lockResult = parseLockResponse(response.text());
+                log.info("🔓 LOCK SUCCESS | Handle: {} | Transport: {} | User: {}",
+                        lockResult.lockHandle().substring(0, Math.min(16, lockResult.lockHandle().length())) + "...",
+                        lockResult.transportNumber(),
+                        lockResult.transportUser());
+                return lockResult;
             } else if (response.statusCode() == 423) {
                 // 423 Locked - Objeto ya bloqueado por otro usuario
                 throw new RuntimeException(
