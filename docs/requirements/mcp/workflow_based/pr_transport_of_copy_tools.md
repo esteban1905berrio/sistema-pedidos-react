@@ -13,4 +13,3 @@ Te doy un ejemplo de como debe funcionar la Tool: usuario dice, quiero crear una
 Otro ejemplo, crear una orden copia de la Orden CADK911511, el agente debe buscar la OT y las tareas para llamar tool.
 
 Es importante aclarar que la tool solo ba a funcionar con las tareas que son las e contienen los obetos. PEro analiza si la clase ABAP ya no hace la logica de consultar tareas a partir de la OT.
-

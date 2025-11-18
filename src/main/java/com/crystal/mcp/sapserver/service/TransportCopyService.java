@@ -83,12 +83,22 @@ public class TransportCopyService {
         // Validate request
         request.validate();
 
-        logger.info("Creating transport copy for source: {}, target: {}, prefix: {}, autoRelease: {}",
-            request.sourceTransport(),
-            request.targetSystem() != null ? request.targetSystem() : "auto",
-            request.getDescriptionPrefixOrDefault(),
-            request.autoRelease()
-        );
+        if (request.isMultipleTransports()) {
+            logger.info("Creating transport copies for {} source transports: {}, target: {}, prefix: {}, autoRelease: {}",
+                request.getTransportCount(),
+                request.getSourceTransportUpperCase(),
+                request.targetSystem() != null ? request.targetSystem() : "auto",
+                request.getDescriptionPrefixOrDefault(),
+                request.autoRelease()
+            );
+        } else {
+            logger.info("Creating transport copy for source: {}, target: {}, prefix: {}, autoRelease: {}",
+                request.sourceTransport(),
+                request.targetSystem() != null ? request.targetSystem() : "auto",
+                request.getDescriptionPrefixOrDefault(),
+                request.autoRelease()
+            );
+        }
 
         try {
             // Get function module from repository
@@ -104,8 +114,8 @@ public class TransportCopyService {
             // Set import parameters
             function.getImportParameterList().setValue("IV_TRANSPORT_REQUEST",
                 request.getSourceTransportUpperCase());
-            function.getImportParameterList().setValue("IV_TARGET_SYSTEM",
-                request.getTargetSystemUpperCase());
+            //function.getImportParameterList().setValue("IV_TARGET_SYSTEM",
+            //    request.getTargetSystemUpperCase());
             function.getImportParameterList().setValue("IV_DESCRIPTION_PREFIX",
                 request.getDescriptionPrefixOrDefault());
             function.getImportParameterList().setValue("IV_AUTO_RELEASE",
@@ -119,22 +129,32 @@ public class TransportCopyService {
             String newTransport = function.getExportParameterList().getString("EV_NEW_TRANSPORT");
             String status = function.getExportParameterList().getString("EV_STATUS");
             String message = function.getExportParameterList().getString("EV_MESSAGE");
+            String releaseLog = function.getExportParameterList().getString("EV_LOG");
 
             // Log result
             if ("S".equals(status)) {
-                logger.info("Transport copy created successfully: {} (source: {})",
-                    newTransport, request.sourceTransport());
+                if (request.isMultipleTransports()) {
+                    logger.info("Transport copies created successfully: {} (sources: {})",
+                        newTransport, request.getSourceTransportUpperCase());
+                } else {
+                    logger.info("Transport copy created successfully: {} (source: {})",
+                        newTransport, request.sourceTransport());
+                }
+                if (releaseLog != null && !releaseLog.isEmpty()) {
+                    logger.debug("Release log available ({} bytes)", releaseLog.length());
+                }
             } else {
                 logger.warn("Transport copy creation completed with status {}: {}",
                     status, message);
             }
 
-            // Build result
+            // Build result with release log
             TransportCopyResult result = new TransportCopyResult(
                 newTransport,
                 status,
                 message,
-                "S".equals(status)
+                "S".equals(status),
+                releaseLog
             );
 
             logger.debug("Transport copy result: {}", result);

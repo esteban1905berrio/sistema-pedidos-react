@@ -103,7 +103,16 @@
       "mcp__gdcmcp__modify_program_source",
       "Bash(git checkout:*)",
       "mcp__gdcmcp__create_function_group",
-      "mcp__gdcmcp__create_class"
+      "mcp__gdcmcp__create_class",
+      "mcp__sap-docs__search",
+      "mcp__sap-docs__sap_community_search",
+      "Bash(mvn clean test-compile:*)",
+      "Bash(mvn exec:java:*)",
+      "mcp__giralmcp__get_ddic_source",
+      "mcp__gdcmcp__get_transport_objects",
+      "mcp__gdcmcp__get_ddic_source",
+      "mcp__gdcmcp__create_transport_copy",
+      "Bash(mvn test-compile:*)"
     ],
     "deny": [],
     "ask": []

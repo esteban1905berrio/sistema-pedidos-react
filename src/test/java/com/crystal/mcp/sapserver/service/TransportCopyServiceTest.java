@@ -149,6 +149,7 @@ class TransportCopyServiceTest {
         String customPrefix = "JUNIT_TEST";
         TransportCopyRequest request = new TransportCopyRequest(
             TEST_SOURCE_TRANSPORT,
+            null,  // sourceTransports (null for single mode)
             TEST_TARGET_SYSTEM,
             customPrefix,
             false  // Don't release for testing
@@ -206,7 +207,8 @@ class TransportCopyServiceTest {
 
         // Given
         TransportCopyRequest request = new TransportCopyRequest(
-            null,  // Invalid: null source transport
+            null,  // Invalid: null source transport (single mode)
+            null,  // sourceTransports (also null)
             TEST_TARGET_SYSTEM,
             "TEST",
             true
@@ -233,6 +235,7 @@ class TransportCopyServiceTest {
         String longPrefix = "A".repeat(51);
         TransportCopyRequest request = new TransportCopyRequest(
             TEST_SOURCE_TRANSPORT,
+            null,  // sourceTransports (null for single mode)
             TEST_TARGET_SYSTEM,
             longPrefix,
             true

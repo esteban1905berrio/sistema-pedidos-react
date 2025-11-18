@@ -53,12 +53,18 @@ public class TransportCopyTools {
     /**
      * MCP Tool: create_transport_copy
      *
-     * <p>Creates a transport copy from an existing transport request. Automatically finds
-     * all related tasks (via E070 STRKORR) and copies all objects to a new transport.
+     * <p>Creates a transport copy from one or multiple existing transport requests.
+     * Automatically finds all related tasks (via E070 STRKORR) and copies all objects
+     * to a new transport.
+     *
+     * <p><b>Single Transport Mode:</b> Use {@code sourceTransport} parameter
+     * <p><b>Multiple Transport Mode:</b> Use {@code sourceTransports} list parameter.
+     * The list will be concatenated with commas and sent to SAP FM as a single string
+     * (e.g., "CADK911511,CADK911512,CADK911513").
      *
      * <p><b>Workflow:</b>
      * <ol>
-     *   <li>Query E070 for main transport and all tasks (WHERE trkorr = X OR strkorr = X)</li>
+     *   <li>Query E070 for main transport(s) and all tasks (WHERE trkorr = X OR strkorr = X)</li>
      *   <li>Extract objects from E071 and E071K</li>
      *   <li>Create new transport via TR_EXT_CREATE_REQUEST (type 'T')</li>
      *   <li>Copy objects via TR_REQUEST_CHOICE</li>
@@ -70,18 +76,21 @@ public class TransportCopyTools {
      *
      * <p><b>Examples:</b>
      * <pre>
-     * // Create transport copy with default settings (auto-release)
-     * create_transport_copy("CADK911511", null, null, null)
+     * // Single transport with default settings (auto-release)
+     * create_transport_copy("CADK911511", null, null, null, null)
      *
-     * // Create transport copy with custom prefix
-     * create_transport_copy("CADK911511", "S4D", "BACKUP", true)
+     * // Multiple transports
+     * create_transport_copy(null, ["CADK911511", "CADK911512"], "S4D", "BACKUP", true)
      *
      * // Create transport copy without releasing (keep modifiable)
-     * create_transport_copy("CADK911511", "S4D", "WIP", false)
+     * create_transport_copy("CADK911511", null, "S4D", "WIP", false)
      * </pre>
      *
-     * @param sourceTransport Source transport request number (e.g., "CADK911511", "DEVK900123").
-     *                        Tool will automatically find all related tasks.
+     * @param sourceTransport Single source transport request number (e.g., "CADK911511", "DEVK900123").
+     *                        Use this OR sourceTransports, not both.
+     * @param sourceTransports List of source transport request numbers for batch processing.
+     *                         Example: ["CADK911511", "CADK911512", "CADK911513"].
+     *                         Use this OR sourceTransport, not both.
      * @param targetSystem Target system name (optional). Must match source transport's target system.
      *                     Examples: "S4D", "S4Q", "S4P". If null, uses source transport's target.
      * @param descriptionPrefix Prefix for transport description (optional).
@@ -89,18 +98,27 @@ public class TransportCopyTools {
      *                          Max 60 chars total. Default: "COPIA"
      * @param autoRelease Auto-release transport after creation (optional).
      *                    true: Release automatically, false: Keep modifiable. Default: true
-     * @return JSON response with success status, new transport number, and message
+     * @return JSON response with success status, new transport number(s), and message
      */
     @McpTool(
-        description = "Create a transport copy from an existing transport request. " +
-                     "Copies all objects from source transport (including tasks) to a new transport. " +
+        description = "Create a transport copy from existing transport request(s). " +
+                     "Supports single or multiple source transports. " +
+                     "Copies all objects from source transport(s) (including tasks) to new transport(s). " +
                      "Workflow: QUERY_TASKS → CREATE_TRANSPORT → COPY_OBJECTS → RELEASE (optional). " +
-                     "Example: create_transport_copy('CADK911511', 'S4D', 'COPIA', true)"
+                     "Examples: " +
+                     "Single: create_transport_copy('CADK911511', null, 'S4D', 'COPIA', true). " +
+                     "Multiple: create_transport_copy(null, ['CADK911511','CADK911512'], 'S4D', 'BACKUP', true)"
     )
     public String create_transport_copy(
-        @McpToolParam(description = "Source transport request number. Example: 'CADK911511', 'DEVK900123'. " +
-                                "Tool will automatically find all related tasks.")
+        @McpToolParam(description = "Single source transport request number. Example: 'CADK911511', 'DEVK900123'. " +
+                                "Use this OR sourceTransports, not both.")
         String sourceTransport,
+
+        @McpToolParam(description = "List of source transport request numbers for batch processing. " +
+                                "Example: ['CADK911511', 'CADK911512', 'CADK911513']. " +
+                                "The list will be sent to SAP as comma-separated string. " +
+                                "Use this OR sourceTransport, not both.")
+        java.util.List<String> sourceTransports,
 
         @McpToolParam(description = "Target system name (optional). Must match source transport's target system. " +
                                 "Examples: 'S4D', 'S4Q', 'S4P'. Default: Same as source transport.")
@@ -116,24 +134,48 @@ public class TransportCopyTools {
         Boolean autoRelease
     ) {
         try {
-            logger.info("MCP Tool called: create_transport_copy(sourceTransport={}, targetSystem={}, " +
-                       "descriptionPrefix={}, autoRelease={})",
-                       sourceTransport, targetSystem, descriptionPrefix, autoRelease);
+            // Determine mode
+            boolean hasSingle = sourceTransport != null && !sourceTransport.trim().isEmpty();
+            boolean hasMultiple = sourceTransports != null && !sourceTransports.isEmpty();
 
-            // Validate source transport
-            if (sourceTransport == null || sourceTransport.trim().isEmpty()) {
-                return formatError("Source transport number is required");
+            logger.info("MCP Tool called: create_transport_copy(sourceTransport={}, sourceTransports={}, " +
+                       "targetSystem={}, descriptionPrefix={}, autoRelease={})",
+                       sourceTransport, sourceTransports, targetSystem, descriptionPrefix, autoRelease);
+
+            // Validate inputs
+            if (!hasSingle && !hasMultiple) {
+                return formatError("Either sourceTransport or sourceTransports is required");
+            }
+
+            if (hasSingle && hasMultiple) {
+                return formatError("Cannot use both sourceTransport and sourceTransports. Use one or the other.");
             }
 
             // Build request with defaults
-            TransportCopyRequest request = new TransportCopyRequest(
-                sourceTransport.toUpperCase(),
-                targetSystem != null ? targetSystem.toUpperCase() : null,
-                descriptionPrefix != null && !descriptionPrefix.trim().isEmpty()
-                    ? descriptionPrefix
-                    : "COPIA",
-                autoRelease != null ? autoRelease : true
-            );
+            TransportCopyRequest request;
+            if (hasSingle) {
+                // Single transport mode
+                request = new TransportCopyRequest(
+                    sourceTransport.toUpperCase(),
+                    null,
+                    targetSystem != null ? targetSystem.toUpperCase() : null,
+                    descriptionPrefix != null && !descriptionPrefix.trim().isEmpty()
+                        ? descriptionPrefix
+                        : "COPIA",
+                    autoRelease != null ? autoRelease : true
+                );
+            } else {
+                // Multiple transports mode
+                request = new TransportCopyRequest(
+                    null,
+                    sourceTransports,
+                    targetSystem != null ? targetSystem.toUpperCase() : null,
+                    descriptionPrefix != null && !descriptionPrefix.trim().isEmpty()
+                        ? descriptionPrefix
+                        : "COPIA",
+                    autoRelease != null ? autoRelease : true
+                );
+            }
 
             // Execute service
             TransportCopyResult result = transportCopyService.createTransportCopy(request);
@@ -156,6 +198,9 @@ public class TransportCopyTools {
     /**
      * Formats a successful result as JSON.
      *
+     * <p>Includes release log if available to provide LLM with detailed context about
+     * the transport copy/release operation.
+     *
      * @param result The transport copy result
      * @return JSON string
      */
@@ -167,6 +212,14 @@ public class TransportCopyTools {
             response.put("statusDescription", result.getStatusDescription());
             response.put("newTransportNumber", result.newTransportNumber());
             response.put("message", result.message());
+
+            // Include release log if available - provides detailed context for LLM
+            if (result.releaseLog() != null && !result.releaseLog().isEmpty()) {
+                response.put("releaseLog", result.releaseLog());
+                response.put("hasReleaseLog", true);
+            } else {
+                response.put("hasReleaseLog", false);
+            }
 
             return objectMapper.writerWithDefaultPrettyPrinter()
                 .writeValueAsString(response);

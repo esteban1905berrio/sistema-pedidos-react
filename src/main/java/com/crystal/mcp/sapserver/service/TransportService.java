@@ -1,9 +1,16 @@
 package com.crystal.mcp.sapserver.service;
 
+import com.crystal.mcp.sapserver.config.JCoConfiguration;
 import com.crystal.mcp.sapserver.model.ObjectInOpenOTResult;
 import com.crystal.mcp.sapserver.model.TableContentsResult;
 import com.crystal.mcp.sapserver.model.TransportListResult;
 import com.crystal.mcp.sapserver.model.TransportObjectsResult;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sap.conn.jco.JCoDestination;
+import com.sap.conn.jco.JCoException;
+import com.sap.conn.jco.JCoFunction;
+import com.sap.conn.jco.JCoParameterList;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,6 +52,7 @@ public class TransportService {
 
     private final RfcAdapter rfcAdapter;
     private final QueryService queryService;
+    private final JCoConfiguration jCoConfiguration;
 
     /**
      * List transport requests for a user.
@@ -172,23 +180,124 @@ public class TransportService {
         log.info("Getting objects for transport: {} (task: {})",
                 transportNumber, taskNumber != null ? taskNumber : "all");
 
-        // TODO: Full implementation requires RFC call to E070/E071 tables
-        // For now, return a placeholder structure
-        log.warn("get_transport_objects: Full implementation pending (requires RFC table access)");
+        try {
+            // Call Z_CX_GET_TRANSPORT_OBJECTS function module
+            JCoDestination destination = jCoConfiguration.jcoDestination();
+            JCoFunction function = destination.getRepository().getFunction("Z_CX_GET_TRANSPORT_OBJECTS");
 
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("transport_number", transportNumber);
-        metadata.put("status", "implementation_pending");
-        metadata.put("note", "Full implementation requires direct RFC calls to E070/E071 tables");
+            if (function == null) {
+                log.error("Function module Z_CX_GET_TRANSPORT_OBJECTS not found");
+                return TransportObjectsResult.failure(transportNumber,
+                    "Function module Z_CX_GET_TRANSPORT_OBJECTS not found in SAP system");
+            }
 
-        return new TransportObjectsResult(
-                false,
+            // Set import parameters
+            JCoParameterList importParams = function.getImportParameterList();
+            importParams.setValue("IV_TRANSPORT_NUMBER", transportNumber);
+            if (taskNumber != null && !taskNumber.trim().isEmpty()) {
+                importParams.setValue("IV_TASK_NUMBER", taskNumber);
+            }
+
+            // Execute function
+            function.execute(destination);
+
+            // Get export parameters
+            JCoParameterList exportParams = function.getExportParameterList();
+            String successFlag = exportParams.getString("EV_SUCCESS");
+            boolean success = "X".equals(successFlag) || "1".equals(successFlag);
+            String message = exportParams.getString("EV_MESSAGE");
+            String jsonString = exportParams.getString("EV_TRANSPORT_JSON");
+
+            if (!success) {
+                log.error("FM returned failure: {}", message);
+                return TransportObjectsResult.failure(transportNumber, message);
+            }
+
+            // Parse JSON response
+            log.info("JSON from FM (length: {} bytes): {}", jsonString.length(), jsonString);
+            return parseTransportObjectsJson(jsonString);
+
+        } catch (JCoException e) {
+            log.error("JCo error calling Z_CX_GET_TRANSPORT_OBJECTS: {}", e.getMessage(), e);
+            return TransportObjectsResult.failure(transportNumber,
+                "JCo error: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Error getting transport objects: {}", e.getMessage(), e);
+            return TransportObjectsResult.failure(transportNumber, e.getMessage());
+        }
+    }
+
+    /**
+     * Parse JSON response from Z_CX_GET_TRANSPORT_OBJECTS function module.
+     *
+     * @param jsonString JSON string from FM
+     * @return TransportObjectsResult parsed from JSON
+     */
+    private TransportObjectsResult parseTransportObjectsJson(String jsonString) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(jsonString);
+
+            // Extract basic fields
+            boolean success = root.get("success").asBoolean();
+            String transportNumber = root.get("transport_number").asText();
+            int totalObjects = root.get("total_objects").asInt();
+
+            // Parse metadata
+            JsonNode metadataNode = root.get("metadata");
+            Map<String, Object> metadata = new HashMap<>();
+            metadataNode.fields().forEachRemaining(entry ->
+                metadata.put(entry.getKey(), entry.getValue().asText())
+            );
+
+            // Parse objects
+            List<TransportObjectsResult.TransportObject> objects = new ArrayList<>();
+            JsonNode objectsNode = root.get("objects");
+            if (objectsNode != null && objectsNode.isArray()) {
+                for (JsonNode objNode : objectsNode) {
+                    objects.add(new TransportObjectsResult.TransportObject(
+                        objNode.get("trkorr").asText(),
+                        objNode.get("pgmid").asText(),
+                        objNode.get("object_type").asText(),
+                        objNode.get("object_name").asText(),
+                        objNode.get("lock_flag").asText(""),
+                        objNode.get("gennum").asText(""),
+                        objNode.get("tab_key").asText("")
+                    ));
+                }
+            }
+
+            // Parse tasks
+            List<TransportObjectsResult.Task> tasks = new ArrayList<>();
+            JsonNode tasksNode = root.get("tasks");
+            if (tasksNode != null && tasksNode.isArray()) {
+                for (JsonNode taskNode : tasksNode) {
+                    tasks.add(new TransportObjectsResult.Task(
+                        taskNode.get("task_number").asText(),
+                        taskNode.get("owner").asText(),
+                        taskNode.get("created_date").asText(),
+                        taskNode.get("created_time").asText(),
+                        taskNode.get("status").asText(),
+                        taskNode.get("status_desc").asText(),
+                        taskNode.get("description").asText(""),
+                        taskNode.get("object_count").asInt()
+                    ));
+                }
+            }
+
+            return new TransportObjectsResult(
+                success,
                 transportNumber,
                 metadata,
-                new ArrayList<>(),
-                0,
-                new ArrayList<>()
-        );
+                objects,
+                totalObjects,
+                tasks
+            );
+
+        } catch (Exception e) {
+            log.error("Error parsing JSON from FM: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to parse JSON response: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -331,215 +440,288 @@ public class TransportService {
             throw new IllegalArgumentException("Object name cannot be empty");
         }
 
-        String searchPattern = "%" + objectName.trim() + "%";
         log.info("Checking if object is in open transport: {} (type: {})",
                 objectName, objectType != null ? objectType : "all");
 
         try {
-            // Step 1: Query E071 table for objects matching name pattern
-            // Note: We search by OBJ_NAME only (not by OBJECT type) because:
-            // - Classes can have related objects: METH (methods), CLSD (definition), CPUB (public section)
-            // - The class name appears in all related object names (e.g., ZCLMMI1229_SINCRONIZA_INV_MAWMPROCESAR_INFORMACION)
-            // - Filtering by OBJECT would exclude methods and other class components
-            String whereClause = "OBJ_NAME LIKE '" + searchPattern + "'";
+            // Call Z_CX_GET_OBJECT_IN_OPEN_OT function module
+            JCoDestination destination = jCoConfiguration.jcoDestination();
+            JCoFunction function = destination.getRepository().getFunction("Z_CX_GET_OBJECT_IN_OPEN_OT");
 
-            // objectType parameter is ignored intentionally
-            // We return ALL related objects (methods, definitions, etc.)
+            if (function == null) {
+                log.error("Function module Z_CX_GET_OBJECT_IN_OPEN_OT not found");
+                return ObjectInOpenOTResult.failure(objectName,
+                    "Function module Z_CX_GET_OBJECT_IN_OPEN_OT not found in SAP system");
+            }
+
+            // Set import parameters
+            JCoParameterList importParams = function.getImportParameterList();
+            importParams.setValue("IV_OBJECT_NAME", objectName);
             if (objectType != null && !objectType.trim().isEmpty()) {
-                log.debug("objectType parameter '{}' is ignored - searching all object types", objectType);
+                importParams.setValue("IV_OBJECT_TYPE", objectType);
             }
 
-            log.debug("E071 WHERE clause: {}", whereClause);
+            // Execute function
+            function.execute(destination);
 
-            TableContentsResult e071Result = queryService.getTableContents(
-                    "E071",
-                    whereClause,
-                    1000,  // Max 1000 results
-                    List.of("TRKORR", "OBJ_NAME", "OBJECT", "PGMID", "LOCKFLAG")
-            );
+            // Get export parameters
+            JCoParameterList exportParams = function.getExportParameterList();
+            String successFlag = exportParams.getString("EV_SUCCESS");
+            boolean success = "X".equals(successFlag);
+            String message = exportParams.getString("EV_MESSAGE");
+            String jsonString = exportParams.getString("EV_RESULTS_JSON");
 
-            if (e071Result.rowCount() == 0) {
-                log.info("No objects found in E071 matching: {}", searchPattern);
-                return ObjectInOpenOTResult.notFound(objectName, searchPattern);
+            if (!success) {
+                log.error("FM returned failure: {}", message);
+                return ObjectInOpenOTResult.failure(objectName, message);
             }
 
-            log.debug("Found {} objects in E071", e071Result.rowCount());
+            // Parse JSON response
+            log.info("JSON from FM (length: {} bytes)", jsonString.length());
+            log.debug("JSON content: {}", jsonString);
 
-            // Step 2: Group by unique transport numbers and query E070 for metadata
-            Map<String, ObjectInOpenOTResult.TransportInfo> transportMap = new HashMap<>();
+            return parseObjectInOpenOTJson(jsonString);
 
-            for (Map<String, String> row : e071Result.rows()) {
-                String trkorr = row.get("TRKORR");
-                String objName = row.get("OBJ_NAME");
-                String object = row.get("OBJECT");
-                String pgmid = row.get("PGMID");
-                String lockFlag = row.get("LOCKFLAG");
+        } catch (JCoException e) {
+            log.error("JCo error calling Z_CX_GET_OBJECT_IN_OPEN_OT: {}", e.getMessage(), e);
+            return ObjectInOpenOTResult.failure(objectName,
+                "JCo error: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Error getting object in open transport: {}", e.getMessage(), e);
+            return ObjectInOpenOTResult.failure(objectName, e.getMessage());
+        }
+    }
 
-                // Skip if already processed this transport
-                if (transportMap.containsKey(trkorr)) {
-                    continue;
-                }
+    /**
+     * Parse JSON response from Z_CX_GET_OBJECT_IN_OPEN_OT function module.
+     *
+     * @param jsonString JSON string from FM
+     * @return ObjectInOpenOTResult parsed from JSON
+     */
+    private ObjectInOpenOTResult parseObjectInOpenOTJson(String jsonString) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(jsonString);
 
-                // Query E070 for transport metadata
-                TableContentsResult e070Result = queryService.getTableContents(
-                        "E070",
-                        "TRKORR = '" + trkorr + "'",
-                        1,
-                        List.of("TRFUNCTION", "TRSTATUS", "AS4USER", "AS4DATE", "AS4TIME")
-                );
+            // Extract basic fields
+            boolean success = root.get("success").asBoolean();
+            String objectName = root.get("objectName").asText();
+            String searchPattern = root.get("searchPattern").asText();
+            int totalTransports = root.get("totalTransports").asInt();
 
-                if (e070Result.rowCount() == 0) {
-                    log.warn("Transport {} found in E071 but not in E070", trkorr);
-                    continue;
-                }
+            // Parse transports array
+            List<ObjectInOpenOTResult.TransportInfo> transports = new ArrayList<>();
+            JsonNode transportsNode = root.get("transports");
 
-                Map<String, String> e070Row = e070Result.rows().get(0);
-                String trFunction = e070Row.get("TRFUNCTION");
-                String trStatus = e070Row.get("TRSTATUS");
-                String owner = e070Row.get("AS4USER");
-                String date = e070Row.get("AS4DATE");
-                String time = e070Row.get("AS4TIME");
-
-                // Step 3a: If this is a task (TRFUNCTION = 'S'), get parent transport info
-                ObjectInOpenOTResult.ParentTransportInfo parentTransport = null;
-                String effectiveStatus = trStatus;
-
-                if ("S".equals(trFunction)) {
-                    // This is a task, get parent transport
-                    String strkorr = e070Row.get("STRKORR");
-                    if (strkorr != null && !strkorr.trim().isEmpty()) {
-                        log.debug("Task {} belongs to parent transport {}", trkorr, strkorr);
-
-                        // Query E070 for parent transport
-                        TableContentsResult parentResult = queryService.getTableContents(
-                                "E070",
-                                "TRKORR = '" + strkorr + "'",
-                                1,
-                                List.of("TRFUNCTION", "TRSTATUS", "AS4USER", "AS4TEXT")
+            if (transportsNode != null && transportsNode.isArray()) {
+                for (JsonNode transportNode : transportsNode) {
+                    // Parse objectInfo
+                    JsonNode objInfoNode = transportNode.get("objectInfo");
+                    ObjectInOpenOTResult.ObjectInfo objectInfo = null;
+                    if (objInfoNode != null) {
+                        objectInfo = new ObjectInOpenOTResult.ObjectInfo(
+                            objInfoNode.get("objName").asText(),
+                            objInfoNode.get("objectType").asText(),
+                            objInfoNode.get("pgmid").asText()
                         );
-
-                        if (parentResult.rowCount() > 0) {
-                            Map<String, String> parentRow = parentResult.rows().get(0);
-                            String parentTrFunction = parentRow.get("TRFUNCTION");
-                            String parentTrStatus = parentRow.get("TRSTATUS");
-                            String parentOwner = parentRow.get("AS4USER");
-                            String parentDesc = parentRow.get("AS4TEXT");
-
-                            // Map parent transport type
-                            Map<String, String> typeMap = Map.of(
-                                    "K", "Workbench",
-                                    "S", "Task",
-                                    "T", "Transport of Copies",
-                                    "W", "Workbench Request",
-                                    "C", "Customizing"
-                            );
-
-                            // Map parent status
-                            Map<String, String> statusMap = Map.of(
-                                    "D", "Modifiable",
-                                    "L", "Protected",
-                                    "R", "Released",
-                                    "N", "Modifiable (Protected)",
-                                    "O", "Released (With Import Protection)"
-                            );
-
-                            parentTransport = new ObjectInOpenOTResult.ParentTransportInfo(
-                                    strkorr,
-                                    parentTrFunction,
-                                    typeMap.getOrDefault(parentTrFunction, parentTrFunction),
-                                    parentTrStatus,
-                                    statusMap.getOrDefault(parentTrStatus, parentTrStatus),
-                                    parentOwner,
-                                    parentDesc
-                            );
-
-                            // Use parent status for filtering
-                            effectiveStatus = parentTrStatus;
-                            log.debug("Parent transport {} status: {}", strkorr, parentTrStatus);
-                        }
                     }
-                }
 
-                // Step 3b: Filter - only keep open transports (D or L)
-                // For tasks, check parent transport status
-                if (!"D".equals(effectiveStatus) && !"L".equals(effectiveStatus)) {
-                    log.debug("Skipping transport {} (effective status: {})", trkorr, effectiveStatus);
-                    continue;
-                }
+                    // Parse parentTransport (can be null)
+                    JsonNode parentNode = transportNode.get("parentTransport");
+                    ObjectInOpenOTResult.ParentTransportInfo parentTransport = null;
+                    if (parentNode != null && !parentNode.isNull()) {
+                        parentTransport = new ObjectInOpenOTResult.ParentTransportInfo(
+                            parentNode.get("transportNumber").asText(),
+                            parentNode.get("transportType").asText(),
+                            parentNode.get("transportTypeDesc").asText(),
+                            parentNode.get("status").asText(),
+                            parentNode.get("statusDesc").asText(),
+                            parentNode.get("owner").asText(),
+                            parentNode.get("description").asText()
+                        );
+                    }
 
-                // Format date: YYYYMMDD → YYYY-MM-DD
-                String formattedDate = date;
-                if (date != null && date.length() == 8) {
-                    formattedDate = date.substring(0, 4) + "-" +
-                            date.substring(4, 6) + "-" +
-                            date.substring(6, 8);
-                }
-
-                // Format time: HHMMSS → HH:MM:SS
-                String formattedTime = time;
-                if (time != null && time.length() == 6) {
-                    formattedTime = time.substring(0, 2) + ":" +
-                            time.substring(2, 4) + ":" +
-                            time.substring(4, 6);
-                }
-
-                // Map transport type
-                Map<String, String> typeMap = Map.of(
-                        "K", "Workbench",
-                        "S", "Task",
-                        "T", "Transport of Copies",
-                        "W", "Workbench Request",
-                        "C", "Customizing"
-                );
-
-                // Map status
-                Map<String, String> statusMap = Map.of(
-                        "D", "Modifiable",
-                        "L", "Protected",
-                        "R", "Released",
-                        "N", "Modifiable (Protected)",
-                        "O", "Released (With Import Protection)"
-                );
-
-                // Build TransportInfo
-                ObjectInOpenOTResult.ObjectInfo objectInfo =
-                        new ObjectInOpenOTResult.ObjectInfo(objName, object, pgmid);
-
-                ObjectInOpenOTResult.TransportInfo transportInfo =
+                    // Build TransportInfo
+                    ObjectInOpenOTResult.TransportInfo transportInfo =
                         new ObjectInOpenOTResult.TransportInfo(
-                                trkorr,
-                                trFunction,
-                                typeMap.getOrDefault(trFunction, trFunction),
-                                trStatus,
-                                statusMap.getOrDefault(trStatus, trStatus),
-                                owner,
-                                formattedDate,
-                                formattedTime,
-                                "X".equals(lockFlag),
-                                objectInfo,
-                                parentTransport
+                            transportNode.get("transportNumber").asText(),
+                            transportNode.get("transportType").asText(),
+                            transportNode.get("transportTypeDesc").asText(),
+                            transportNode.get("status").asText(),
+                            transportNode.get("statusDesc").asText(),
+                            transportNode.get("owner").asText(),
+                            transportNode.get("createdDate").asText(),
+                            transportNode.get("createdTime").asText(),
+                            transportNode.get("isLocked").asBoolean(),
+                            objectInfo,
+                            parentTransport
                         );
 
-                transportMap.put(trkorr, transportInfo);
+                    transports.add(transportInfo);
+                }
             }
-
-            // Step 4: Build final result
-            List<ObjectInOpenOTResult.TransportInfo> transports =
-                    new ArrayList<>(transportMap.values());
-
-            log.info("Found {} open transports for object: {}", transports.size(), objectName);
 
             return new ObjectInOpenOTResult(
-                    true,
-                    objectName,
-                    searchPattern,
-                    transports,
-                    transports.size()
+                success,
+                objectName,
+                searchPattern,
+                transports,
+                totalTransports
             );
 
         } catch (Exception e) {
-            log.error("Error checking object in open transport: {}", e.getMessage(), e);
-            return ObjectInOpenOTResult.failure(objectName, e.getMessage());
+            log.error("Error parsing JSON from FM: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to parse JSON response: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Get objects from E071 table for a given transport or task.
+     *
+     * @param trkorr Transport or task number
+     * @return List of transport objects
+     */
+    private List<TransportObjectsResult.TransportObject> getObjectsFromE071(String trkorr) {
+        log.debug("Querying E071 for objects in transport: {}", trkorr);
+
+        TableContentsResult e071Result = queryService.getTableContents(
+                "E071",
+                "TRKORR = '" + trkorr + "'",
+                1000,
+                List.of("TRKORR", "PGMID", "OBJECT", "OBJ_NAME", "LOCKFLAG", "GENNUM", "TABKEY")
+        );
+
+        List<TransportObjectsResult.TransportObject> objects = new ArrayList<>();
+
+        for (Map<String, String> row : e071Result.rows()) {
+            String objectTrkorr = row.get("TRKORR");
+            String pgmid = row.get("PGMID");
+            String objectType = row.get("OBJECT");
+            String objectName = row.get("OBJ_NAME");
+            String lockFlag = row.get("LOCKFLAG");
+            String gennum = row.get("GENNUM");
+            String tabKey = row.get("TABKEY");
+
+            objects.add(new TransportObjectsResult.TransportObject(
+                    objectTrkorr,
+                    pgmid != null ? pgmid : "",
+                    objectType != null ? objectType : "",
+                    objectName != null ? objectName : "",
+                    lockFlag != null ? lockFlag : "",
+                    gennum != null ? gennum : "",
+                    tabKey != null ? tabKey : ""
+            ));
+        }
+
+        log.debug("Found {} objects in E071 for transport {}", objects.size(), trkorr);
+        return objects;
+    }
+
+    /**
+     * Build transport metadata map from E070 fields.
+     *
+     * @param transportNumber Transport number
+     * @param trFunction      TRFUNCTION (K, S, T, etc.)
+     * @param trStatus        TRSTATUS (D, R, L, etc.)
+     * @param owner           AS4USER
+     * @param date            AS4DATE (YYYYMMDD)
+     * @param time            AS4TIME (HHMMSS)
+     * @param targetSystem    TARSYSTEM
+     * @param category        KORRDEV
+     * @param parentTransport STRKORR
+     * @param description     AS4TEXT
+     * @return Metadata map
+     */
+    private Map<String, Object> buildTransportMetadata(
+            String transportNumber,
+            String trFunction,
+            String trStatus,
+            String owner,
+            String date,
+            String time,
+            String targetSystem,
+            String category,
+            String parentTransport,
+            String description
+    ) {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("transport_number", transportNumber);
+        metadata.put("transport_type", trFunction != null ? trFunction : "");
+        metadata.put("transport_type_desc", mapTransportType(trFunction));
+        metadata.put("status", trStatus != null ? trStatus : "");
+        metadata.put("status_desc", mapTransportStatus(trStatus));
+        metadata.put("owner", owner != null ? owner : "");
+        metadata.put("created_date", formatDate(date));
+        metadata.put("created_time", formatTime(time));
+        metadata.put("target_system", targetSystem != null ? targetSystem : "");
+        metadata.put("category", category != null ? category : "");
+        metadata.put("description", description != null ? description : "");
+        metadata.put("parent_transport", parentTransport != null ? parentTransport : "");
+
+        return metadata;
+    }
+
+    /**
+     * Map transport type code to description.
+     *
+     * @param trFunction TRFUNCTION code
+     * @return Human-readable description
+     */
+    private String mapTransportType(String trFunction) {
+        if (trFunction == null) return "";
+
+        return switch (trFunction) {
+            case "K" -> "Workbench";
+            case "S" -> "Task";
+            case "T" -> "Transport of Copies";
+            case "W" -> "Workbench Request";
+            case "C" -> "Customizing";
+            default -> trFunction;
+        };
+    }
+
+    /**
+     * Map transport status code to description.
+     *
+     * @param trStatus TRSTATUS code
+     * @return Human-readable description
+     */
+    private String mapTransportStatus(String trStatus) {
+        if (trStatus == null) return "";
+
+        return switch (trStatus) {
+            case "D" -> "Modifiable";
+            case "L" -> "Protected";
+            case "R" -> "Released";
+            case "N" -> "Modifiable (Protected)";
+            case "O" -> "Released (With Import Protection)";
+            default -> trStatus;
+        };
+    }
+
+    /**
+     * Format date from YYYYMMDD to YYYY-MM-DD.
+     *
+     * @param date Date string in YYYYMMDD format
+     * @return Formatted date or empty string
+     */
+    private String formatDate(String date) {
+        if (date == null || date.length() != 8) {
+            return "";
+        }
+        return date.substring(0, 4) + "-" + date.substring(4, 6) + "-" + date.substring(6, 8);
+    }
+
+    /**
+     * Format time from HHMMSS to HH:MM:SS.
+     *
+     * @param time Time string in HHMMSS format
+     * @return Formatted time or empty string
+     */
+    private String formatTime(String time) {
+        if (time == null || time.length() != 6) {
+            return "";
+        }
+        return time.substring(0, 2) + ":" + time.substring(2, 4) + ":" + time.substring(4, 6);
     }
 }
