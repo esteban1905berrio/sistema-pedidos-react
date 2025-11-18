@@ -41,24 +41,17 @@ sap:
 logging:
   pattern:
     console: ""  # Completely disable console pattern
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
   level:
-    root: OFF    # Disable all console logging
-    com.crystal.mcp.sapserver: OFF
-    com.sap.conn.jco: OFF
-    org.springframework.ai.mcp: OFF
-    org.springframework: OFF
+    root: INFO    # Enable root logging for file
+    com.crystal.mcp.sapserver: INFO  # Enable app logging
+    com.sap.conn.jco: WARN
+    org.springframework.ai.mcp: WARN
+    org.springframework: WARN
   file:
     name: logs/sap-mcp-server.log
     max-size: 10MB
     max-history: 7
-  loggers:
-    # File logging only (no console output)
-    com.crystal.mcp.sapserver:
-      level: DEBUG
-    com.sap.conn.jco:
-      level: INFO
-    org.springframework.ai.mcp:
-      level: DEBUG
 
 # Actuator Configuration (Health Checks)
 management:

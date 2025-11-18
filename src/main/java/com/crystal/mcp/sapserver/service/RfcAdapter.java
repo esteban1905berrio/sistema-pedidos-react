@@ -101,13 +101,16 @@ public class RfcAdapter {
             );
         }
 
-        log.debug("Beginning stateful context (thread: {})",
-                Thread.currentThread().getName());
+        log.info("🔵 BEGIN STATEFUL CONTEXT | Thread: {} | Destination: {} | Instance: {}",
+                Thread.currentThread().getName(),
+                destination.getDestinationName(),
+                System.identityHashCode(destination));
 
         JCoContext.begin(destination);
         statefulContextActive.set(true);
 
-        log.debug("Stateful context started successfully");
+        log.info("✅ Stateful context STARTED | JCoContext active: {}",
+                JCoContext.isStateful(destination));
     }
 
     /**
@@ -132,19 +135,21 @@ public class RfcAdapter {
      */
     public void endStatefulContext() throws JCoException {
         if (!statefulContextActive.get()) {
-            log.warn("Attempted to end stateful context when none is active " +
+            log.warn("⚠️ Attempted to end stateful context when none is active " +
                     "(thread: {}). This is safe but indicates a logic issue.",
                     Thread.currentThread().getName());
             return; // Graceful degradation
         }
 
         try {
-            log.debug("Ending stateful context (thread: {})",
-                    Thread.currentThread().getName());
+            log.info("🔴 END STATEFUL CONTEXT | Thread: {} | Destination: {} | Instance: {}",
+                    Thread.currentThread().getName(),
+                    destination.getDestinationName(),
+                    System.identityHashCode(destination));
 
             JCoContext.end(destination);
 
-            log.debug("Stateful context ended successfully");
+            log.info("✅ Stateful context ENDED successfully");
 
         } finally {
             // SIEMPRE limpiar flag, incluso si end() falla
@@ -193,7 +198,11 @@ public class RfcAdapter {
         String fullUri = buildUri(uri, params);
         Map<String, String> requestHeaders = buildHeaders(headers, contentType);
 
-        log.debug("RFC Request: {} {}", method, fullUri);
+        boolean isStateful = JCoContext.isStateful(destination);
+        log.info("📡 RFC REQUEST | Method: {} | URI: {} | Stateful: {} | Thread: {} | Dest Instance: {}",
+                method, fullUri, isStateful,
+                Thread.currentThread().getName(),
+                System.identityHashCode(destination));
         log.debug("Headers: {}", requestHeaders);
 
         try {
@@ -236,12 +245,18 @@ public class RfcAdapter {
             function.execute(destination);
             long duration = System.currentTimeMillis() - startTime;
 
-            log.debug("RFC call completed in {} ms", duration);
+            log.info("✅ RFC RESPONSE | Duration: {} ms | Stateful after call: {}",
+                    duration, JCoContext.isStateful(destination));
 
             // Parse RESPONSE structure
             JCoStructure response = function.getExportParameterList().getStructure("RESPONSE");
 
-            return parseResponse(response);
+            RfcResponse result = parseResponse(response);
+
+            log.info("📥 Response Status: {} | Body length: {} bytes",
+                    result.statusCode(), result.text().length());
+
+            return result;
 
         } catch (JCoException e) {
             log.error("RFC call failed: {}", e.getMessage(), e);

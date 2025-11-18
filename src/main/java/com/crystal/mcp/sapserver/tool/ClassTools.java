@@ -221,18 +221,19 @@ public class ClassTools {
      * @param newSource   new source code to set (complete replacement)
      * @param includeType include type to modify (main, implementations, testclasses, macros)
      * @param transport   optional transport number (if null, uses system-assigned transport from LOCK)
-     * @return ProgramModifyResult with detailed workflow execution status
+     * @return ClassModifyResult with detailed workflow execution status
      */
     @McpTool(
             description = "Modify ABAP class source code with complete workflow (LOCK → MODIFY → UNLOCK). " +
                     "Workflow-based tool that handles locking, modification, and unlocking automatically. " +
                     "Supports modification of different include types (main, implementations, testclasses, macros). " +
+                    "Include type validation: only accepts main, implementations, testclasses, or macros. " +
                     "Returns transport number from lock operation if not provided. " +
                     "Fails with error if object is already locked by another user. " +
                     "Always unlocks object even on failure (prevents orphaned locks). " +
                     "Example: modify_class('ZCL_TEST', new_code, 'main', null)"
     )
-    public com.crystal.mcp.sapserver.model.ProgramModifyResult modify_class(
+    public com.crystal.mcp.sapserver.model.ClassModifyResult modify_class(
             @McpToolParam(
                     description = "Name of the class to modify. " +
                             "Examples: 'ZCL_TEST', 'ZCL_INVOICE_PROCESSOR', 'YCL_UTILS'",
@@ -266,9 +267,7 @@ public class ClassTools {
             )
             String transport
     ) {
-        // Apply default for includeType
-        String actualIncludeType = (includeType != null && !includeType.isEmpty()) ? includeType : "main";
-
-        return classService.modifyClassSource(className, newSource, actualIncludeType, transport);
+        // modifyClass now handles includeType normalization and validation internally
+        return classService.modifyClass(className, newSource, includeType, transport);
     }
 }
