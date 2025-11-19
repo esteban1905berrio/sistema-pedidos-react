@@ -1,6 +1,8 @@
 package com.crystal.mcp.sapserver.tool;
 
 import com.crystal.mcp.sapserver.model.ObjectInOpenOTResult;
+import com.crystal.mcp.sapserver.model.TransportInfoListResult;
+import com.crystal.mcp.sapserver.model.TransportInfoResult;
 import com.crystal.mcp.sapserver.model.TransportListResult;
 import com.crystal.mcp.sapserver.model.TransportObjectsResult;
 import com.crystal.mcp.sapserver.service.TransportService;
@@ -19,11 +21,14 @@ import org.springframework.stereotype.Component;
  *
  * Progressive Discovery Workflow:
  * Stage 1: list_user_transports → Find available transports
- * Stage 2: get_transport_objects → Get detailed object list
+ * Stage 2: get_transport_info → Get metadata (lightweight)
+ * Stage 3: get_transport_objects → Get detailed object list (if needed)
  *
- * Phase 1 Tools:
+ * Available Tools:
  * - list_user_transports: List transport requests for a user
- * - get_transport_objects: Get objects from a transport (placeholder)
+ * - get_transport_info: Get transport metadata without objects (NEW)
+ * - get_transport_objects: Get objects from a transport
+ * - get_object_in_open_ot: Check if object is in open transport
  *
  * Future Tools:
  * - create_transport: Create new transport request
@@ -148,6 +153,72 @@ public class TransportTools {
             String taskNumber
     ) {
         return transportService.getTransportObjects(transportNumber, taskNumber);
+    }
+
+    /**
+     * MCP Tool: Get transport request metadata without loading objects.
+     *
+     * This tool retrieves complete metadata for a transport request
+     * from E070 table without loading the full object list. Use this
+     * when you need transport information but don't need to see all objects.
+     *
+     * Use Cases:
+     * - "Who owns transport DEVK900123?" → Returns owner, status
+     * - "Is transport CADK911088 released?" → Returns status
+     * - "When was transport created?" → Returns dates
+     * - "What's the description of this transport?" → Returns description
+     * - Quick transport lookups before detailed queries
+     *
+     * Token Optimization:
+     * - Lightweight: ~500-800 tokens (much cheaper than get_transport_objects)
+     * - Progressive Discovery: Use this first, then get_transport_objects if needed
+     * - Ideal for quick metadata checks
+     *
+     * Workflow Example:
+     * 1. User: "Is transport DEVK900123 ready to release?"
+     * 2. Claude: get_transport_info("DEVK900123") → Checks status
+     * 3. Result: status="D" (Modifiable), has_objects=true, has_tasks=true
+     * 4. Claude: "Transport is modifiable, not yet released"
+     *
+     * Progressive Discovery Integration:
+     * - Stage 1: list_user_transports → Find transports
+     * - Stage 2: get_transport_info → Get metadata
+     * - Stage 3: get_transport_objects → Get full object list (if needed)
+     *
+     * Returned Fields:
+     * - transport_number: OT number
+     * - transport_type: K (Workbench), S (Task), T (Transport of Copies)
+     * - status: D (Modifiable), R (Released), L (Protected)
+     * - owner: User who created the transport
+     * - description: Transport description text
+     * - created_date: YYYY-MM-DD format
+     * - created_time: HH:MM:SS format
+     * - target_system: Destination system (e.g., S4Q, S4P)
+     * - parent_transport: Parent OT number (for tasks)
+     * - has_objects: Boolean indicating if transport contains objects
+     * - has_tasks: Boolean indicating if transport has tasks
+     *
+     * @param transportNumber Transport request number (main OT or task)
+     *                        Examples: "CADK911088", "DEVK900123"
+     * @return TransportInfoResult with complete metadata
+     */
+    @McpTool(
+            description = "Get transport request metadata without loading objects. " +
+                    "Retrieves complete metadata from E070 table: owner, status, dates, description. " +
+                    "Lightweight alternative to get_transport_objects. " +
+                    "Token cost: ~500-800 tokens (much cheaper than full object list). " +
+                    "Use when you need metadata only. For full object details, use get_transport_objects. " +
+                    "Progressive Discovery: list_user_transports → get_transport_info → get_transport_objects"
+    )
+    public TransportInfoListResult get_transport_info(
+            @McpToolParam(
+                    description = "Transport request number (main OT or task). " +
+                            "Examples: 'CADK911088', 'DEVK900123', 'S4DK932806'",
+                    required = true
+            )
+            String transportNumber
+    ) {
+        return transportService.getTransportInfo(transportNumber);
     }
 
     /**
