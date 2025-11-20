@@ -112,7 +112,10 @@
       "mcp__gdcmcp__get_transport_objects",
       "mcp__gdcmcp__get_ddic_source",
       "mcp__gdcmcp__create_transport_copy",
-      "Bash(mvn test-compile:*)"
+      "Bash(mvn test-compile:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

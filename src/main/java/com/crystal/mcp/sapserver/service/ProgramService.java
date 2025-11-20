@@ -51,6 +51,7 @@ public class ProgramService {
 
     private final RfcAdapter rfcAdapter;
     private final StatefulModificationService statefulModificationService;
+    private final ActivationService activationService;
 
     /**
      * Get source code for an ABAP program.
@@ -411,12 +412,46 @@ public class ProgramService {
             }
         }
 
+        // ========================================
+        // Step 5: Check syntax and activate (outside stateful context)
+        // ========================================
+        if (result.isSuccess()) {
+            log.info("Step 5/5: Checking syntax and activating {} '{}'", objectType, objectName);
+            try {
+                var activationResult = activationService.checkAndActivate(sourceUri);
+                result.setActivated(activationResult.success());
+
+                if (activationResult.success()) {
+                    log.info("✓ {} activated successfully", objectType);
+                    result.addMessage("info", objectType + " activated successfully", "activate");
+                } else {
+                    log.warn("⚠️  Activation failed with {} errors", activationResult.errors().size());
+                    result.addMessage("warning",
+                            String.format("Activation failed: %s", activationResult.message()),
+                            "activate");
+
+                    // Add syntax errors as messages
+                    for (var error : activationResult.errors()) {
+                        result.addMessage("error",
+                                String.format("Line %d: %s", error.line(), error.shortText()),
+                                "syntax");
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error during activation", e);
+                result.setActivated(false);
+                result.addMessage("error",
+                        "Activation failed: " + e.getMessage(),
+                        "activate");
+            }
+        }
+
         // Final result
-        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked());
+        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked() && result.isActivated());
 
         if (result.isSuccess()) {
-            log.info("✓✓✓ Modification workflow completed successfully for {} '{}'",
-                    objectType, objectName);
+            log.info("✓✓✓ Modification workflow completed successfully for {} '{}' (activated: {})",
+                    objectType, objectName, result.isActivated());
         } else {
             log.error("✗✗✗ Modification workflow failed for {} '{}'",
                     objectType, objectName);
@@ -586,13 +621,48 @@ public class ProgramService {
                 }
         );
 
+        // ========================================
+        // Step 5: Check syntax and activate (outside stateful context)
+        // ========================================
+        if (workflowResult.isSuccess()) {
+            log.info("Step 5/5: Checking syntax and activating function module '{}'", functionModuleName);
+            try {
+                var activationResult = activationService.checkAndActivate(fmSourceUri);
+                workflowResult.setActivated(activationResult.success());
+
+                if (activationResult.success()) {
+                    log.info("✓ Function module activated successfully");
+                    workflowResult.addMessage("info", "Function module activated successfully", "activate");
+                } else {
+                    log.warn("⚠️  Activation failed with {} errors", activationResult.errors().size());
+                    workflowResult.addMessage("warning",
+                            String.format("Activation failed: %s", activationResult.message()),
+                            "activate");
+
+                    // Add syntax errors as messages
+                    for (var error : activationResult.errors()) {
+                        workflowResult.addMessage("error",
+                                String.format("Line %d: %s", error.line(), error.shortText()),
+                                "syntax");
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error during activation", e);
+                workflowResult.setActivated(false);
+                workflowResult.addMessage("error",
+                        "Activation failed: " + e.getMessage(),
+                        "activate");
+            }
+        }
+
         // Set overall success based on workflow steps
         workflowResult.setSuccess(workflowResult.isLocked()
                 && workflowResult.isModified()
-                && workflowResult.isUnlocked());
+                && workflowResult.isUnlocked()
+                && workflowResult.isActivated());
 
-        log.info("🎯 Function module modification workflow completed: {} (success: {})",
-                functionModuleName, workflowResult.isSuccess());
+        log.info("🎯 Function module modification workflow completed: {} (success: {}, activated: {})",
+                functionModuleName, workflowResult.isSuccess(), workflowResult.isActivated());
 
         return workflowResult;
     }

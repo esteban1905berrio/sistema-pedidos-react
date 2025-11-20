@@ -46,15 +46,28 @@ public class SyntaxCheckService {
     /**
      * Check syntax of an ABAP object.
      *
+     * IMPORTANT: By default, syntax check is performed on the INACTIVE version
+     * (version in development), not the ACTIVE version. This is because:
+     * - Active versions are already validated and activated
+     * - Syntax errors typically only exist in inactive/modified code
+     * - Checking inactive version validates code before activation
+     *
+     * Only check ACTIVE version when explicitly requested (rare cases).
+     *
      * @param objectUri ADT URI of the object (e.g., "/sap/bc/adt/oo/classes/zcl_test/source/main")
-     * @param version Version to check: "active" or "inactive" (default: "inactive")
+     * @param version Version to check: "inactive" (default) or "active" (explicit only)
      * @return SyntaxCheckResult with messages and status
      * @throws RuntimeException if check fails
      */
     public SyntaxCheckResult checkSyntax(String objectUri, String version) {
-        logger.info("Checking syntax for object: {} (version: {})", objectUri, version);
+        // ALWAYS default to "inactive" unless explicitly specified as "active"
+        String effectiveVersion = "inactive";
+        if (version != null && "active".equalsIgnoreCase(version)) {
+            effectiveVersion = "active";
+            logger.warn("Checking ACTIVE version - this is unusual. Typically check INACTIVE version.");
+        }
 
-        String effectiveVersion = (version == null || version.isEmpty()) ? "inactive" : version;
+        logger.info("Checking syntax for object: {} (version: {})", objectUri, effectiveVersion);
 
         try {
             // Build request XML

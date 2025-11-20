@@ -253,17 +253,28 @@ public class ObjectService {
         // Set default version
         String actualVersion = (version != null && !version.isEmpty()) ? version : "active";
 
+        // IMPORTANT: Always append /source/main if not present
+        // This ensures we get source code (text/plain) instead of metadata XML
+        String sourceUri = objectUri;
+        if (!sourceUri.contains("/source/main")) {
+            // Remove trailing slash if present
+            if (sourceUri.endsWith("/")) {
+                sourceUri = sourceUri.substring(0, sourceUri.length() - 1);
+            }
+            sourceUri = sourceUri + "/source/main";
+        }
+
         // Query parameters
         Map<String, String> params = new HashMap<>();
         params.put("version", actualVersion);
 
         log.info("Fetching source for object URI: {} (version: {})",
-                objectUri, actualVersion);
+                sourceUri, actualVersion);
 
         try {
-            // Execute RFC request
+            // Execute RFC request using sourceUri (with /source/main)
             RfcAdapter.RfcResponse response = rfcAdapter.request(
-                    objectUri,
+                    sourceUri,
                     "GET",
                     null,
                     params,
@@ -278,13 +289,13 @@ public class ObjectService {
 
                 // Build metadata
                 Map<String, Object> metadata = new HashMap<>();
-                metadata.put("uri", objectUri);
+                metadata.put("uri", sourceUri);  // Use sourceUri (with /source/main)
                 metadata.put("responseHeaders", response.headers());
                 metadata.put("sourceLength", response.text().length());
 
                 return new ObjectSourceResult(
                         response.text(),
-                        objectUri,
+                        sourceUri,  // Use sourceUri (with /source/main)
                         actualVersion,
                         metadata
                 );
