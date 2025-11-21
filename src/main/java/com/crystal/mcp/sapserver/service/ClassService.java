@@ -46,6 +46,7 @@ public class ClassService {
 
     private final RfcAdapter rfcAdapter;
     private final StatefulModificationService statefulModificationService;
+    private final ActivationService activationService;
     private final JCoDestination destination;
 
     /**
@@ -410,8 +411,42 @@ public class ClassService {
                 && workflowResult.isModified()
                 && workflowResult.isUnlocked());
 
-        log.info("🎯 Class modification workflow completed: {} (success: {})",
-                className, workflowResult.isSuccess());
+        // ========================================
+        // Step 4: Check syntax and activate (outside stateful context)
+        // ========================================
+        if (workflowResult.isSuccess()) {
+            log.info("Step 4/4: Checking syntax and activating class '{}'", className);
+            try {
+                var activationResult = activationService.checkAndActivate(sourceUri);
+                workflowResult.setActivated(activationResult.success());
+
+                if (activationResult.success()) {
+                    log.info("✓ Class activated successfully");
+                    workflowResult.addMessage("info", "Class activated successfully", "activate");
+                } else {
+                    log.warn("⚠️  Activation failed with {} errors", activationResult.errors().size());
+                    workflowResult.addMessage("warning",
+                            String.format("Activation failed: %s", activationResult.message()),
+                            "activate");
+
+                    // Add syntax errors as messages
+                    for (var error : activationResult.errors()) {
+                        workflowResult.addMessage("error",
+                                String.format("Line %d: %s", error.line(), error.shortText()),
+                                "syntax");
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error during activation", e);
+                workflowResult.setActivated(false);
+                workflowResult.addMessage("error",
+                        "Activation failed: " + e.getMessage(),
+                        "activate");
+            }
+        }
+
+        log.info("🎯 Class modification workflow completed: {} (success: {}, activated: {})",
+                className, workflowResult.isSuccess(), workflowResult.isActivated());
 
         return workflowResult;
     }

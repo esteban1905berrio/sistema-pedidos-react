@@ -3,6 +3,8 @@ package com.crystal.mcp.sapserver.service;
 import com.crystal.mcp.sapserver.config.JCoConfiguration;
 import com.crystal.mcp.sapserver.model.ObjectInOpenOTResult;
 import com.crystal.mcp.sapserver.model.TableContentsResult;
+import com.crystal.mcp.sapserver.model.TransportInfoResult;
+import com.crystal.mcp.sapserver.model.TransportInfoListResult;
 import com.crystal.mcp.sapserver.model.TransportListResult;
 import com.crystal.mcp.sapserver.model.TransportObjectsResult;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -572,6 +574,256 @@ public class TransportService {
         } catch (Exception e) {
             log.error("Error parsing JSON from FM: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to parse JSON response: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Get transport request metadata without objects.
+     *
+     * This method retrieves complete metadata for one or more transport requests
+     * from E070 table without loading the full object list. Use this
+     * when you need transport information but don't need to see all objects.
+     *
+     * Progressive Discovery Integration:
+     * - Lightweight alternative to get_transport_objects
+     * - Use when you need metadata only (owner, status, dates, etc.)
+     * - For full object details, use get_transport_objects instead
+     *
+     * Implementation:
+     * Uses Z_CX_GET_TRANSPORT_INFO function module which queries E070
+     * with efficient JOIN and returns metadata with object/task counts.
+     *
+     * Supports Multiple Transports:
+     * - Single: "CADK911088"
+     * - Multiple: "CADK911088,CADK911122"
+     *
+     * Token Cost: ~500-800 tokens per transport (much cheaper than get_transport_objects)
+     *
+     * Workflow Examples:
+     * 1. "Who owns transport DEVK900123?"
+     *    → get_transport_info("DEVK900123") → Returns owner, status
+     * 2. "Is transport CADK911088 released?"
+     *    → get_transport_info("CADK911088") → Returns status
+     * 3. "Get info for multiple transports"
+     *    → get_transport_info("CADK911088,CADK911122") → Returns list
+     *
+     * @param transportNumbers Transport request number(s) - single or comma-separated
+     * @return TransportInfoListResult with complete metadata
+     * @throws RuntimeException if FM call fails
+     */
+    public TransportInfoListResult getTransportInfo(String transportNumbers) {
+        // Validate input
+        if (transportNumbers == null || transportNumbers.trim().isEmpty()) {
+            throw new IllegalArgumentException("Transport number(s) cannot be empty");
+        }
+
+        log.info("Getting transport info for: {}", transportNumbers);
+
+        try {
+            // Get destination
+            JCoDestination destination = jCoConfiguration.jcoDestination();
+
+            // Get function module
+            JCoFunction function = destination.getRepository()
+                    .getFunction("Z_CX_GET_TRANSPORT_INFO");
+
+            if (function == null) {
+                throw new RuntimeException(
+                        "Function module Z_CX_GET_TRANSPORT_INFO not found. " +
+                        "Please verify FM exists in SAP system (GDC)."
+                );
+            }
+
+            // Set import parameters (now accepts comma-separated list)
+            JCoParameterList importParams = function.getImportParameterList();
+            importParams.setValue("IV_TRANSPORT_NUMBERS", transportNumbers.trim().toUpperCase());
+
+            // Execute function
+            function.execute(destination);
+
+            // Get export parameters
+            JCoParameterList exportParams = function.getExportParameterList();
+            String successFlag = exportParams.getString("EV_SUCCESS");
+            boolean success = "X".equals(successFlag) || "1".equals(successFlag);
+            String message = exportParams.getString("EV_MESSAGE");
+            String jsonString = exportParams.getString("EV_TRANSPORTS_JSON");
+
+            if (!success) {
+                log.error("FM returned failure: {}", message);
+                return TransportInfoListResult.failure(message);
+            }
+
+            // Parse JSON response (now array)
+            log.info("JSON from FM (length: {} bytes)", jsonString.length());
+            return parseTransportInfoJsonArray(jsonString);
+
+        } catch (JCoException e) {
+            log.error("JCo error calling Z_CX_GET_TRANSPORT_INFO: {}", e.getMessage(), e);
+            return TransportInfoListResult.failure("JCo error: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Error getting transport info: {}", e.getMessage(), e);
+            return TransportInfoListResult.failure(e.getMessage());
+        }
+    }
+
+    /**
+     * Parse JSON response from Z_CX_GET_TRANSPORT_INFO function module.
+     *
+     * Expected JSON structure:
+     * {
+     *   "success": true,
+     *   "transport_number": "CADK911088",
+     *   "transport_type": "K",
+     *   "transport_type_desc": "Workbench",
+     *   "status": "D",
+     *   "status_desc": "Modifiable",
+     *   "owner": "USERNAME",
+     *   "description": "Transport description",
+     *   "created_date": "2025-01-15",
+     *   "created_time": "14:30:45",
+     *   "target_system": "S4Q",
+     *   "category": "CUST",
+     *   "parent_transport": null,
+     *   "has_objects": true,
+     *   "has_tasks": true
+     * }
+     *
+     * @param jsonString JSON string from FM
+     * @return TransportInfoResult parsed from JSON
+     */
+    private TransportInfoResult parseTransportInfoJson(String jsonString) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(jsonString);
+
+            // Extract fields
+            boolean success = root.get("success").asBoolean();
+            String transportNumber = root.get("transport_number").asText();
+            String transportType = root.get("transport_type").asText("");
+            String transportTypeDesc = root.get("transport_type_desc").asText("");
+            String status = root.get("status").asText("");
+            String statusDesc = root.get("status_desc").asText("");
+            String owner = root.get("owner").asText("");
+            String description = root.get("description").asText("");
+            String createdDate = root.get("created_date").asText("");
+            String createdTime = root.get("created_time").asText("");
+            String targetSystem = root.get("target_system").asText("");
+            String category = root.get("category").asText("");
+
+            // Handle null parent_transport
+            JsonNode parentNode = root.get("parent_transport");
+            String parentTransport = (parentNode != null && !parentNode.isNull())
+                    ? parentNode.asText() : null;
+
+            boolean hasObjects = root.get("has_objects").asBoolean(false);
+            boolean hasTasks = root.get("has_tasks").asBoolean(false);
+
+            return new TransportInfoResult(
+                success,
+                transportNumber,
+                transportType,
+                transportTypeDesc,
+                status,
+                statusDesc,
+                owner,
+                description,
+                createdDate,
+                createdTime,
+                targetSystem,
+                category,
+                parentTransport,
+                hasObjects,
+                hasTasks
+            );
+
+        } catch (Exception e) {
+            log.error("Error parsing JSON from FM: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to parse JSON response: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Parse JSON array response from Z_CX_GET_TRANSPORT_INFO function module.
+     *
+     * Expected JSON structure:
+     * [{
+     *   "transport_number": "CADK911088",
+     *   "transport_type": "K",
+     *   "transport_type_desc": "Workbench",
+     *   "status": "D",
+     *   "status_desc": "Modifiable",
+     *   "owner": "USERNAME",
+     *   "description": "Transport description",
+     *   "created_date": "2025-01-15",
+     *   "created_time": "14:30:45",
+     *   "target_system": "S4Q",
+     *   "category": "CUST",
+     *   "parent_transport": null,
+     *   "object_count": 15,
+     *   "task_count": 2
+     * }]
+     *
+     * @param jsonString JSON array string from FM
+     * @return TransportInfoListResult with list of transports
+     */
+    private TransportInfoListResult parseTransportInfoJsonArray(String jsonString) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(jsonString);
+
+            if (!root.isArray()) {
+                throw new RuntimeException("Expected JSON array, got: " + root.getNodeType());
+            }
+
+            List<TransportInfoListResult.TransportInfo> transports = new ArrayList<>();
+
+            for (JsonNode transportNode : root) {
+                // Extract fields
+                String transportNumber = transportNode.get("transport_number").asText();
+                String transportType = transportNode.get("transport_type").asText("");
+                String transportTypeDesc = transportNode.get("transport_type_desc").asText("");
+                String status = transportNode.get("status").asText("");
+                String statusDesc = transportNode.get("status_desc").asText("");
+                String owner = transportNode.get("owner").asText("");
+                String description = transportNode.get("description").asText("");
+                String createdDate = transportNode.get("created_date").asText("");
+                String createdTime = transportNode.get("created_time").asText("");
+                String targetSystem = transportNode.get("target_system").asText("");
+                String category = transportNode.get("category").asText("");
+
+                // Handle null parent_transport
+                JsonNode parentNode = transportNode.get("parent_transport");
+                String parentTransport = (parentNode != null && !parentNode.isNull())
+                        ? parentNode.asText() : null;
+
+                int objectCount = transportNode.get("object_count").asInt(0);
+                int taskCount = transportNode.get("task_count").asInt(0);
+
+                TransportInfoListResult.TransportInfo info = new TransportInfoListResult.TransportInfo(
+                    transportNumber,
+                    transportType,
+                    transportTypeDesc,
+                    status,
+                    statusDesc,
+                    owner,
+                    description,
+                    createdDate,
+                    createdTime,
+                    targetSystem,
+                    category,
+                    parentTransport,
+                    objectCount,
+                    taskCount
+                );
+
+                transports.add(info);
+            }
+
+            return TransportInfoListResult.success(transports);
+
+        } catch (Exception e) {
+            log.error("Error parsing JSON array from FM: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to parse JSON array response: " + e.getMessage(), e);
         }
     }
 

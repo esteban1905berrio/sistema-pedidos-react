@@ -23,6 +23,7 @@ public class ProgramModifyResult {
     private boolean locked;
     private boolean modified;
     private boolean unlocked;
+    private boolean activated;
     private String lockHandle;
     private String transportNumber;
     private String transportUser;
@@ -35,6 +36,7 @@ public class ProgramModifyResult {
         this.locked = false;
         this.modified = false;
         this.unlocked = false;
+        this.activated = false;
         this.messages = new ArrayList<>();
     }
 
@@ -133,6 +135,14 @@ public class ProgramModifyResult {
 
     public void setUnlocked(boolean unlocked) {
         this.unlocked = unlocked;
+    }
+
+    public boolean isActivated() {
+        return activated;
+    }
+
+    public void setActivated(boolean activated) {
+        this.activated = activated;
     }
 
     public String getLockHandle() {
