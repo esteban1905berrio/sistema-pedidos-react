@@ -589,11 +589,40 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
 ## Important Development Notes
 
-### ⚠️ CRITICAL: ABAP Function Module Signatures
+### ⚠️⚠️⚠️ CRITICAL: ABAP Function Module Signatures (MANDATORY)
 
-**REGLA FUNDAMENTAL**: Las firmas de Function Modules NUNCA deben incluir comentarios.
+**REGLAS FUNDAMENTALES** - Violar estas reglas causa errores de SAP ADT API:
 
-**❌ NUNCA HACER ESTO**:
+#### REGLA 1: SIEMPRE incluir la firma completa
+
+**NUNCA** omitir la firma del Function Module. **SIEMPRE** debe incluirse inmediatamente después de `FUNCTION <nombre>`:
+
+**❌ NUNCA HACER ESTO** (firma omitida):
+```abap
+FUNCTION Z_MI_FUNCION.
+  " You can use the template 'functionModuleParameter' to add here the signature!
+
+  DATA: lv_result TYPE string.
+  " ... código ...
+ENDFUNCTION.
+```
+
+**✅ SIEMPRE HACER ESTO** (firma completa):
+```abap
+FUNCTION Z_MI_FUNCION
+  IMPORTING
+    VALUE(IV_PARAM1) TYPE STRING
+  EXPORTING
+    VALUE(EV_RESULT) TYPE STRING.
+
+  DATA: lv_result TYPE string.
+  " ... código ...
+ENDFUNCTION.
+```
+
+#### REGLA 2: NUNCA incluir comentarios en la firma
+
+**❌ NUNCA HACER ESTO** (comentarios en firma):
 ```abap
 FUNCTION ZCX_GETDDICSOURCE.
 *"----------------------------------------------------------------------
@@ -603,7 +632,7 @@ FUNCTION ZCX_GETDDICSOURCE.
 *"----------------------------------------------------------------------
 ```
 
-**✅ SIEMPRE HACER ESTO**:
+**✅ SIEMPRE HACER ESTO** (sin comentarios):
 ```abap
 FUNCTION ZCX_GETDDICSOURCE
   IMPORTING
@@ -615,18 +644,23 @@ FUNCTION ZCX_GETDDICSOURCE
     OBJECT_NOT_FOUND.
 ```
 
-**Por qué**: SAP ADT API rechaza firmas con comentarios (HTTP 400: "Parameter comment blocks are not allowed")
+#### Por qué estas reglas son críticas
 
-**Documentación completa**: `docs/development_rules/abap_function_module_rules.md`
+1. **Firma omitida**: Si no se incluye la firma, SAP ADT API inserta un placeholder vacío que invalida los parámetros del FM
+2. **Comentarios en firma**: SAP ADT API rechaza con HTTP 400: "Parameter comment blocks are not allowed"
 
-**Formato correcto**:
-- Sin comentarios `*"` en sección de parámetros
-- Sin bloques decorativos `*"----`
-- Solo keywords (IMPORTING, EXPORTING, EXCEPTIONS) y parámetros
-- Punto final (`.`) después de firma
-- Indentación de 2-4 espacios
+#### Checklist OBLIGATORIO antes de modificar un FM
 
-**Ejemplo completo**:
+- [ ] ¿La firma incluye TODOS los parámetros IMPORTING?
+- [ ] ¿La firma incluye TODOS los parámetros EXPORTING?
+- [ ] ¿La firma incluye TODOS los parámetros CHANGING (si aplica)?
+- [ ] ¿La firma incluye TODOS los parámetros TABLES (si aplica)?
+- [ ] ¿La firma incluye TODAS las EXCEPTIONS?
+- [ ] ¿La firma NO tiene comentarios `*"` ni bloques `*"----`?
+- [ ] ¿La firma termina con punto `.` después del último parámetro o excepción?
+
+#### Formato correcto de firma
+
 ```abap
 FUNCTION Z_MI_FUNCION
   IMPORTING
@@ -647,6 +681,16 @@ FUNCTION Z_MI_FUNCION
 
 ENDFUNCTION.
 ```
+
+**Elementos de formato**:
+- Sin comentarios `*"` en sección de parámetros
+- Sin bloques decorativos `*"----`
+- Solo keywords (IMPORTING, EXPORTING, CHANGING, TABLES, EXCEPTIONS) y parámetros
+- Punto final (`.`) después del último elemento de la firma
+- Indentación de 2 espacios para keywords, 4 espacios para parámetros
+- Línea en blanco entre firma y código de implementación
+
+**Documentación completa**: `docs/development_rules/abap_function_module_rules.md`
 
 ### Multi-Platform Support
 
