@@ -251,9 +251,7 @@ public class ClassTools {
             @McpToolParam(
                     description = "Include type to modify. " +
                             "'main' for class definition (PUBLIC, PROTECTED, PRIVATE sections), " +
-                            "'implementations' for method implementations, " +
                             "'testclasses' for unit test classes, " +
-                            "'macros' for ABAP macro definitions. " +
                             "Default: 'main'",
                     required = false
             )

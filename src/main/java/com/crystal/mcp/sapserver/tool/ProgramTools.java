@@ -290,10 +290,7 @@ public class ProgramTools {
                     "Returns transport number from lock operation if not provided. " +
                     "Fails with error if object is already locked by another user. " +
                     "Always unlocks object even on failure (prevents orphaned locks). " +
-                    "\n\n⚠️ CRITICAL: Function module signatures cannot be modified via ADT API. " +
-                    "Signatures must be configured manually in SE37 transaction. " +
-                    "Signatures must NEVER include comments (*\" blocks). " +
-                    "This tool modifies implementation code only, not the signature. " +
+                    "\n\n⚠️ CRITICAL:  Signatures must NEVER include comments (*\" blocks). " +
                     "See docs/development_rules/abap_function_module_rules.md for correct signature format. " +
                     "\n\nExample: modify_function_module('Z_TEST_FM', 'ZTEST_FG', new_code, null)"
     )

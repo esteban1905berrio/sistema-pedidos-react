@@ -316,9 +316,8 @@ public class RfcAdapter {
                 : "*/*";
 
         requestHeaders.put("Accept", acceptType);
-        //requestHeaders.put("Cache-Control", "no-cache");
-        //requestHeaders.put("Content-Type", contentType);
-        //requestHeaders.put("X-sap-adt-sessiontype", "stateless");
+        requestHeaders.put("Content-Type", contentType);
+        requestHeaders.put("X-sap-adt-profiling", "server-time");
 
         // Merge custom headers (overrides defaults)
         if (headers != null) {
@@ -368,6 +367,71 @@ public class RfcAdapter {
     }
 
     /**
+     * Call SAP function module directly (not via ADT API).
+     *
+     * This method is used for function modules that don't have ADT equivalents
+     * or when direct RFC calls are more efficient (e.g., custom Z/Y FMs).
+     *
+     * @param functionName Function module name (e.g., "Z_CX_GET_PACKAGE_HIERARCHY")
+     * @param importParams Import parameters map (parameter name → value)
+     * @return RfcFunctionResponse with export parameters and tables
+     * @throws JCoException if RFC call fails
+     */
+    public RfcFunctionResponse callFunctionModule(
+            String functionName,
+            Map<String, String> importParams) throws JCoException {
+
+        log.info("📞 DIRECT FM CALL | Function: {} | Params: {}",
+                functionName, importParams.keySet());
+
+        try {
+            // Get function module from repository
+            JCoFunction function = destination.getRepository().getFunction(functionName);
+
+            if (function == null) {
+                throw new RuntimeException(
+                        "Function module " + functionName + " not found in SAP system."
+                );
+            }
+
+            // Set import parameters
+            JCoParameterList imports = function.getImportParameterList();
+            if (imports != null && importParams != null) {
+                for (Map.Entry<String, String> param : importParams.entrySet()) {
+                    imports.setValue(param.getKey(), param.getValue());
+                    log.debug("Set import param: {} = {}", param.getKey(), param.getValue());
+                }
+            }
+
+            // Execute function
+            long startTime = System.currentTimeMillis();
+            function.execute(destination);
+            long duration = System.currentTimeMillis() - startTime;
+
+            log.info("✅ FM EXECUTED | Duration: {} ms", duration);
+
+            // Extract export parameters
+            JCoParameterList exports = function.getExportParameterList();
+            Map<String, String> exportParams = new HashMap<>();
+
+            if (exports != null) {
+                for (JCoField field : exports) {
+                    String value = field.getString();
+                    exportParams.put(field.getName(), value != null ? value : "");
+                    log.debug("Export param: {} = {}", field.getName(),
+                            value != null ? value.substring(0, Math.min(100, value.length())) : "");
+                }
+            }
+
+            return new RfcFunctionResponse(exportParams);
+
+        } catch (JCoException e) {
+            log.error("FM call failed: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
      * Response wrapper record (mimics Python RfcResponse).
      *
      * Immutable record containing:
@@ -380,5 +444,24 @@ public class RfcAdapter {
             String text,
             Map<String, String> headers
     ) {
+    }
+
+    /**
+     * Response wrapper for direct FM calls.
+     *
+     * Contains export parameters from the function module.
+     */
+    public record RfcFunctionResponse(
+            Map<String, String> exportParams
+    ) {
+        /**
+         * Get export parameter value by name.
+         *
+         * @param paramName Parameter name (e.g., "EV_SUCCESS")
+         * @return Parameter value, or empty string if not found
+         */
+        public String getExportParam(String paramName) {
+            return exportParams.getOrDefault(paramName, "");
+        }
     }
 }

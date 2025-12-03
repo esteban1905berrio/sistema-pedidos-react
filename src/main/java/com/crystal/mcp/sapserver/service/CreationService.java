@@ -96,6 +96,7 @@ public class CreationService {
             log.debug("  Step 2/3: Registering function group in repository...");
             String registerUri = "/sap/bc/adt/functions/groups";
             String registerXml = buildFunctionGroupXml(functionGroupName, description, packageName, transport);
+            log.info("XML being sent:\n{}", registerXml);
 
             RfcAdapter.RfcResponse registerResponse = rfcAdapter.request(
                     registerUri,
@@ -525,33 +526,20 @@ public class CreationService {
 
     /**
      * Build XML body for function group creation.
+     * Format matches Eclipse ADT exactly.
      */
     private String buildFunctionGroupXml(String name, String description, String packageName, String transport) {
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.newDocument();
-
-            // Root element
-            Element root = doc.createElement("group:abapFunctionGroup");
-            root.setAttribute("xmlns:group", "http://www.sap.com/adt/functions/groups");
-            root.setAttribute("xmlns:adtcore", "http://www.sap.com/adt/core");
-            root.setAttribute("adtcore:type", "FUGR/F");
-            root.setAttribute("adtcore:description", description);
-            root.setAttribute("adtcore:name", name);
-            root.setAttribute("adtcore:masterLanguage", "EN");
-            doc.appendChild(root);
-
-            // Package reference
-            Element packageRef = doc.createElement("adtcore:packageRef");
-            packageRef.setAttribute("adtcore:name", packageName);
-            root.appendChild(packageRef);
-
-            return xmlToString(doc);
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to build function group XML", e);
-        }
+        // Eclipse ADT format - all in one line after declaration, with language attributes
+        return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<group:abapFunctionGroup xmlns:group=\"http://www.sap.com/adt/functions/groups\" " +
+                "xmlns:adtcore=\"http://www.sap.com/adt/core\" " +
+                "adtcore:description=\"%s\" " +
+                "adtcore:language=\"EN\" " +
+                "adtcore:name=\"%s\" " +
+                "adtcore:type=\"FUGR/F\" " +
+                "adtcore:masterLanguage=\"EN\">" +
+                "<adtcore:packageRef adtcore:name=\"%s\"/>" +
+                "</group:abapFunctionGroup>").formatted(description, name, packageName);
     }
 
     /**
@@ -691,12 +679,27 @@ public class CreationService {
     }
 
     /**
-     * Convert DOM Document to XML string.
+     * Convert DOM Document to XML string without declaration.
      */
     private String xmlToString(Document doc) throws Exception {
         TransformerFactory tf = TransformerFactory.newInstance();
         Transformer transformer = tf.newTransformer();
         transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        transformer.setOutputProperty(OutputKeys.INDENT, "no");
+        StringWriter writer = new StringWriter();
+        transformer.transform(new DOMSource(doc), new StreamResult(writer));
+        return writer.getBuffer().toString();
+    }
+
+    /**
+     * Convert DOM Document to XML string with XML declaration.
+     * Required by SAP ADT API for certain endpoints.
+     */
+    private String xmlToStringWithDeclaration(Document doc) throws Exception {
+        TransformerFactory tf = TransformerFactory.newInstance();
+        Transformer transformer = tf.newTransformer();
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
+        transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
         transformer.setOutputProperty(OutputKeys.INDENT, "no");
         StringWriter writer = new StringWriter();
         transformer.transform(new DOMSource(doc), new StreamResult(writer));
