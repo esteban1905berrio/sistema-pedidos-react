@@ -332,6 +332,71 @@ class ClassServiceTest {
 }
 ```
 
+---
+
+### ⚠️ REGLA: Tests Manuales/Debug (CommandLineRunner)
+
+**OBLIGATORIO**: Para tests manuales o de debug que requieren ejecución aislada, usar el patrón `CommandLineRunner` en lugar de JUnit.
+
+**Razón**: JUnit con `mvn test -Dtest=TestClass#methodName` frecuentemente ejecuta todos los métodos en lugar del específico. El patrón `CommandLineRunner` garantiza ejecución aislada.
+
+**Ubicación**: `src/test/java/com/crystal/mcp/sapserver/manual/`
+
+**Patrón CommandLineRunner (OBLIGATORIO para debug):**
+
+```java
+@Profile("!test")  // Excluir del perfil test
+@SpringBootApplication
+@ComponentScan(basePackages = "com.crystal.mcp.sapserver")
+public class ManualMyServiceTest implements CommandLineRunner {
+
+    @Autowired
+    private MyService myService;
+
+    public static void main(String[] args) {
+        SpringApplication app = new SpringApplication(ManualMyServiceTest.class);
+        app.setLogStartupInfo(false);
+        app.run(args);
+    }
+
+    @Override
+    public void run(String... args) {
+        System.out.println("╔══════════════════════════════════════╗");
+        System.out.println("║        Manual Test: MyService        ║");
+        System.out.println("╚══════════════════════════════════════╝");
+
+        try {
+            // Test específico aquí
+            testMyMethod();
+
+            System.out.println("✅ TEST COMPLETED");
+        } catch (Exception e) {
+            System.err.println("❌ TEST FAILED: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+
+    private void testMyMethod() {
+        // Implementación del test
+    }
+}
+```
+
+**Ejecución:**
+```bash
+mvn spring-boot:run -Dspring-boot.run.mainClass=com.crystal.mcp.sapserver.manual.ManualMyServiceTest
+```
+
+**Cuándo usar cada patrón:**
+
+| Escenario | Patrón | Comando |
+|-----------|--------|---------|
+| Tests automatizados CI/CD | JUnit `@SpringBootTest` | `mvn test` |
+| Debug de un método específico | CommandLineRunner | `mvn spring-boot:run -Dspring-boot.run.mainClass=...` |
+| Validación manual SAP | CommandLineRunner | `mvn spring-boot:run -Dspring-boot.run.mainClass=...` |
+| Tests de regresión | JUnit `@SpringBootTest` | `mvn test -Dtest=TestClass` |
+
 ### Phase 5: Documentation
 - JavaDoc for all public methods
 - Update README_JAVA.md with new tools
@@ -589,6 +654,65 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
 ## Important Development Notes
 
+### ⚠️ REGLA: Sistema SAP por Defecto
+
+**OBLIGATORIO**: Cuando se trabaje con herramientas MCP de SAP, usar **gdcmcp** como sistema por defecto.
+
+- **Sistema por defecto**: `mcp__gdcmcp__*` (GDC - Sistema de desarrollo principal)
+- **Solo usar giralmcp** cuando el usuario lo especifique explícitamente
+- Aplica a todas las operaciones: lectura, búsqueda, creación, modificación
+
+**Ejemplo**:
+```
+✅ CORRECTO: mcp__gdcmcp__get_class_source
+✅ CORRECTO: mcp__gdcmcp__search_objects
+❌ INCORRECTO: mcp__giralmcp__get_class_source (solo si usuario lo pide)
+```
+
+---
+
+### ⚠️ REGLA: Function Group por Defecto para FMs Custom
+
+**OBLIGATORIO**: Los Function Modules custom del MCP Server deben crearse en el Function Group **ZGFCX_1**.
+
+- **Function Group por defecto**: `ZGFCX_1`
+- **Ubicación en SAP**: Package `ZCX` o subpaquete correspondiente
+- **Convención de nombres FM**: `ZCX_*` o `Z_CX_*`
+
+**FMs existentes en ZGFCX_1**:
+- `ZCX_GETDDICSOURCE` - Obtener estructura DDIC
+- `ZCX_CREATE_TRANSPORT_COPY` - Crear copia de transporte
+- `Z_CX_GET_TRANSPORT_OBJECTS` - Obtener objetos de transporte
+- `Z_CX_GET_OBJECT_IN_OPEN_OT` - Buscar objeto en OTs abiertas
+- `Z_CX_GET_TRANSPORT_INFO` - Metadata de transportes
+- `Z_CX_GET_PACKAGE_HIERARCHY` - Jerarquía de paquetes
+- `ZCX_CREATE_TRANSPORT_REQUEST` - Crear nuevo transporte
+- `ZCX_GET_DUMP_DETAIL` - Detalles de dump ST22
+- `ZCX_GET_TRANSPORT_LOG` - Log de transporte
+- `Z_CX_SEARCH_TRANSPORTS` - Búsqueda de transportes
+
+---
+
+### ⚠️ REGLA: Tests Manuales (Usuario Primero)
+
+**OBLIGATORIO**: NO ejecutar tests manuales automáticamente. El usuario probará primero manualmente.
+
+- **NUNCA** ejecutar `mvn spring-boot:run -Dspring-boot.run.mainClass=...` automáticamente
+- **SIEMPRE** proporcionar el comando para compilar/recompilar el proyecto
+- **SOLO** ejecutar tests cuando el usuario lo solicite explícitamente
+
+**Comando para compilar**:
+```bash
+mvn clean compile
+```
+
+**Comando para compilar con tests**:
+```bash
+mvn clean test-compile
+```
+
+---
+
 ### ⚠️⚠️⚠️ CRITICAL: ABAP Function Module Signatures (MANDATORY)
 
 **REGLAS FUNDAMENTALES** - Violar estas reglas causa errores de SAP ADT API:
@@ -691,6 +815,76 @@ ENDFUNCTION.
 - Línea en blanco entre firma y código de implementación
 
 **Documentación completa**: `docs/development_rules/abap_function_module_rules.md`
+
+---
+
+### ⚠️ REGLA: Manejo de JSON en ABAP con /ui2/cl_json
+
+**OBLIGATORIO**: Para serializar/deserializar JSON en ABAP, **SIEMPRE** usar la clase estándar `/ui2/cl_json`.
+
+**NUNCA** hacer parsing manual de strings JSON. La clase `/ui2/cl_json` es la forma estándar y robusta de manejar JSON en ABAP.
+
+#### Deserialización (JSON String → Internal Table)
+
+```abap
+TYPES: BEGIN OF ty_object,
+         pgmid    TYPE pgmid,
+         object   TYPE trobjtype,
+         obj_name TYPE sobj_name,
+       END OF ty_object,
+       tt_objects TYPE STANDARD TABLE OF ty_object WITH DEFAULT KEY.
+
+DATA: lt_objects TYPE tt_objects.
+
+" Deserializar JSON a tabla interna
+/ui2/cl_json=>deserialize(
+  EXPORTING
+    json        = iv_json_string
+    pretty_name = /ui2/cl_json=>pretty_mode-camel_case
+  CHANGING
+    data        = lt_objects ).
+```
+
+#### Serialización (Internal Table → JSON String)
+
+```abap
+DATA: lt_tasks TYPE STANDARD TABLE OF trkorr WITH DEFAULT KEY,
+      lv_json  TYPE string.
+
+" Serializar tabla interna a JSON
+lv_json = /ui2/cl_json=>serialize(
+  data        = lt_tasks
+  pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+```
+
+#### Opciones de pretty_name
+
+| Modo | Uso | Ejemplo |
+|------|-----|---------|
+| `pretty_mode-camel_case` | Input JSON con camelCase | `{"objName": "ZTEST"}` |
+| `pretty_mode-low_case` | Output JSON en minúsculas | `{"obj_name": "ZTEST"}` |
+| `pretty_mode-none` | Sin transformación | Mantiene nombres ABAP |
+
+#### Checklist OBLIGATORIO
+
+- [ ] ¿Usas `/ui2/cl_json=>deserialize()` para parsear JSON de entrada?
+- [ ] ¿Usas `/ui2/cl_json=>serialize()` para generar JSON de salida?
+- [ ] ¿Definiste `TYPES` para las estructuras de datos?
+- [ ] ¿Elegiste el `pretty_name` apropiado según el formato esperado?
+
+**❌ NUNCA hacer esto** (parsing manual):
+```abap
+" MAL - Parsing manual propenso a errores
+FIND REGEX '"obj_name"\s*:\s*"([^"]+)"' IN lv_json SUBMATCHES lv_name.
+```
+
+**✅ SIEMPRE hacer esto** (usar /ui2/cl_json):
+```abap
+" BIEN - Clase estándar SAP
+/ui2/cl_json=>deserialize( ... ).
+```
+
+---
 
 ### Multi-Platform Support
 
@@ -837,6 +1031,29 @@ mvn clean install -U
 # Skip tests if needed
 mvn clean package -DskipTests
 ```
+
+### Error: "Type conflict during a function module call"
+
+```
+JCo error: Type conflict during a function module call
+```
+
+**Causa**: Este error **NO** es del MCP server Java. El problema está en el Function Module ABAP en SAP.
+
+**Explicación**: Ocurre cuando un FM custom (ej: `ZCX_GET_TRANSPORT_LOGS`) llama internamente a otro FM estándar de SAP con un tipo de parámetro incorrecto.
+
+**Ejemplos comunes**:
+- Pasar `STRING` donde se espera `CHAR`
+- Usar estructura incorrecta para tablas
+- Tipos IMPORTING/EXPORTING que no coinciden con la firma del FM llamado
+
+**Solución**:
+1. Revisar el FM custom en SAP via SE37/SE80
+2. Verificar las llamadas internas a otros FMs (ej: `STRF_READ_COFILE`, `TRINT_READ_LOG`)
+3. Comparar tipos de parámetros con la firma del FM llamado
+4. Corregir el tipo en el FM custom y activar
+
+**Nota**: El MCP server solo reporta el error de JCo. La corrección debe hacerse en ABAP.
 
 ---
 

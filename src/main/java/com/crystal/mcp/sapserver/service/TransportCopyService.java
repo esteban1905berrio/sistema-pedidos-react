@@ -125,11 +125,23 @@ public class TransportCopyService {
             logger.debug("Executing RFC: {} with parameters: {}", FUNCTION_MODULE, request);
             function.execute(destination);
 
-            // Get export parameters
+            // Get export parameters - basic
             String newTransport = function.getExportParameterList().getString("EV_NEW_TRANSPORT");
             String status = function.getExportParameterList().getString("EV_STATUS");
             String message = function.getExportParameterList().getString("EV_MESSAGE");
-            String releaseLog = function.getExportParameterList().getString("EV_LOG");
+
+            // Get export parameters - detailed step results
+            String creationOkStr = function.getExportParameterList().getString("EV_CREATION_OK");
+            String creationMsg = function.getExportParameterList().getString("EV_CREATION_MSG");
+            String objectsOkStr = function.getExportParameterList().getString("EV_OBJECTS_OK");
+            String objectsMsg = function.getExportParameterList().getString("EV_OBJECTS_MSG");
+            String releaseOkStr = function.getExportParameterList().getString("EV_RELEASE_OK");
+            String releaseMsg = function.getExportParameterList().getString("EV_RELEASE_MSG");
+
+            // Convert CHAR1 to boolean
+            boolean creationOk = "X".equalsIgnoreCase(creationOkStr);
+            boolean objectsOk = "X".equalsIgnoreCase(objectsOkStr);
+            boolean releaseOk = "X".equalsIgnoreCase(releaseOkStr);
 
             // Log result
             if ("S".equals(status)) {
@@ -140,21 +152,26 @@ public class TransportCopyService {
                     logger.info("Transport copy created successfully: {} (source: {})",
                         newTransport, request.sourceTransport());
                 }
-                if (releaseLog != null && !releaseLog.isEmpty()) {
-                    logger.debug("Release log available ({} bytes)", releaseLog.length());
-                }
+            } else if ("W".equals(status)) {
+                logger.warn("Transport copy created with warning: {} - Creation: {}, Objects: {}, Release: {}",
+                    message, creationOk, objectsOk, releaseOk);
             } else {
-                logger.warn("Transport copy creation completed with status {}: {}",
-                    status, message);
+                logger.warn("Transport copy creation failed with status {}: {} - Creation: {}, Objects: {}, Release: {}",
+                    status, message, creationOk, objectsOk, releaseOk);
             }
 
-            // Build result with release log
+            // Build result with detailed step info
             TransportCopyResult result = new TransportCopyResult(
                 newTransport,
                 status,
                 message,
                 "S".equals(status),
-                releaseLog
+                creationOk,
+                creationMsg,
+                objectsOk,
+                objectsMsg,
+                releaseOk,
+                releaseMsg
             );
 
             logger.debug("Transport copy result: {}", result);

@@ -4,16 +4,27 @@ package com.crystal.mcp.sapserver.model;
  * Result model for transport copy creation operation.
  *
  * <p>Represents the response from the SAP system after attempting to create a transport copy.
- * Contains the new transport number, operation status, descriptive message, and release log.
+ * Contains the new transport number, operation status, descriptive message, and detailed
+ * step-by-step results for each phase of the workflow.
+ *
+ * <p><b>Workflow Steps:</b>
+ * <ol>
+ *   <li>Creation: Create the transport request</li>
+ *   <li>Objects: Include objects from source transport(s)</li>
+ *   <li>Release: Release the transport (if autoRelease=true)</li>
+ * </ol>
  *
  * @param newTransportNumber The newly created transport copy number (e.g., "CADK911520").
  *                           Null if creation failed.
  * @param status SAP status code: "S" (Success), "E" (Error), "W" (Warning), "I" (Info)
  * @param message Descriptive message about the operation result
  * @param success Boolean flag indicating if operation succeeded (status == "S")
- * @param releaseLog Detailed release log from transport copy/release operation.
- *                   Contains information about exported objects, warnings, and errors.
- *                   Null if log not available or operation failed before release.
+ * @param creationOk Whether the transport was created successfully
+ * @param creationMsg Message from creation step
+ * @param objectsOk Whether objects were included successfully
+ * @param objectsMsg Message from objects inclusion step
+ * @param releaseOk Whether the transport was released successfully
+ * @param releaseMsg Message from release step
  *
  * @author Crystal Development Team
  * @since 2025-11-18
@@ -23,29 +34,45 @@ public record TransportCopyResult(
     String status,
     String message,
     boolean success,
-    String releaseLog
+    // Detailed step results
+    boolean creationOk,
+    String creationMsg,
+    boolean objectsOk,
+    String objectsMsg,
+    boolean releaseOk,
+    String releaseMsg
 ) {
     /**
-     * Creates a successful result.
+     * Creates a successful result with detailed step info.
      *
      * @param newTransportNumber The created transport number
      * @param message Success message
-     * @param releaseLog Release log (optional, can be null)
+     * @param creationOk Creation step success
+     * @param creationMsg Creation step message
+     * @param objectsOk Objects step success
+     * @param objectsMsg Objects step message
+     * @param releaseOk Release step success
+     * @param releaseMsg Release step message
      * @return TransportCopyResult with success status
      */
-    public static TransportCopyResult success(String newTransportNumber, String message, String releaseLog) {
-        return new TransportCopyResult(newTransportNumber, "S", message, true, releaseLog);
+    public static TransportCopyResult success(String newTransportNumber, String message,
+            boolean creationOk, String creationMsg,
+            boolean objectsOk, String objectsMsg,
+            boolean releaseOk, String releaseMsg) {
+        return new TransportCopyResult(newTransportNumber, "S", message, true,
+            creationOk, creationMsg, objectsOk, objectsMsg, releaseOk, releaseMsg);
     }
 
     /**
-     * Creates a successful result without release log.
+     * Creates a successful result with default step info.
      *
      * @param newTransportNumber The created transport number
      * @param message Success message
      * @return TransportCopyResult with success status
      */
     public static TransportCopyResult success(String newTransportNumber, String message) {
-        return success(newTransportNumber, message, null);
+        return new TransportCopyResult(newTransportNumber, "S", message, true,
+            true, null, true, null, true, null);
     }
 
     /**
@@ -55,18 +82,41 @@ public record TransportCopyResult(
      * @return TransportCopyResult with error status
      */
     public static TransportCopyResult error(String errorMessage) {
-        return new TransportCopyResult(null, "E", errorMessage, false, null);
+        return new TransportCopyResult(null, "E", errorMessage, false,
+            false, null, false, null, false, null);
     }
 
     /**
-     * Creates a warning result.
+     * Creates a warning result (e.g., transport created but release failed).
+     *
+     * @param newTransportNumber The created transport number (may be partial success)
+     * @param warningMessage Warning description
+     * @param creationOk Creation step success
+     * @param creationMsg Creation step message
+     * @param objectsOk Objects step success
+     * @param objectsMsg Objects step message
+     * @param releaseOk Release step success
+     * @param releaseMsg Release step message
+     * @return TransportCopyResult with warning status
+     */
+    public static TransportCopyResult warning(String newTransportNumber, String warningMessage,
+            boolean creationOk, String creationMsg,
+            boolean objectsOk, String objectsMsg,
+            boolean releaseOk, String releaseMsg) {
+        return new TransportCopyResult(newTransportNumber, "W", warningMessage, false,
+            creationOk, creationMsg, objectsOk, objectsMsg, releaseOk, releaseMsg);
+    }
+
+    /**
+     * Creates a warning result with default step info.
      *
      * @param newTransportNumber The created transport number (may be partial success)
      * @param warningMessage Warning description
      * @return TransportCopyResult with warning status
      */
     public static TransportCopyResult warning(String newTransportNumber, String warningMessage) {
-        return new TransportCopyResult(newTransportNumber, "W", warningMessage, false, null);
+        return new TransportCopyResult(newTransportNumber, "W", warningMessage, false,
+            false, null, false, null, false, null);
     }
 
     /**
@@ -118,12 +168,15 @@ public record TransportCopyResult(
      */
     @Override
     public String toString() {
-        return String.format("TransportCopyResult[transport=%s, status=%s (%s), message=%s, hasLog=%s]",
+        return String.format("TransportCopyResult[transport=%s, status=%s (%s), message=%s, " +
+            "creation=%s, objects=%s, release=%s]",
             newTransportNumber != null ? newTransportNumber : "null",
             status,
             getStatusDescription(),
             message,
-            releaseLog != null && !releaseLog.isEmpty()
+            creationOk ? "OK" : "FAILED",
+            objectsOk ? "OK" : "FAILED",
+            releaseOk ? "OK" : "FAILED"
         );
     }
 }

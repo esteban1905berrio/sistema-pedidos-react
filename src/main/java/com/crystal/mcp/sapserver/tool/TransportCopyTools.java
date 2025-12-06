@@ -104,10 +104,11 @@ public class TransportCopyTools {
         description = "Create a transport copy from existing transport request(s). " +
                      "Supports single or multiple source transports. " +
                      "Copies all objects from source transport(s) (including tasks) to new transport(s). " +
-                     "Workflow: QUERY_TASKS → CREATE_TRANSPORT → COPY_OBJECTS → RELEASE (optional). " +
+                     "Workflow: QUERY_TASKS → CREATE_TRANSPORT → COPY_OBJECTS → RELEASE (auto by default). " +
                      "Examples: " +
-                     "Single: create_transport_copy('CADK911511', null, 'S4D', 'COPIA', true). " +
-                     "Multiple: create_transport_copy(null, ['CADK911511','CADK911512'], 'S4D', 'BACKUP', true)"
+                     "Single: create_transport_copy('CADK911511', null, 'S4D', 'COPIA'). " +
+                     "Multiple: create_transport_copy(null, ['CADK911511','CADK911512'], 'S4D', 'BACKUP'). " +
+                     "Without release: create_transport_copy('CADK911511', null, null, null, false)"
     )
     public String create_transport_copy(
         @McpToolParam(description = "Single source transport request number. Example: 'CADK911511', 'DEVK900123'. " +
@@ -129,8 +130,9 @@ public class TransportCopyTools {
                                 "Max 60 chars total. Default: 'COPIA'")
         String descriptionPrefix,
 
-        @McpToolParam(description = "Auto-release transport after creation (optional). " +
-                                "true: Release automatically, false: Keep modifiable. Default: true")
+        @McpToolParam(description = "Auto-release transport after creation. " +
+                                "Default: true (released automatically). " +
+                                "Only specify false if you want to keep the transport modifiable.")
         Boolean autoRelease
     ) {
         try {
@@ -199,7 +201,8 @@ public class TransportCopyTools {
      * Formats a successful result as JSON.
      *
      * <p>Includes release log if available to provide LLM with detailed context about
-     * the transport copy/release operation.
+     * the transport copy/release operation. Also includes step-by-step results for
+     * each phase of the workflow.
      *
      * @param result The transport copy result
      * @return JSON string
@@ -213,13 +216,25 @@ public class TransportCopyTools {
             response.put("newTransportNumber", result.newTransportNumber());
             response.put("message", result.message());
 
-            // Include release log if available - provides detailed context for LLM
-            if (result.releaseLog() != null && !result.releaseLog().isEmpty()) {
-                response.put("releaseLog", result.releaseLog());
-                response.put("hasReleaseLog", true);
-            } else {
-                response.put("hasReleaseLog", false);
-            }
+            // Include detailed step results for LLM to understand what happened
+            Map<String, Object> steps = new LinkedHashMap<>();
+
+            Map<String, Object> creationStep = new LinkedHashMap<>();
+            creationStep.put("success", result.creationOk());
+            creationStep.put("message", result.creationMsg());
+            steps.put("creation", creationStep);
+
+            Map<String, Object> objectsStep = new LinkedHashMap<>();
+            objectsStep.put("success", result.objectsOk());
+            objectsStep.put("message", result.objectsMsg());
+            steps.put("objectsInclusion", objectsStep);
+
+            Map<String, Object> releaseStep = new LinkedHashMap<>();
+            releaseStep.put("success", result.releaseOk());
+            releaseStep.put("message", result.releaseMsg());
+            steps.put("release", releaseStep);
+
+            response.put("workflowSteps", steps);
 
             return objectMapper.writerWithDefaultPrettyPrinter()
                 .writeValueAsString(response);

@@ -196,4 +196,27 @@
         </pluginRepository>
     </pluginRepositories>
 
+    <!-- Profiles for Manual Tests -->
+    <profiles>
+        <!-- Profile: manual-test (default test class configurable via property) -->
+        <profile>
+            <id>manual-test</id>
+            <properties>
+                <!-- Change this to switch the default manual test -->
+                <manual.test.class>com.crystal.mcp.sapserver.manual.transport.ManualTransportCreationTest</manual.test.class>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-maven-plugin</artifactId>
+                        <configuration>
+                            <mainClass>${manual.test.class}</mainClass>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>
