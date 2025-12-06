@@ -5,6 +5,8 @@ import com.crystal.mcp.sapserver.model.TransportInfoListResult;
 import com.crystal.mcp.sapserver.model.TransportInfoResult;
 import com.crystal.mcp.sapserver.model.TransportListResult;
 import com.crystal.mcp.sapserver.model.TransportObjectsResult;
+import com.crystal.mcp.sapserver.model.TransportSearchResult;
+import com.crystal.mcp.sapserver.service.TransportSearchService;
 import com.crystal.mcp.sapserver.service.TransportService;
 import lombok.RequiredArgsConstructor;
 import org.springaicommunity.mcp.annotation.McpTool;
@@ -40,6 +42,7 @@ import org.springframework.stereotype.Component;
 public class TransportTools {
 
     private final TransportService transportService;
+    private final TransportSearchService transportSearchService;
 
     /**
      * MCP Tool: List transport requests for a user.
@@ -299,5 +302,121 @@ public class TransportTools {
             String objectType
     ) {
         return transportService.getObjectInOpenOT(objectName, objectType);
+    }
+
+    /**
+     * MCP Tool: Search transport requests by flexible criteria.
+     *
+     * This tool provides advanced search capabilities for SAP transport requests,
+     * allowing flexible searches by description pattern, user, type, status,
+     * target system, and date range.
+     *
+     * Key Features:
+     * - Description pattern search with % wildcards (LIKE query)
+     * - Multiple filter combinations
+     * - Object and task counts included
+     * - Results ordered by date descending (newest first)
+     *
+     * Use Cases:
+     * - "Find OTs containing PSR01" → search_transports(description="%PSR01%")
+     * - "Show open OTs from L_ABAPS_ITA" → search_transports(user="L_ABAPS_ITA", status="D")
+     * - "FI Workbench OTs released in December" → search_transports(description="%FI%", transportType="K", status="R", dateFrom="2025-12-01", dateTo="2025-12-31")
+     *
+     * Token Optimization:
+     * - Typical cost: ~1,000-3,000 tokens (depends on result count)
+     * - Returns lightweight data with counts (no full object list)
+     * - Use get_transport_objects for detailed object list
+     *
+     * Comparison with Other Tools:
+     * - list_user_transports: Lists transports for a specific user
+     * - search_transports: Flexible search by multiple criteria
+     * - get_transport_info: Get metadata for known transport number
+     * - get_transport_objects: Get full object list for a transport
+     *
+     * Performance Notes:
+     * - At least one search criterion required (prevents full table scan)
+     * - Maximum 1000 results per query
+     * - Indexed on AS4USER, TRSTATUS, AS4DATE for efficient filtering
+     *
+     * @param description     Description pattern (LIKE search). Use % for wildcards.
+     *                        Examples: "%PSR01%", "%INVOICE%", "FI-%"
+     * @param user            User/owner filter. Exact match or pattern with %.
+     *                        Examples: "L_ABAPS_ITA", "L_ABAPS%"
+     * @param transportType   Transport type: K=Workbench, W=Customizing, T=Copies
+     * @param status          Status: D=Modifiable, R=Released, L=Protected
+     * @param targetSystem    Target system name. Examples: "S4Q", "S4P"
+     * @param dateFrom        Start date filter (YYYY-MM-DD). Example: "2025-01-01"
+     * @param dateTo          End date filter (YYYY-MM-DD). Example: "2025-12-31"
+     * @param maxResults      Maximum results (1-1000). Default: 100
+     * @return TransportSearchResult with matching transports
+     */
+    @McpTool(
+            description = "Search transport requests by flexible criteria. " +
+                    "Supports searching by description pattern (LIKE), user, type, status, " +
+                    "target system, and date range. At least one criterion required. " +
+                    "Returns transports with object/task counts. " +
+                    "Token cost: ~1,000-3,000 tokens (depends on results). " +
+                    "Examples: description='%PSR01%', status='D', user='L_ABAPS_ITA'"
+    )
+    public TransportSearchResult search_transports(
+            @McpToolParam(
+                    description = "Description pattern (LIKE search). " +
+                            "Use % for wildcards. Examples: '%PSR01%', '%INVOICE%', 'FI-%'",
+                    required = false
+            )
+            String description,
+
+            @McpToolParam(
+                    description = "User filter (owner). " +
+                            "Exact match or pattern with %. Examples: 'L_ABAPS_ITA', 'L_ABAPS%'",
+                    required = false
+            )
+            String user,
+
+            @McpToolParam(
+                    description = "Transport type: 'K' (Workbench), 'W' (Customizing), " +
+                            "'T' (Transport of Copies). Leave empty for all types.",
+                    required = false
+            )
+            String transportType,
+
+            @McpToolParam(
+                    description = "Status filter: 'D' (Modifiable), 'R' (Released), " +
+                            "'L' (Protected). Leave empty for all statuses.",
+                    required = false
+            )
+            String status,
+
+            @McpToolParam(
+                    description = "Target system filter. Examples: 'S4Q', 'S4P'. " +
+                            "Leave empty for all systems.",
+                    required = false
+            )
+            String targetSystem,
+
+            @McpToolParam(
+                    description = "Date from (YYYY-MM-DD). Filter by creation date. " +
+                            "Example: '2025-01-01'",
+                    required = false
+            )
+            String dateFrom,
+
+            @McpToolParam(
+                    description = "Date to (YYYY-MM-DD). Filter by creation date. " +
+                            "Example: '2025-12-31'",
+                    required = false
+            )
+            String dateTo,
+
+            @McpToolParam(
+                    description = "Maximum results (1-1000). Default: 100",
+                    required = false
+            )
+            Integer maxResults
+    ) {
+        return transportSearchService.searchTransports(
+                description, user, transportType, status,
+                targetSystem, dateFrom, dateTo, maxResults
+        );
     }
 }
