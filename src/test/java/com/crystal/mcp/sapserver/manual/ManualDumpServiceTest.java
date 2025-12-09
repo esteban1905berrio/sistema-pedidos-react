@@ -80,7 +80,7 @@ public class ManualDumpServiceTest implements CommandLineRunner {
 
         try {
             // Test 1: List dumps and get first one's details
-            testListAndGetDetails();
+            //testListAndGetDetails();
 
             // Alternative tests (uncomment as needed):
             // testRawXmlResponse();

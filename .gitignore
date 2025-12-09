@@ -203,11 +203,11 @@ build/
 spring-boot-devtools.properties
 
 # SAP JCo Libraries (NEVER commit - licensed by SAP)
-lib/sapjco3.jar
-lib/libsapjco3.so
-lib/libsapjco3.jnilib
-lib/libsapjco3.dylib
-lib/sapjco3.dll
+#lib/sapjco3.jar
+#lib/libsapjco3.so
+#lib/libsapjco3.jnilib
+#lib/libsapjco3.dylib
+#lib/sapjco3.dll
 
 # Java IDE
 *.iml

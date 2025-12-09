@@ -151,13 +151,15 @@ public class CreationService {
      * @param functionGroupName  parent function group name
      * @param description        description (max 60 chars)
      * @param transport          optional transport number (null for local)
+     * @param processingType     optional processing type: null/empty for normal FM, "rfc" for RFC-enabled FM
      * @return CreationResult with success status and details
      */
     public CreationResult createFunctionModule(
             String functionModuleName,
             String functionGroupName,
             String description,
-            String transport
+            String transport,
+            String processingType
     ) {
         log.info("🔧 Creating function module: {} in group {}", functionModuleName, functionGroupName);
 
@@ -239,7 +241,7 @@ public class CreationService {
             // Step 6: Create function module with corrNr parameter
             log.debug("  Step 6/8: Creating function module with transport...");
             String registerUri = "/sap/bc/adt/functions/groups/" + functionGroupName.toLowerCase() + "/fmodules";
-            String registerXml = buildFunctionModuleXmlV2(functionModuleName, description, functionGroupName);
+            String registerXml = buildFunctionModuleXmlV2(functionModuleName, description, functionGroupName, processingType);
 
             // Add corrNr parameter if transport is provided
             Map<String, String> createParams = null;
@@ -545,8 +547,13 @@ public class CreationService {
     /**
      * Build XML body for function module creation (V2 format with container reference).
      * This matches the Eclipse ADT format from pr_fm_manager.md line 218-222.
+     *
+     * @param name              Function module name
+     * @param description       Description
+     * @param functionGroupName Parent function group
+     * @param processingType    Processing type: null/empty for normal FM, "rfc" for RFC-enabled FM
      */
-    private String buildFunctionModuleXmlV2(String name, String description, String functionGroupName) {
+    private String buildFunctionModuleXmlV2(String name, String description, String functionGroupName, String processingType) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
@@ -559,6 +566,13 @@ public class CreationService {
             root.setAttribute("adtcore:description", description);
             root.setAttribute("adtcore:name", name);
             root.setAttribute("adtcore:type", "FUGR/FF");
+
+            // Add RFC processing type ONLY when explicitly requested
+            if ("rfc".equalsIgnoreCase(processingType)) {
+                root.setAttribute("fmodule:processingType", "rfc");
+                log.debug("  → RFC-enabled function module requested");
+            }
+
             doc.appendChild(root);
 
             // Container reference (function group)
