@@ -5,6 +5,7 @@
 [![Java](https://img.shields.io/badge/Java-21+-orange)](https://adoptium.net/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.0-brightgreen)](https://spring.io/projects/spring-boot)
 [![MCP Tools](https://img.shields.io/badge/MCP%20Tools-36-blue)](docs/requirements/mcp/)
+[![MCP Resources](https://img.shields.io/badge/MCP%20Resources-9-green)](docs/requirements/mcp/resources_implementation_plan.md)
 [![License](https://img.shields.io/badge/License-Internal-red)](LICENSE)
 
 ---
@@ -13,6 +14,7 @@
 
 - [Overview](#overview)
 - [MCP Tools Catalog](#mcp-tools-catalog)
+- [MCP Resources Catalog](#mcp-resources-catalog)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Configuration](#configuration)
@@ -214,6 +216,108 @@ Tools for system diagnostics and analysis.
 1. `list_dumps('2025-01-15', '2025-01-15', 'DEVELOPER')` → Find dumps
 2. `get_dump_details(dumpId)` → Get full analysis
 3. Review: error type, call stack, source code, variables
+
+---
+
+## MCP Resources Catalog
+
+MCP Resources provide **read-only URI-based access** to SAP data with automatic caching support. Unlike Tools, Resources are lightweight and optimized for token efficiency.
+
+### Summary: 9 Resources in 4 Categories
+
+| Category | Resources | Description |
+|----------|-----------|-------------|
+| [Class Resources](#class-resources) | 4 | Source code, methods, attributes |
+| [Transport Resources](#transport-resources) | 2 | Transport info and objects |
+| [Package Resources](#package-resources) | 2 | Package objects and hierarchy |
+| [Table Resources](#table-resources) | 1 | DDIC field definitions |
+
+---
+
+### Class Resources
+
+| URI Pattern | Description | MIME Type | Token Cost |
+|------------|-------------|-----------|------------|
+| `sap://class/{name}/definition` | Class definition source | `text/plain` | ~2,000+ |
+| `sap://class/{name}/implementation` | Class implementation source | `text/plain` | ~2,000+ |
+| `sap://class/{name}/methods` | List of methods with metadata | `application/json` | ~300-500 |
+| `sap://class/{name}/attributes` | List of attributes with metadata | `application/json` | ~200-400 |
+
+**Example:** `sap://class/CL_ABAP_CHAR_UTILITIES/methods`
+
+---
+
+### Transport Resources
+
+| URI Pattern | Description | MIME Type | Token Cost |
+|------------|-------------|-----------|------------|
+| `sap://transport/{id}/info` | Transport metadata (owner, status, dates) | `application/json` | ~300-500 |
+| `sap://transport/{id}/objects` | Objects in transport | `application/json` | ~500-2000 |
+
+**Example:** `sap://transport/DEVK900123/info`
+
+---
+
+### Package Resources
+
+| URI Pattern | Description | MIME Type | Token Cost |
+|------------|-------------|-----------|------------|
+| `sap://package/{name}/objects` | Objects in package from TADIR | `application/json` | ~500-2000 |
+| `sap://package/{name}/hierarchy` | Subpackages from TDEVC | `application/json` | ~300-800 |
+
+**Example:** `sap://package/ZCX/objects`
+
+---
+
+### Table Resources
+
+| URI Pattern | Description | MIME Type | Token Cost |
+|------------|-------------|-----------|------------|
+| `sap://table/{name}/fields` | Field definitions from DD03L | `application/json` | ~400-1500 |
+
+**Example:** `sap://table/MARA/fields`
+
+---
+
+### Resources vs Tools
+
+| Aspect | Tools | Resources |
+|--------|-------|-----------|
+| **Purpose** | Execute actions | Expose read-only data |
+| **Side Effects** | Yes (modifications) | No (read-only) |
+| **Caching** | Not recommended | Client can cache |
+| **Discovery** | `tools/list` | `resources/templates/list` |
+| **Token Efficiency** | Full response | Optimized structure |
+
+### Important: Resource Templates vs Static Resources
+
+This server implements **Resource Templates** (URIs with placeholders like `{name}`, `{id}`) rather than Static Resources. This design choice has implications:
+
+**Resource Types:**
+- **Static Resources**: Fixed URIs like `sap://server/info` (no placeholders)
+- **Resource Templates**: Parameterized URIs like `sap://class/{name}/definition`
+
+**Discovery Limitation:**
+- Claude Code's `ListMcpResourcesTool` only lists **Static Resources**
+- **Resource Templates are NOT listed** but work correctly when read directly
+- Use the static resource `sap://server/info` to see all available templates
+
+**How to Use Resources:**
+
+```bash
+# 1. Get list of available resource templates (static resource)
+ReadMcpResourceTool server=giralmcp uri=sap://server/info
+
+# 2. Read a specific resource by replacing placeholders
+ReadMcpResourceTool server=giralmcp uri=sap://class/CL_ABAP_CHAR_UTILITIES/methods
+ReadMcpResourceTool server=giralmcp uri=sap://transport/DEVK900123/info
+ReadMcpResourceTool server=giralmcp uri=sap://package/ZCX/objects
+```
+
+**Why Resource Templates?**
+- SAP objects are dynamic (classes, transports, packages vary per system)
+- Parameterized URIs allow access to any object without pre-registration
+- More flexible than registering thousands of static resources
 
 ---
 

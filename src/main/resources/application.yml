@@ -6,7 +6,14 @@ spring:
         name: sap-abap-mcp-server
         version: 0.1.0-POC
         description: "MCP Server for SAP ABAP using Spring AI and SAP JCo"
-        vendor: Crystal
+        vendor: MountaiDev.ai
+        stdio: true                      # Habilitar transporte STDIO (JSON-RPC via stdin/stdout)
+        type: SYNC                       # Servidor sincrónico (vs ASYNC para reactivo)
+        annotation-scanner:
+          enabled: true                  # Auto-detectar @McpTool, @McpResource, @McpPrompt
+        capabilities:
+          resource: true
+          tool: true
 
   # Application Configuration
   application:

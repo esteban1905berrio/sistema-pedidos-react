@@ -654,6 +654,45 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
 ## Important Development Notes
 
+### ⚠️ REGLA: MCP Resources - Templates vs Static
+
+**IMPORTANTE**: Este servidor implementa **Resource Templates** (URIs con placeholders como `{name}`, `{id}`) en lugar de Static Resources.
+
+**Implicación para Claude Code:**
+- `ListMcpResourcesTool` solo lista **Static Resources**
+- Los **Resource Templates NO aparecen** en la lista pero **funcionan correctamente**
+- Usar el recurso estático `sap://server/info` para ver todos los templates disponibles
+
+**Cómo usar los Resources:**
+
+```bash
+# 1. Obtener lista de templates disponibles (recurso estático)
+ReadMcpResourceTool server=giralmcp uri=sap://server/info
+
+# 2. Leer un recurso específico reemplazando placeholders
+ReadMcpResourceTool server=giralmcp uri=sap://class/CL_ABAP_CHAR_UTILITIES/methods
+ReadMcpResourceTool server=giralmcp uri=sap://transport/DEVK900123/info
+ReadMcpResourceTool server=giralmcp uri=sap://package/ZCX/objects
+ReadMcpResourceTool server=giralmcp uri=sap://table/MARA/fields
+```
+
+**Resource Templates disponibles:**
+
+| URI Template | Descripción |
+|--------------|-------------|
+| `sap://server/info` | Info del servidor (ESTÁTICO) |
+| `sap://class/{name}/definition` | Código fuente definición |
+| `sap://class/{name}/implementation` | Código fuente implementación |
+| `sap://class/{name}/methods` | Lista de métodos (JSON) |
+| `sap://class/{name}/attributes` | Lista de atributos (JSON) |
+| `sap://transport/{id}/info` | Metadata de transporte |
+| `sap://transport/{id}/objects` | Objetos en transporte |
+| `sap://package/{name}/objects` | Objetos en paquete |
+| `sap://package/{name}/hierarchy` | Jerarquía de paquetes |
+| `sap://table/{name}/fields` | Campos de tabla DDIC |
+
+---
+
 ### ⚠️ REGLA: Sistema SAP por Defecto
 
 **OBLIGATORIO**: Cuando se trabaje con herramientas MCP de SAP, usar **gdcmcp** como sistema por defecto.
