@@ -1,7 +1,8 @@
 package com.crystal.mcp.sapserver.service;
 
 import com.crystal.mcp.sapserver.model.PackageObjectsResult;
-import com.crystal.mcp.sapserver.model.TableContentsResult;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,7 +39,7 @@ import java.util.Map;
 public class NavigationService {
 
     private final RfcAdapter rfcAdapter;
-    private final QueryService queryService;
+    private final ObjectMapper objectMapper;
 
     /**
      * Get ABAP objects from a package with pagination and filtering.
@@ -113,66 +114,60 @@ public class NavigationService {
                 packageName, actualMaxRows, actualOffset, objectTypes, author, createdFrom, createdTo);
 
         try {
-            // Build WHERE clause with filters
-            List<String> whereConditions = new ArrayList<>();
-            whereConditions.add("DEVCLASS = '" + packageName + "'");
+            // Build RFC parameters
+            Map<String, String> params = new HashMap<>();
+            params.put("IV_PACKAGE_NAME", packageName.toUpperCase());
+            params.put("IV_MAX_ROWS", String.valueOf(actualMaxRows));
+            params.put("IV_OFFSET", String.valueOf(actualOffset));
 
-            // Filter by object types
+            // Object types filter (comma-separated)
             if (objectTypes != null && !objectTypes.isEmpty()) {
-                String typesList = objectTypes.stream()
-                        .map(t -> "'" + t + "'")
-                        .collect(java.util.stream.Collectors.joining(", "));
-                whereConditions.add("OBJECT IN (" + typesList + ")");
+                params.put("IV_OBJECT_TYPES", String.join(",", objectTypes));
                 log.debug("Filtering by object types: {}", objectTypes);
             }
 
-            // Filter by author
+            // Author filter
             if (author != null && !author.trim().isEmpty()) {
-                whereConditions.add("AUTHOR = '" + author.trim() + "'");
+                params.put("IV_AUTHOR", author.trim().toUpperCase());
                 log.debug("Filtering by author: {}", author);
             }
 
-            // Filter by creation date range
+            // Date filters (convert YYYY-MM-DD to YYYYMMDD for SAP)
             if (createdFrom != null && !createdFrom.trim().isEmpty()) {
-                // Convert YYYY-MM-DD to SAP format YYYYMMDD
                 String sapDateFrom = createdFrom.replace("-", "");
-                whereConditions.add("CREATED_ON >= '" + sapDateFrom + "'");
+                params.put("IV_CREATED_FROM", sapDateFrom);
                 log.debug("Filtering from date: {} (SAP: {})", createdFrom, sapDateFrom);
             }
 
             if (createdTo != null && !createdTo.trim().isEmpty()) {
-                // Convert YYYY-MM-DD to SAP format YYYYMMDD
                 String sapDateTo = createdTo.replace("-", "");
-                whereConditions.add("CREATED_ON <= '" + sapDateTo + "'");
+                params.put("IV_CREATED_TO", sapDateTo);
                 log.debug("Filtering to date: {} (SAP: {})", createdTo, sapDateTo);
             }
 
-            // Combine all conditions with AND
-            String whereClause = String.join(" AND ", whereConditions);
-            log.debug("Final WHERE clause: {}", whereClause);
-
-            // Define fields to retrieve from TADIR
-            List<String> fields = List.of(
-                    "PGMID",
-                    "OBJECT",
-                    "OBJ_NAME",
-                    "SRCSYSTEM",
-                    "AUTHOR",
-                    "DEVCLASS",
-                    "CREATED_ON",
-                    "CHECK_DATE"
+            // Call RFC
+            RfcAdapter.RfcFunctionResponse response = rfcAdapter.callFunctionModule(
+                    "Z_CX_GET_PACKAGE_OBJECTS",
+                    params
             );
 
-            // Query TADIR table with pagination
-            // Note: We add +1 to maxRows to detect if there are more pages
-            TableContentsResult tableData = queryService.getTableContents(
-                    "TADIR",
-                    whereClause,
-                    actualMaxRows + 1,  // Request one extra row to check for more
-                    fields
-            );
+            // Get export parameters
+            String success = response.getExportParam("EV_SUCCESS");
+            String message = response.getExportParam("EV_MESSAGE");
+            String objectsJson = response.getExportParam("EV_OBJECTS_JSON");
+            String totalCountStr = response.getExportParam("EV_TOTAL_COUNT");
+            String hasMoreFlag = response.getExportParam("EV_HAS_MORE");
 
-            // Parse and group results
+            log.debug("FM response: success={}, message={}, totalCount={}", success, message, totalCountStr);
+
+            if (!"X".equals(success)) {
+                throw new RuntimeException("RFC call failed: " + message);
+            }
+
+            // Parse JSON response
+            JsonNode jsonRoot = objectMapper.readTree(objectsJson);
+
+            // Build filters applied map
             Map<String, String> filtersApplied = new HashMap<>();
             if (objectTypes != null && !objectTypes.isEmpty()) {
                 filtersApplied.put("object_types", String.join(", ", objectTypes));
@@ -181,22 +176,17 @@ public class NavigationService {
             if (createdFrom != null) filtersApplied.put("created_from", createdFrom);
             if (createdTo != null) filtersApplied.put("created_to", createdTo);
 
-            // Check if we got more rows than requested (indicates more pages)
-            List<Map<String, String>> rows = tableData.rows();
-            boolean hasMore = rows.size() > actualMaxRows;
+            // Parse objects from JSON and group by type
+            boolean hasMore = "X".equals(hasMoreFlag);
+            int totalCount = Integer.parseInt(totalCountStr != null ? totalCountStr : "0");
 
-            // If we got extra row, remove it from results
-            if (hasMore) {
-                rows = rows.subList(0, actualMaxRows);
-            }
-
-            // Group objects by type
-            PackageObjectsResult result = groupPackageObjects(
-                    rows,
+            PackageObjectsResult result = parseAndGroupObjects(
+                    jsonRoot,
                     packageName,
                     actualMaxRows,
                     actualOffset,
                     hasMore,
+                    totalCount,
                     filtersApplied
             );
 
@@ -217,49 +207,54 @@ public class NavigationService {
     }
 
     /**
-     * Group TADIR rows by object type.
+     * Parse JSON response from RFC and group objects by type.
      *
-     * @param rows           List of TADIR rows
+     * @param jsonRoot       JSON root node from RFC response
      * @param packageName    Package name
      * @param maxRows        Page size
      * @param offset         Current offset
      * @param hasMore        Whether there are more pages
+     * @param totalCount     Total count from RFC
      * @param filtersApplied Applied filters
      * @return PackageObjectsResult with grouped objects
      */
-    private PackageObjectsResult groupPackageObjects(
-            List<Map<String, String>> rows,
+    private PackageObjectsResult parseAndGroupObjects(
+            JsonNode jsonRoot,
             String packageName,
             int maxRows,
             int offset,
             boolean hasMore,
+            int totalCount,
             Map<String, String> filtersApplied
     ) {
         // Group objects by type
         Map<String, PackageObjectsResult.ObjectTypeGroup> objectTypeGroups = new HashMap<>();
 
-        for (Map<String, String> row : rows) {
-            String objectType = row.get("OBJECT");
-            if (objectType == null || objectType.isEmpty()) {
-                continue;
+        JsonNode objectsArray = jsonRoot.get("objects");
+        if (objectsArray != null && objectsArray.isArray()) {
+            for (JsonNode objNode : objectsArray) {
+                String objectType = getJsonText(objNode, "object");
+                if (objectType == null || objectType.isEmpty()) {
+                    continue;
+                }
+
+                // Create object info
+                PackageObjectsResult.ObjectInfo objectInfo = new PackageObjectsResult.ObjectInfo(
+                        getJsonText(objNode, "pgmid"),
+                        objectType,
+                        getJsonText(objNode, "obj_name"),
+                        getJsonText(objNode, "srcsystem"),
+                        getJsonText(objNode, "author"),
+                        getJsonText(objNode, "devclass"),
+                        formatSapDate(getJsonText(objNode, "created_on")),
+                        null  // CHECK_DATE not included in RFC response
+                );
+
+                // Add to type group
+                objectTypeGroups.computeIfAbsent(objectType, k ->
+                        new PackageObjectsResult.ObjectTypeGroup(0, new ArrayList<>())
+                ).objects().add(objectInfo);
             }
-
-            // Create object info
-            PackageObjectsResult.ObjectInfo objectInfo = new PackageObjectsResult.ObjectInfo(
-                    row.get("PGMID"),
-                    objectType,
-                    row.get("OBJ_NAME"),
-                    row.get("SRCSYSTEM"),
-                    row.get("AUTHOR"),
-                    row.get("DEVCLASS"),
-                    formatSapDate(row.get("CREATED_ON")),
-                    formatSapDate(row.get("CHECK_DATE"))
-            );
-
-            // Add to type group
-            objectTypeGroups.computeIfAbsent(objectType, k ->
-                    new PackageObjectsResult.ObjectTypeGroup(0, new ArrayList<>())
-            ).objects().add(objectInfo);
         }
 
         // Update counts for each type
@@ -282,12 +277,27 @@ public class NavigationService {
 
         return new PackageObjectsResult(
                 packageName,
-                rows.size(),  // Total objects in current page
-                rows.size(),  // Returned objects (same as total for this page)
+                totalCount,   // Total objects returned by RFC
+                totalCount,   // Returned objects (same as total for this page)
                 objectTypeGroups,
                 pagination,
                 filtersApplied
         );
+    }
+
+    /**
+     * Get text value from JSON node safely.
+     *
+     * @param node      JSON node
+     * @param fieldName Field name
+     * @return Text value or null
+     */
+    private String getJsonText(JsonNode node, String fieldName) {
+        JsonNode field = node.get(fieldName);
+        if (field != null && !field.isNull()) {
+            return field.asText().trim();
+        }
+        return null;
     }
 
     /**

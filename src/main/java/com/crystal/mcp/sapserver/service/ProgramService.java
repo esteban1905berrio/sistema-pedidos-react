@@ -254,12 +254,19 @@ public class ProgramService {
      * Complete workflow to modify an ABAP program or include.
      *
      * This is a workflow-based tool that orchestrates the complete ADT modification flow:
-     * LOCK → MODIFY → UNLOCK
+     * LOCK → MODIFY → UNLOCK using stateful connections (JCoContext).
      *
      * Workflow Steps:
-     * 1. LOCK: Acquire exclusive lock on object
-     * 2. MODIFY: Update source code with new content
-     * 3. UNLOCK: Release lock (always executed, even on failure)
+     * 1. Begin stateful context (JCoContext)
+     * 2. LOCK: Acquire exclusive lock on object (stateful session)
+     * 3. SYNTAX CHECK: Validate source before modification (stateful session)
+     * 4. MODIFY: Update source code with new content (stateful session)
+     * 5. UNLOCK: Release lock (stateful session)
+     * 6. End stateful context (JCoContext)
+     * 7. ACTIVATE: Activate object (outside stateful context)
+     *
+     * The stateful context ensures that all operations use the same SAP session,
+     * which is critical for maintaining the lock throughout the workflow.
      *
      * Based on Python implementation: modification_service.py
      * Reference: docs/requirements/mcp/workflow_based/pr_update_program.md
@@ -292,7 +299,7 @@ public class ProgramService {
             throw new IllegalArgumentException("Object type must be 'program' or 'include'");
         }
 
-        log.info("Starting modification workflow for {}: {}", objectType, objectName);
+        log.info("🔧 Starting stateful modification workflow for {}: {}", objectType, objectName);
 
         // Build URIs based on object type
         String objectUri;
@@ -305,159 +312,154 @@ public class ProgramService {
             sourceUri = String.format("%s/source/main", objectUri);
         }
 
-        // Initialize result
-        ProgramModifyResult result = new ProgramModifyResult();
-        result.setUri(sourceUri);
-        result.setObjectName(objectName);
-        result.setObjectType(objectType);
+        // Execute workflow in stateful context
+        ProgramModifyResult workflowResult = statefulModificationService.executeStatefulWorkflow(
+                objectName,
+                () -> {
+                    // Initialize result object
+                    ProgramModifyResult result = new ProgramModifyResult();
+                    result.setUri(sourceUri);
+                    result.setObjectName(objectName);
+                    result.setObjectType(objectType);
 
-        String lockHandle = null;
+                    // ========================================
+                    // Step 1: Lock object (in stateful session)
+                    // ========================================
+                    log.info("Step 1/4: Locking {} '{}'", objectType, objectName);
 
-        try {
-            // ========================================
-            // Step 1: Lock object
-            // ========================================
-            log.info("Step 1/4: Locking {} '{}'", objectType, objectName);
-            LockResult lockResult = lockObject(sourceUri);
-            lockHandle = lockResult.lockHandle;
+                    StatefulModificationService.LockResult lock =
+                            statefulModificationService.lockObject(objectUri);
 
-            result.setLocked(true);
-            result.setLockHandle(lockHandle);
-            result.setTransportNumber(lockResult.transportNumber);
-            result.setTransportUser(lockResult.transportUser);
-            result.setTransportDescription(lockResult.transportDescription);
+                    result.setLocked(true);
+                    result.setLockHandle(lock.lockHandle());
+                    result.setTransportNumber(lock.transportNumber());
+                    result.setTransportUser(lock.transportUser());
+                    result.setTransportDescription(lock.transportDescription());
 
-            log.info("✓ {} locked successfully (transport: {})", objectType, lockResult.transportNumber);
-            result.addMessage("info",
-                    String.format("Object locked successfully. Transport: %s", lockResult.transportNumber),
-                    "lock");
+                    log.info("✓ {} locked successfully (transport: {})", objectType, lock.transportNumber());
+                    result.addMessage("info",
+                            String.format("Object locked successfully. Transport: %s", lock.transportNumber()),
+                            "lock");
 
-            // ========================================
-            // Step 2: Syntax Check
-            // ========================================
-            log.info("Step 2/4: Running syntax check...");
+                    try {
+                        // ========================================
+                        // Step 2: Syntax Check (in stateful session)
+                        // ========================================
+                        log.info("Step 2/4: Running syntax check...");
 
-            List<SyntaxCheckMessage> syntaxMessages = syntaxCheck(
-                    objectUri,      // Object URI (without /source/main)
-                    sourceUri,      // Source URI (with /source/main)
-                    newSource,
-                    "inactive"      // Check against inactive version
-            );
+                        List<SyntaxCheckMessage> syntaxMessages = syntaxCheck(
+                                objectUri,      // Object URI (without /source/main)
+                                sourceUri,      // Source URI (with /source/main)
+                                newSource,
+                                "inactive"      // Check against inactive version
+                        );
 
-            // Check for errors
-            List<SyntaxCheckMessage> errors = syntaxMessages.stream()
-                    .filter(SyntaxCheckMessage::isError)
-                    .collect(Collectors.toList());
+                        // Check for errors
+                        List<SyntaxCheckMessage> errors = syntaxMessages.stream()
+                                .filter(SyntaxCheckMessage::isError)
+                                .collect(Collectors.toList());
 
-            if (!errors.isEmpty()) {
-                String errorMsg = String.format(
-                        "Syntax check failed with %d error(s):", errors.size()
-                );
-                log.error(errorMsg);
+                        if (!errors.isEmpty()) {
+                            String errorMsg = String.format(
+                                    "Syntax check failed with %d error(s):", errors.size()
+                            );
+                            log.error(errorMsg);
 
-                for (SyntaxCheckMessage error : errors) {
-                    log.error("  {}", error.toFormattedString());
+                            for (SyntaxCheckMessage error : errors) {
+                                log.error("  {}", error.toFormattedString());
+                            }
+
+                            result.addMessage("error", errorMsg, "syntax_check");
+                            throw new RuntimeException(errorMsg);
+                        }
+
+                        log.info("✓ Syntax check passed ({} message(s))", syntaxMessages.size());
+                        result.addMessage("info",
+                                String.format("Syntax check passed (%d message(s))", syntaxMessages.size()),
+                                "syntax_check");
+
+                        // ========================================
+                        // Step 3: Modify source code (in stateful session)
+                        // ========================================
+                        log.info("Step 3/4: Modifying source code ({} bytes)", newSource.length());
+
+                        // Use transport from lock response if not explicitly provided
+                        String effectiveTransport = (transport != null && !transport.isEmpty())
+                                ? transport
+                                : lock.transportNumber();
+
+                        boolean modified = setObjectSource(
+                                sourceUri,
+                                newSource,
+                                lock.lockHandle(),
+                                effectiveTransport
+                        );
+                        result.setModified(modified);
+
+                        log.info("✓ Source code modified successfully");
+                        result.addMessage("info",
+                                String.format("Source code updated (%d bytes)", newSource.length()),
+                                "modify");
+
+                        return result;
+
+                    } finally {
+                        // ========================================
+                        // Step 4: Unlock (ALWAYS execute, even on error, in stateful session)
+                        // ========================================
+                        log.info("Step 4/4: Unlocking {} '{}'", objectType, objectName);
+                        statefulModificationService.unlockObject(objectUri, lock.lockHandle());
+                        result.setUnlocked(true);
+                        log.info("✓ {} unlocked successfully", objectType);
+                        result.addMessage("info", "Object unlocked successfully", "unlock");
+                    }
                 }
-
-                result.addMessage("error", errorMsg, "syntax_check");
-                throw new RuntimeException(errorMsg);
-            }
-
-            log.info("✓ Syntax check passed ({} message(s))", syntaxMessages.size());
-            result.addMessage("info",
-                    String.format("Syntax check passed (%d message(s))", syntaxMessages.size()),
-                    "syntax_check");
-
-            // ========================================
-            // Step 3: Modify source code
-            // ========================================
-            log.info("Step 3/4: Modifying source code ({} bytes)", newSource.length());
-
-            // Use transport from lock response if not explicitly provided
-            String effectiveTransport = (transport != null && !transport.isEmpty())
-                    ? transport
-                    : lockResult.transportNumber;
-
-            boolean modified = setObjectSource(sourceUri, newSource, lockHandle, effectiveTransport);
-            result.setModified(modified);
-
-            log.info("✓ Source code modified successfully");
-            result.addMessage("info",
-                    String.format("Source code updated (%d bytes)", newSource.length()),
-                    "modify");
-
-        } catch (Exception e) {
-            log.error("✗ Modification workflow failed: {}", e.getMessage(), e);
-            result.addMessage("error", e.getMessage(), "modify");
-            throw new RuntimeException("Modification workflow failed: " + e.getMessage(), e);
-
-        } finally {
-            // ========================================
-            // Step 4: Unlock (ALWAYS EXECUTE)
-            // ========================================
-            if (lockHandle != null) {
-                try {
-                    log.info("Step 4/4: Unlocking {} '{}'", objectType, objectName);
-                    unlockObject(sourceUri, lockHandle);
-                    result.setUnlocked(true);
-                    log.info("✓ {} unlocked successfully", objectType);
-                    result.addMessage("info", "Object unlocked successfully", "unlock");
-
-                } catch (Exception unlockError) {
-                    log.error("✗ Failed to unlock {}: {}", objectType, unlockError.getMessage());
-                    result.addMessage("warning",
-                            "Failed to unlock object: " + unlockError.getMessage(),
-                            "unlock");
-                }
-            }
-        }
+        );
 
         // ========================================
         // Step 5: Check syntax and activate (outside stateful context)
         // ========================================
-        if (result.isSuccess()) {
+        if (workflowResult.isSuccess()) {
             log.info("Step 5/5: Checking syntax and activating {} '{}'", objectType, objectName);
             try {
                 var activationResult = activationService.checkAndActivate(sourceUri);
-                result.setActivated(activationResult.success());
+                workflowResult.setActivated(activationResult.success());
 
                 if (activationResult.success()) {
                     log.info("✓ {} activated successfully", objectType);
-                    result.addMessage("info", objectType + " activated successfully", "activate");
+                    workflowResult.addMessage("info", objectType + " activated successfully", "activate");
                 } else {
                     log.warn("⚠️  Activation failed with {} errors", activationResult.errors().size());
-                    result.addMessage("warning",
+                    workflowResult.addMessage("warning",
                             String.format("Activation failed: %s", activationResult.message()),
                             "activate");
 
                     // Add syntax errors as messages
                     for (var error : activationResult.errors()) {
-                        result.addMessage("error",
+                        workflowResult.addMessage("error",
                                 String.format("Line %d: %s", error.line(), error.shortText()),
                                 "syntax");
                     }
                 }
             } catch (Exception e) {
                 log.error("Error during activation", e);
-                result.setActivated(false);
-                result.addMessage("error",
+                workflowResult.setActivated(false);
+                workflowResult.addMessage("error",
                         "Activation failed: " + e.getMessage(),
                         "activate");
             }
         }
 
-        // Final result
-        result.setSuccess(result.isLocked() && result.isModified() && result.isUnlocked() && result.isActivated());
+        // Set overall success based on workflow steps
+        workflowResult.setSuccess(workflowResult.isLocked()
+                && workflowResult.isModified()
+                && workflowResult.isUnlocked()
+                && workflowResult.isActivated());
 
-        if (result.isSuccess()) {
-            log.info("✓✓✓ Modification workflow completed successfully for {} '{}' (activated: {})",
-                    objectType, objectName, result.isActivated());
-        } else {
-            log.error("✗✗✗ Modification workflow failed for {} '{}'",
-                    objectType, objectName);
-        }
+        log.info("🎯 {} modification workflow completed: {} (success: {}, activated: {})",
+                objectType, objectName, workflowResult.isSuccess(), workflowResult.isActivated());
 
-        return result;
+        return workflowResult;
     }
 
     /**
@@ -667,148 +669,6 @@ public class ProgramService {
         return workflowResult;
     }
 
-    // ============================================================================
-    // LOCK/UNLOCK OPERATIONS (Private helpers)
-    // ============================================================================
-
-    /**
-     * Lock an ABAP object for editing.
-     *
-     * ADT API Endpoint:
-     * POST /sap/bc/adt/programs/{type}/{name}?_action=LOCK&accessMode=MODIFY
-     *
-     * Response (XML):
-     * <pre>
-     * {@code
-     * <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
-     *   <asx:values>
-     *     <DATA>
-     *       <LOCK_HANDLE>93F5650FDF763E3CF1B9FD12266CC9E7E59262CA</LOCK_HANDLE>
-     *       <CORRNR>CADK911122</CORRNR>
-     *       <CORRUSER>L_ABAPS_ITA</CORRUSER>
-     *       <CORRTEXT>FI WB AAC002 Description</CORRTEXT>
-     *     </DATA>
-     *   </asx:values>
-     * </asx:abap>
-     * }
-     * </pre>
-     *
-     * @param objectUri URI of the object to lock
-     * @return LockResult with handle and transport information
-     * @throws RuntimeException if lock fails (already locked, no permissions, etc.)
-     */
-    private LockResult lockObject(String objectUri) {
-        Map<String, String> params = new HashMap<>();
-        params.put("_action", "LOCK");
-        params.put("accessMode", "MODIFY");
-
-        log.debug("Locking object: {}", objectUri);
-
-        // Build ADT-specific headers for LOCK operation
-        // Based on Eclipse ADT client behavior (from PR documentation)
-        Map<String, String> headers = new HashMap<>();
-
-        // Accept header with ADT lock result versions
-        // Supports both lock result formats (v1 and v2)
-        headers.put("Accept",
-            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result;q=0.8, " +
-            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.lock.result2;q=0.9");
-
-        // User-Agent matching Eclipse ADT
-        headers.put("User-Agent",
-            "Eclipse/4.36.0.v20250528-1830 (Java " + System.getProperty("java.version") + ") " +
-            "ADT/3.50.0 (JavaMCP)");
-
-        // Profiling header (optional but recommended)
-        headers.put("X-sap-adt-profiling", "server-time");
-
-        try {
-            RfcAdapter.RfcResponse response = rfcAdapter.request(
-                    objectUri,
-                    "POST",
-                    headers,  // Pass custom headers
-                    params,
-                    "",
-                    "application/vnd.sap.as+xml;charset=UTF-8"
-            );
-
-            if (response.statusCode() == 200) {
-                // Parse XML response to extract lock info
-                LockResult lockResult = parseLockResponse(response.text());
-                log.debug("Lock acquired: handle={}, transport={}",
-                        lockResult.lockHandle.substring(0, Math.min(20, lockResult.lockHandle.length())),
-                        lockResult.transportNumber);
-                return lockResult;
-            } else if (response.statusCode() == 409) {
-                // Object is already locked by another user
-                String errorMsg = String.format(
-                        "Object is already locked by another user. Cannot acquire lock. (HTTP 409)"
-                );
-                log.error(errorMsg);
-                throw new RuntimeException(errorMsg);
-            } else {
-                String errorMsg = String.format(
-                        "Failed to lock object: HTTP %d - %s",
-                        response.statusCode(),
-                        response.text()
-                );
-                log.error(errorMsg);
-                throw new RuntimeException(errorMsg);
-            }
-
-        } catch (Exception e) {
-            log.error("Error locking object '{}': {}", objectUri, e.getMessage(), e);
-            throw new RuntimeException("Failed to lock object", e);
-        }
-    }
-
-    /**
-     * Unlock an ABAP object after editing.
-     *
-     * ADT API Endpoint:
-     * POST /sap/bc/adt/programs/{type}/{name}?_action=UNLOCK&lockHandle={handle}
-     *
-     * @param objectUri  URI of the object to unlock
-     * @param lockHandle lock handle from lock operation
-     * @return true if unlock successful
-     * @throws RuntimeException if unlock fails
-     */
-    private boolean unlockObject(String objectUri, String lockHandle) {
-        Map<String, String> params = new HashMap<>();
-        params.put("_action", "UNLOCK");
-        params.put("lockHandle", lockHandle);
-
-        log.debug("Unlocking object: {}", objectUri);
-
-        try {
-            RfcAdapter.RfcResponse response = rfcAdapter.request(
-                    objectUri,
-                    "POST",
-                    null,
-                    params,
-                    "",
-                    "application/vnd.sap.as+xml;charset=UTF-8"
-            );
-
-            if (response.statusCode() == 200 || response.statusCode() == 204) {
-                log.debug("Object unlocked successfully");
-                return true;
-            } else {
-                String errorMsg = String.format(
-                        "Failed to unlock object: HTTP %d - %s",
-                        response.statusCode(),
-                        response.text()
-                );
-                log.error(errorMsg);
-                throw new RuntimeException(errorMsg);
-            }
-
-        } catch (Exception e) {
-            log.error("Error unlocking object '{}': {}", objectUri, e.getMessage(), e);
-            throw new RuntimeException("Failed to unlock object", e);
-        }
-    }
-
     /**
      * Set (update) source code for an ABAP object.
      *
@@ -878,70 +738,6 @@ public class ProgramService {
             log.error("Error setting source for object '{}': {}", objectUri, e.getMessage(), e);
             throw new RuntimeException("Failed to set object source", e);
         }
-    }
-
-    // ============================================================================
-    // XML PARSING HELPERS
-    // ============================================================================
-
-    /**
-     * Parse XML response from LOCK operation.
-     *
-     * Extracts:
-     * - LOCK_HANDLE: Required for subsequent operations
-     * - CORRNR: Transport number (system-assigned or existing)
-     * - CORRUSER: User who owns the transport
-     * - CORRTEXT: Transport description
-     *
-     * @param xmlResponse XML response from LOCK operation
-     * @return LockResult with parsed values
-     * @throws RuntimeException if parsing fails or LOCK_HANDLE not found
-     */
-    private LockResult parseLockResponse(String xmlResponse) {
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.parse(new InputSource(new StringReader(xmlResponse)));
-
-            Element dataElement = (Element) doc.getElementsByTagName("DATA").item(0);
-
-            if (dataElement == null) {
-                throw new RuntimeException("No DATA element found in lock response");
-            }
-
-            String lockHandle = getElementText(dataElement, "LOCK_HANDLE");
-            String transportNumber = getElementText(dataElement, "CORRNR");
-            String transportUser = getElementText(dataElement, "CORRUSER");
-            String transportDescription = getElementText(dataElement, "CORRTEXT");
-
-            if (lockHandle == null || lockHandle.isEmpty()) {
-                throw new RuntimeException("LOCK_HANDLE not found in response: " + xmlResponse);
-            }
-
-            LockResult result = new LockResult();
-            result.lockHandle = lockHandle;
-            result.transportNumber = transportNumber != null ? transportNumber : "";
-            result.transportUser = transportUser != null ? transportUser : "";
-            result.transportDescription = transportDescription != null ? transportDescription : "";
-
-            return result;
-
-        } catch (Exception e) {
-            log.error("Failed to parse lock response XML: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to parse lock response", e);
-        }
-    }
-
-    /**
-     * Get text content of XML element.
-     */
-    private String getElementText(Element parent, String tagName) {
-        org.w3c.dom.NodeList nodes = parent.getElementsByTagName(tagName);
-        if (nodes.getLength() > 0) {
-            Element element = (Element) nodes.item(0);
-            return element.getTextContent();
-        }
-        return null;
     }
 
     // ============================================================================
@@ -1151,15 +947,5 @@ public class ProgramService {
             log.error("Failed to parse syntax check result XML: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to parse syntax check result", e);
         }
-    }
-
-    /**
-     * Internal class to hold lock response data.
-     */
-    private static class LockResult {
-        String lockHandle;
-        String transportNumber;
-        String transportUser;
-        String transportDescription;
     }
 }

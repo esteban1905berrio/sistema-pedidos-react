@@ -11,10 +11,12 @@ FUNCTION Z_CX_GET_PACKAGE_HIERARCHY
     PACKAGE_NOT_FOUND
     QUERY_ERROR.
 
+
+
   TYPES: BEGIN OF ty_package,
            devclass TYPE devclass,
            parentcl TYPE devclass,
-           ctext    TYPE ctext,
+           ctext    TYPE tdevc-ctext,
            level    TYPE i,
          END OF ty_package.
 

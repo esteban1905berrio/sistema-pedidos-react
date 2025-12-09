@@ -9,79 +9,93 @@ FUNCTION ZCX_GETDDICSOURCE
     OBJECT_NOT_FOUND
     INVALID_OBJECT_TYPE.
 
-   DATA: lv_tabclass   TYPE dd02l-tabclass,
-         lt_fields     TYPE STANDARD TABLE OF dd03l,
-         ls_field      TYPE dd03l,
-         lv_json       TYPE string,
-         lv_field_json TYPE string,
-         lv_first      TYPE abap_bool VALUE abap_true.
 
-   CLEAR: object_type, object_status, fields_json.
 
-   SELECT SINGLE tabclass
-     FROM dd02l
-     INTO lv_tabclass
-     WHERE tabname = object_name
-       AND as4local = 'A'.
+  " Structure for JSON output (matches Java DdicField)
+  TYPES: BEGIN OF ty_field,
+           fieldname  TYPE dd03l-fieldname,
+           position   TYPE dd03l-position,
+           rollname   TYPE dd03l-rollname,
+           mandatory  TYPE dd03l-mandatory,
+           checktable TYPE dd03l-checktable,
+           adminfield TYPE dd03l-adminfield,
+           inttype    TYPE dd03l-inttype,
+           intlen     TYPE dd03l-intlen,
+           datatype   TYPE dd03l-datatype,
+           keyflag    TYPE dd03l-keyflag,
+           reffield   TYPE dd03l-reffield,
+         END OF ty_field,
+         tt_fields TYPE STANDARD TABLE OF ty_field WITH DEFAULT KEY.
 
-   IF sy-subrc <> 0.
-     RAISE object_not_found.
-   ENDIF.
+  DATA: lv_tabclass TYPE dd02l-tabclass,
+        lt_dd03l    TYPE STANDARD TABLE OF dd03l,
+        ls_dd03l    TYPE dd03l,
+        lt_fields   TYPE tt_fields,
+        ls_field    TYPE ty_field.
 
-   CASE lv_tabclass.
-     WHEN 'TRANSP'.
-       object_type = 'TABLE'.
-     WHEN 'INTTAB'.
-       object_type = 'STRUCTURE'.
-     WHEN 'VIEW'.
-       object_type = 'VIEW'.
-     WHEN 'APPEND'.
-       object_type = 'APPEND'.
-     WHEN OTHERS.
-       object_type = 'UNKNOWN'.
-   ENDCASE.
+  CLEAR: object_type, object_status, fields_json.
 
-   object_status = 'ACTIVE'.
+  " Get object type from DD02L
+  SELECT SINGLE tabclass
+    FROM dd02l
+    INTO lv_tabclass
+    WHERE tabname = object_name
+      AND as4local = 'A'.
 
-   SELECT fieldname position rollname mandatory checktable
-          adminfield inttype intlen datatype keyflag reffield
-     FROM dd03l
-     INTO CORRESPONDING FIELDS OF TABLE lt_fields
-     WHERE tabname = object_name
-       AND as4local = 'A'
-       AND fieldname <> '.INCLUDE'
-     ORDER BY position.
+  IF sy-subrc <> 0.
+    RAISE object_not_found.
+  ENDIF.
 
-   IF sy-subrc <> 0.
-     RAISE invalid_object_type.
-   ENDIF.
+  " Map tabclass to readable type
+  CASE lv_tabclass.
+    WHEN 'TRANSP'.
+      object_type = 'TABLE'.
+    WHEN 'INTTAB'.
+      object_type = 'STRUCTURE'.
+    WHEN 'VIEW'.
+      object_type = 'VIEW'.
+    WHEN 'APPEND'.
+      object_type = 'APPEND'.
+    WHEN OTHERS.
+      object_type = 'UNKNOWN'.
+  ENDCASE.
 
-   lv_json = '['.
+  object_status = 'ACTIVE'.
 
-   LOOP AT lt_fields INTO ls_field.
-     IF lv_first = abap_false.
-       CONCATENATE lv_json ',' INTO lv_json.
-     ENDIF.
+  " Get fields from DD03L
+  SELECT fieldname position rollname mandatory checktable
+         adminfield inttype intlen datatype keyflag reffield
+    FROM dd03l
+    INTO CORRESPONDING FIELDS OF TABLE lt_dd03l
+    WHERE tabname = object_name
+      AND as4local = 'A'
+      AND fieldname <> '.INCLUDE'
+    ORDER BY position.
 
-     CONCATENATE '{'
-                 '"fieldname":"' ls_field-fieldname '",'
-                 '"position":' ls_field-position ','
-                 '"rollname":"' ls_field-rollname '",'
-                 '"mandatory":"' ls_field-mandatory '",'
-                 '"checktable":"' ls_field-checktable '",'
-                 '"adminfield":"' ls_field-adminfield '",'
-                 '"inttype":"' ls_field-inttype '",'
-                 '"intlen":' ls_field-intlen ','
-                 '"datatype":"' ls_field-datatype '",'
-                 '"keyflag":"' ls_field-keyflag '",'
-                 '"reffield":"' ls_field-reffield '"'
-                 '}'
-       INTO lv_field_json.
+  IF sy-subrc <> 0.
+    RAISE invalid_object_type.
+  ENDIF.
 
-     CONCATENATE lv_json lv_field_json INTO lv_json.
-     lv_first = abap_false.
-   ENDLOOP.
+  " Convert to output structure (removes trailing spaces)
+  LOOP AT lt_dd03l INTO ls_dd03l.
+    CLEAR ls_field.
+    ls_field-fieldname  = ls_dd03l-fieldname.
+    ls_field-position   = ls_dd03l-position.
+    ls_field-rollname   = ls_dd03l-rollname.
+    ls_field-mandatory  = ls_dd03l-mandatory.
+    ls_field-checktable = ls_dd03l-checktable.
+    ls_field-adminfield = ls_dd03l-adminfield.
+    ls_field-inttype    = ls_dd03l-inttype.
+    ls_field-intlen     = ls_dd03l-intlen.
+    ls_field-datatype   = ls_dd03l-datatype.
+    ls_field-keyflag    = ls_dd03l-keyflag.
+    ls_field-reffield   = ls_dd03l-reffield.
+    APPEND ls_field TO lt_fields.
+  ENDLOOP.
 
-   CONCATENATE lv_json ']' INTO fields_json.
+  " Serialize to JSON using /ui2/cl_json
+  fields_json = /ui2/cl_json=>serialize(
+    data        = lt_fields
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
 
 ENDFUNCTION.

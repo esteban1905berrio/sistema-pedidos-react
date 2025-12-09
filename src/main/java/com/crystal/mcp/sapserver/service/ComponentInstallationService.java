@@ -130,118 +130,117 @@ public class ComponentInstallationService {
             int fgCreated = 0, fmCreated = 0, classCreated = 0, skipped = 0, failed = 0;
             List<String> objectsToActivate = new ArrayList<>();
 
-            // Process installation in order defined by manifest
-            if (manifest.getInstallationOrder() != null) {
-                for (ManifestData.InstallationStep step : manifest.getInstallationOrder()) {
-                    log.info("Processing installation step {}: {} - {}",
-                            step.getStep(), step.getType(), step.getDescription());
+            // Install directly from manifest lists (ignore installation_order)
+            // Order: 1) Function Groups, 2) Classes, 3) Function Modules, 4) Activation
 
-                    switch (step.getType()) {
-                        case "package":
-                            // Package creation - skip for now, assume exists
-                            warnings.add("Package creation skipped: " + step.getName());
-                            break;
-
-                        case "function_group":
-                            // Install function group
-                            ManifestData.FunctionGroup fg = findFunctionGroup(manifest, step.getName());
-                            if (fg != null) {
-                                InstallComponentResult fgResult = installFunctionGroup(
-                                        basePath, fg, actualPackage, transport,
-                                        dryRun, skipExisting, forceOverwrite);
-
-                                components.add(fgResult.component());
-                                if (fgResult.success()) {
-                                    fgCreated++;
-                                    if (fgResult.objectUri() != null) {
-                                        objectsToActivate.add(fgResult.objectUri());
-                                    }
-                                } else if (fgResult.pendingConfirmation()) {
-                                    pendingConfirmations.add("FUGR:" + fg.getName());
-                                } else if (fgResult.skipped()) {
-                                    skipped++;
-                                } else {
-                                    failed++;
-                                    if (fgResult.error() != null) {
-                                        errors.add(fgResult.error());
-                                    }
-                                }
-                            }
-                            break;
-
-                        case "class":
-                            // Install single class
-                            ManifestData.ClassDef classDef = findClass(manifest, step.getName());
-                            if (classDef != null) {
-                                InstallComponentResult classResult = installClass(
-                                        basePath, classDef, actualPackage, transport,
-                                        dryRun, skipExisting, forceOverwrite);
-
-                                components.add(classResult.component());
-                                if (classResult.success()) {
-                                    classCreated++;
-                                    if (classResult.objectUri() != null) {
-                                        objectsToActivate.add(classResult.objectUri());
-                                    }
-                                } else if (classResult.pendingConfirmation()) {
-                                    pendingConfirmations.add("CLAS:" + classDef.getName());
-                                } else if (classResult.skipped()) {
-                                    skipped++;
-                                } else {
-                                    failed++;
-                                    if (classResult.error() != null) {
-                                        errors.add(classResult.error());
-                                    }
-                                }
-                            }
-                            break;
-
-                        case "function_modules":
-                            // Install multiple function modules
-                            if (step.getNames() != null) {
-                                for (String fmName : step.getNames()) {
-                                    // Find FM and its parent function group
-                                    FunctionModuleWithGroup fmWithGroup = findFunctionModule(manifest, fmName);
-                                    if (fmWithGroup != null) {
-                                        InstallComponentResult fmResult = installFunctionModule(
-                                                basePath, fmWithGroup.fg(), fmWithGroup.fm(),
-                                                actualPackage, transport,
-                                                dryRun, skipExisting, forceOverwrite);
-
-                                        components.add(fmResult.component());
-                                        if (fmResult.success()) {
-                                            fmCreated++;
-                                            if (fmResult.objectUri() != null) {
-                                                objectsToActivate.add(fmResult.objectUri());
-                                            }
-                                        } else if (fmResult.pendingConfirmation()) {
-                                            pendingConfirmations.add("FUNC:" + fmName);
-                                        } else if (fmResult.skipped()) {
-                                            skipped++;
-                                        } else {
-                                            failed++;
-                                            if (fmResult.error() != null) {
-                                                errors.add(fmResult.error());
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-
-                        case "activation":
-                            // Activate all pending objects
-                            if (!dryRun && !objectsToActivate.isEmpty()) {
-                                try {
-                                    activationService.activateObjects(objectsToActivate);
-                                    resultBuilder.objectsActivated(objectsToActivate.size());
-                                    log.info("Activated {} objects", objectsToActivate.size());
-                                } catch (Exception e) {
-                                    warnings.add("Activation failed: " + e.getMessage());
-                                }
-                            }
-                            break;
+            // Step 1: Install Function Groups
+            if (manifest.getFunctionGroups() != null) {
+                for (ManifestData.FunctionGroup fg : manifest.getFunctionGroups()) {
+                    // Filter by component names if specified
+                    if (componentNames != null && !componentNames.contains(fg.getName().toUpperCase())) {
+                        continue;
                     }
+
+                    log.info("Installing function group: {}", fg.getName());
+                    InstallComponentResult fgResult = installFunctionGroup(
+                            basePath, fg, actualPackage, transport,
+                            dryRun, skipExisting, forceOverwrite);
+
+                    components.add(fgResult.component());
+                    if (fgResult.success()) {
+                        fgCreated++;
+                        if (fgResult.objectUri() != null) {
+                            objectsToActivate.add(fgResult.objectUri());
+                        }
+                    } else if (fgResult.pendingConfirmation()) {
+                        pendingConfirmations.add("FUGR:" + fg.getName());
+                    } else if (fgResult.skipped()) {
+                        skipped++;
+                    } else {
+                        failed++;
+                        if (fgResult.error() != null) {
+                            errors.add(fgResult.error());
+                        }
+                    }
+                }
+            }
+
+            // Step 2: Install Classes
+            if (manifest.getClasses() != null) {
+                for (ManifestData.ClassDef classDef : manifest.getClasses()) {
+                    // Filter by component names if specified
+                    if (componentNames != null && !componentNames.contains(classDef.getName().toUpperCase())) {
+                        continue;
+                    }
+
+                    log.info("Installing class: {}", classDef.getName());
+                    InstallComponentResult classResult = installClass(
+                            basePath, classDef, actualPackage, transport,
+                            dryRun, skipExisting, forceOverwrite);
+
+                    components.add(classResult.component());
+                    if (classResult.success()) {
+                        classCreated++;
+                        if (classResult.objectUri() != null) {
+                            objectsToActivate.add(classResult.objectUri());
+                        }
+                    } else if (classResult.pendingConfirmation()) {
+                        pendingConfirmations.add("CLAS:" + classDef.getName());
+                    } else if (classResult.skipped()) {
+                        skipped++;
+                    } else {
+                        failed++;
+                        if (classResult.error() != null) {
+                            errors.add(classResult.error());
+                        }
+                    }
+                }
+            }
+
+            // Step 3: Install Function Modules (from all function groups)
+            if (manifest.getFunctionGroups() != null) {
+                for (ManifestData.FunctionGroup fg : manifest.getFunctionGroups()) {
+                    if (fg.getFunctionModules() != null) {
+                        for (ManifestData.FunctionModule fm : fg.getFunctionModules()) {
+                            // Filter by component names if specified
+                            if (componentNames != null && !componentNames.contains(fm.getName().toUpperCase())) {
+                                continue;
+                            }
+
+                            log.info("Installing function module: {} in group {}", fm.getName(), fg.getName());
+                            InstallComponentResult fmResult = installFunctionModule(
+                                    basePath, fg, fm, actualPackage, transport,
+                                    dryRun, skipExisting, forceOverwrite);
+
+                            components.add(fmResult.component());
+                            if (fmResult.success()) {
+                                fmCreated++;
+                                if (fmResult.objectUri() != null) {
+                                    objectsToActivate.add(fmResult.objectUri());
+                                }
+                            } else if (fmResult.pendingConfirmation()) {
+                                pendingConfirmations.add("FUNC:" + fm.getName());
+                            } else if (fmResult.skipped()) {
+                                skipped++;
+                            } else {
+                                failed++;
+                                if (fmResult.error() != null) {
+                                    errors.add(fmResult.error());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Step 4: Activate all pending objects
+            if (!dryRun && !objectsToActivate.isEmpty()) {
+                try {
+                    activationService.activateObjects(objectsToActivate);
+                    resultBuilder.objectsActivated(objectsToActivate.size());
+                    log.info("Activated {} objects", objectsToActivate.size());
+                } catch (Exception e) {
+                    warnings.add("Activation failed: " + e.getMessage());
                 }
             }
 
@@ -458,7 +457,13 @@ public class ComponentInstallationService {
             ProgramModifyResult modifyResult = programService.modifyFunctionModuleSource(
                     name, fg.getName(), source, transport);
 
-            if (modifyResult.isSuccess()) {
+            // Success if: workflow completed (locked+modified+unlocked) OR explicit success
+            // Activation may fail if source is identical (no inactive objects)
+            boolean workflowOk = modifyResult.isLocked() && modifyResult.isModified() && modifyResult.isUnlocked();
+            log.info("FM {} workflow: success={}, locked={}, modified={}, unlocked={}, workflowOk={}",
+                    name, modifyResult.isSuccess(), modifyResult.isLocked(),
+                    modifyResult.isModified(), modifyResult.isUnlocked(), workflowOk);
+            if (modifyResult.isSuccess() || workflowOk) {
                 String uri = String.format("/sap/bc/adt/functions/groups/%s/fmodules/%s",
                         fg.getName().toLowerCase(), name.toLowerCase());
                 return new InstallComponentResult(
@@ -565,7 +570,13 @@ public class ComponentInstallationService {
             ClassModifyResult modifyResult = classService.modifyClass(
                     name, source, "main", transport);
 
-            if (modifyResult.isSuccess()) {
+            // Success if: workflow completed (locked+modified+unlocked) OR explicit success
+            // Activation may fail if source is identical (no inactive objects)
+            boolean workflowOk = modifyResult.isLocked() && modifyResult.isModified() && modifyResult.isUnlocked();
+            log.info("Class {} workflow: success={}, locked={}, modified={}, unlocked={}, workflowOk={}",
+                    name, modifyResult.isSuccess(), modifyResult.isLocked(),
+                    modifyResult.isModified(), modifyResult.isUnlocked(), workflowOk);
+            if (modifyResult.isSuccess() || workflowOk) {
                 String uri = "/sap/bc/adt/oo/classes/" + name.toLowerCase();
                 return new InstallComponentResult(
                         InstallationResult.InstalledComponent.builder()
@@ -613,34 +624,6 @@ public class ComponentInstallationService {
             return null;
         }
         return objectMapper.readValue(manifestPath.toFile(), ManifestData.class);
-    }
-
-    private ManifestData.FunctionGroup findFunctionGroup(ManifestData manifest, String name) {
-        if (manifest.getFunctionGroups() == null) return null;
-        return manifest.getFunctionGroups().stream()
-                .filter(fg -> fg.getName().equalsIgnoreCase(name))
-                .findFirst().orElse(null);
-    }
-
-    private ManifestData.ClassDef findClass(ManifestData manifest, String name) {
-        if (manifest.getClasses() == null) return null;
-        return manifest.getClasses().stream()
-                .filter(c -> c.getName().equalsIgnoreCase(name))
-                .findFirst().orElse(null);
-    }
-
-    private FunctionModuleWithGroup findFunctionModule(ManifestData manifest, String fmName) {
-        if (manifest.getFunctionGroups() == null) return null;
-        for (ManifestData.FunctionGroup fg : manifest.getFunctionGroups()) {
-            if (fg.getFunctionModules() != null) {
-                for (ManifestData.FunctionModule fm : fg.getFunctionModules()) {
-                    if (fm.getName().equalsIgnoreCase(fmName)) {
-                        return new FunctionModuleWithGroup(fg, fm);
-                    }
-                }
-            }
-        }
-        return null;
     }
 
     private String readFunctionModuleSource(Path basePath, ManifestData.FunctionGroup fg,
@@ -697,10 +680,5 @@ public class ComponentInstallationService {
             boolean pendingConfirmation,
             String objectUri,
             InstallationResult.InstallationError error
-    ) {}
-
-    private record FunctionModuleWithGroup(
-            ManifestData.FunctionGroup fg,
-            ManifestData.FunctionModule fm
     ) {}
 }

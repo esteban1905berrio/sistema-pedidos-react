@@ -20,6 +20,7 @@ import java.util.List;
  * <p>Available tools:
  * <ul>
  *   <li>extract_abap_components - Extract ABAP components based on manifest.json</li>
+ *   <li>sync_manifest_with_code - Synchronize manifest with FMs used in Java code</li>
  * </ul>
  *
  * <p>Usage example:
@@ -29,6 +30,9 @@ import java.util.List;
  *
  * // Extract specific function module
  * extract_abap_components("./abap", "ZCX_GETDDICSOURCE", true, true)
+ *
+ * // Sync manifest before extraction (done automatically, but can be called manually)
+ * sync_manifest_with_code("./abap")
  * </pre>
  */
 @Slf4j
@@ -126,6 +130,47 @@ public class ComponentExtractionTools {
 
         log.info("Extraction completed: success={}, components={}, files={}",
                 result.isSuccess(), result.getTotalComponents(), result.getFilesWritten());
+
+        return result;
+    }
+
+    /**
+     * Synchronize manifest.json with function modules actually used in the MCP server code.
+     *
+     * <p>This tool scans the Java source code to detect custom FM references
+     * (Z_CX_*, ZCX_*) and updates the manifest to include any missing FMs.
+     *
+     * <p>This is useful for:
+     * <ul>
+     *   <li>Ensuring all FMs used by the MCP server are in the manifest</li>
+     *   <li>Detecting FMs that were added to the code but not the manifest</li>
+     *   <li>Auditing manifest completeness before extraction</li>
+     * </ul>
+     *
+     * <p>Note: This sync is automatically performed by extract_abap_components,
+     * but can be called manually to preview changes without extraction.
+     *
+     * @param targetPath Path to ABAP components directory containing manifest.json
+     * @return ManifestSyncResult with details of synchronization
+     */
+    @McpTool(description = "Synchronize manifest.json with function modules used in Java code. " +
+            "Scans Java source for custom FM references (Z_CX_*, ZCX_*) and updates manifest. " +
+            "Automatically called by extract_abap_components, but can be run separately. " +
+            "Token cost: ~100-300 tokens.")
+    public ComponentExtractionService.ManifestSyncResult sync_manifest_with_code(
+            @McpToolParam(description = "Path to ABAP components directory containing manifest.json. "
+                    + "Default: './abap'", required = false)
+            String targetPath) {
+
+        log.info("MCP Tool: sync_manifest_with_code called with targetPath={}", targetPath);
+
+        ComponentExtractionService.ManifestSyncResult result =
+                componentExtractionService.syncManifestWithUsedFMs(targetPath);
+
+        log.info("Sync completed: success={}, added={}, extra={}",
+                result.isSuccess(),
+                result.getAddedFMs() != null ? result.getAddedFMs().size() : 0,
+                result.getExtraFMs() != null ? result.getExtraFMs().size() : 0);
 
         return result;
     }

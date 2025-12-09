@@ -114,7 +114,7 @@ public class ManualTransportModificationTest implements CommandLineRunner {
             // UNCOMMENT TO RUN: testReleaseTransport();
 
             // Test 7: Force add objects (bypass lock validation)
-            testForceAddObjectsToTransport();
+            //testForceAddObjectsToTransport();
 
             System.out.println();
             System.out.println("╔══════════════════════════════════════════════════════════════╗");

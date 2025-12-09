@@ -147,7 +147,10 @@
       "WebFetch(domain:www.leanx.eu)",
       "WebFetch(domain:stackoverflow.com)",
       "mcp__gdcmcp__getPackageHierarchy",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:piotrminkowski.com)",
+      "mcp__github__search_code",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []
