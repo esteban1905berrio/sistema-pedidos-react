@@ -5,8 +5,8 @@
       "args": [
         "spring-boot:run",
         "-f",
-        "/Users/bastianroot/CursorIDEWorkspace/giralmcp/pom.xml",
-        "-Djava.library.path=/Users/bastianroot/CursorIDEWorkspace/giralmcp/lib"
+        "/Users/bastianroot/AIWorkspace/giralmcp/pom.xml",
+        "-Djava.library.path=/Users/bastianroot/AIWorkspace/giralmcp/lib"
       ],
       "env": {
         "JAVA_HOME": "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home",
@@ -26,8 +26,8 @@
       "args": [
         "spring-boot:run",
         "-f",
-        "/Users/bastianroot/CursorIDEWorkspace/giralmcp/pom.xml",
-        "-Djava.library.path=/Users/bastianroot/CursorIDEWorkspace/giralmcp/lib"
+        "/Users/bastianroot/AIWorkspace/giralmcp/pom.xml",
+        "-Djava.library.path=/Users/bastianroot/AIWorkspace/giralmcp/lib"
       ],
       "env": {
         "JAVA_HOME": "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home",

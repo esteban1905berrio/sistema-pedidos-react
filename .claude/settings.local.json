@@ -150,14 +150,16 @@
       "Bash(ls:*)",
       "WebFetch(domain:piotrminkowski.com)",
       "mcp__github__search_code",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "sap-java-server"
+    "giralmcp",
+    "gdcmcp"
   ],
   "disabledMcpjsonServers": [
     "CRY",
