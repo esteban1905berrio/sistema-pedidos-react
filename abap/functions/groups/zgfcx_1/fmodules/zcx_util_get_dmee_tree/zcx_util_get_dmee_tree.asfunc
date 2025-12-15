@@ -1,0 +1,239 @@
+FUNCTION ZCX_UTIL_GET_DMEE_TREE
+  IMPORTING
+    VALUE(IV_TREE_TYPE) TYPE STRING
+    VALUE(IV_TREE_ID) TYPE STRING
+    VALUE(IV_VERSION) TYPE DMEE_VERSION OPTIONAL
+    VALUE(IV_LANGU) TYPE LANGU DEFAULT SY-LANGU
+    VALUE(IV_MAX_RESULTS) TYPE I DEFAULT 100
+  EXPORTING
+    VALUE(EV_HEADER_JSON) TYPE STRING
+    VALUE(EV_NODES_JSON) TYPE STRING
+    VALUE(EV_RESULTS_JSON) TYPE STRING
+    VALUE(EV_RCODE) TYPE CHAR2
+    VALUE(EV_MESSAGE) TYPE STRING.
+
+
+
+  TYPES: BEGIN OF ty_header,
+           tree_type    TYPE dmee_treetype,
+           tree_id      TYPE dmee_treeid,
+           description  TYPE string,
+           version      TYPE dmee_version,
+           crea_user    TYPE uname,
+           crea_date    TYPE sydatum,
+           chng_user    TYPE aenam,
+           chng_date    TYPE aedat,
+           release_flag TYPE char1,
+           param_struc  TYPE string,
+           charset      TYPE string,
+           vers_user    TYPE uname,
+           vers_date    TYPE sydatum,
+         END OF ty_header.
+
+  TYPES: BEGIN OF ty_node,
+           node_id       TYPE dmee_nodeid,
+           tech_name     TYPE string,
+           parent_id     TYPE dmee_nodeid,
+           node_type     TYPE string,
+           lev           TYPE i,
+           text          TYPE string,
+           node_comment  TYPE string,
+           length        TYPE i,
+           data_type     TYPE string,
+           mp_const      TYPE string,
+           mp_sc_tab     TYPE string,
+           mp_sc_fld     TYPE string,
+           mp_exit_func  TYPE string,
+           cv_rule       TYPE string,
+         END OF ty_node,
+         tt_nodes TYPE STANDARD TABLE OF ty_node WITH DEFAULT KEY.
+
+  TYPES: BEGIN OF ty_search_result,
+           tree_type   TYPE dmee_treetype,
+           tree_id     TYPE dmee_treeid,
+           description TYPE string,
+         END OF ty_search_result,
+         tt_search_results TYPE STANDARD TABLE OF ty_search_result WITH DEFAULT KEY.
+
+  DATA: ls_tree      TYPE dmee_tree,
+        ls_tree_t    TYPE dmee_tree_t,
+        ls_head      TYPE dmee_tree_head,
+        lt_nodes     TYPE STANDARD TABLE OF dmee_tree_node,
+        lt_nodes_t   TYPE STANDARD TABLE OF dmee_tree_node_t,
+        ls_header    TYPE ty_header,
+        lt_result    TYPE tt_nodes,
+        ls_result    TYPE ty_node,
+        lv_version   TYPE dmee_version,
+        lv_is_wildcard TYPE abap_bool,
+        lv_pattern_type TYPE string,
+        lv_pattern_id TYPE string,
+        lt_search_results TYPE tt_search_results,
+        ls_search_result TYPE ty_search_result,
+        lv_tree_type TYPE dmee_treetype,
+        lv_tree_id TYPE dmee_treeid.
+
+  CLEAR: ev_header_json, ev_nodes_json, ev_results_json, ev_rcode, ev_message.
+
+  IF iv_tree_type IS INITIAL OR iv_tree_id IS INITIAL.
+    ev_rcode = '01'.
+    ev_message = 'TREE_TYPE and TREE_ID are required'.
+    RETURN.
+  ENDIF.
+
+  " Detect wildcard search
+  IF iv_tree_id CS '*'.
+    lv_is_wildcard = abap_true.
+  ELSE.
+    lv_is_wildcard = abap_false.
+  ENDIF.
+
+  " === WILDCARD SEARCH MODE ===
+  IF lv_is_wildcard = abap_true.
+    lv_pattern_type = iv_tree_type.
+    TRANSLATE lv_pattern_type TO UPPER CASE.
+    lv_pattern_id = iv_tree_id.
+    REPLACE ALL OCCURRENCES OF '*' IN lv_pattern_id WITH '%'.
+    TRANSLATE lv_pattern_id TO UPPER CASE.
+
+    " Search DMEE_TREE table with LIKE
+    SELECT tree_type tree_id
+      FROM dmee_tree
+      INTO CORRESPONDING FIELDS OF TABLE lt_search_results
+      UP TO iv_max_results ROWS
+      WHERE tree_type = lv_pattern_type
+        AND tree_id LIKE lv_pattern_id.
+
+    IF sy-subrc <> 0 OR lt_search_results IS INITIAL.
+      ev_rcode = '04'.
+      ev_message = 'No DMEE trees found matching pattern'.
+      RETURN.
+    ENDIF.
+
+    " Get descriptions for found trees
+    LOOP AT lt_search_results ASSIGNING FIELD-SYMBOL(<ls_search>).
+      SELECT SINGLE text FROM dmee_tree_t
+        INTO <ls_search>-description
+        WHERE langu     = iv_langu
+          AND tree_type = <ls_search>-tree_type
+          AND tree_id   = <ls_search>-tree_id.
+    ENDLOOP.
+
+    " Return search results as JSON
+    ev_results_json = /ui2/cl_json=>serialize(
+      data        = lt_search_results
+      pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+    ev_rcode = '00'.
+    ev_message = |Found { lines( lt_search_results ) } DMEE tree(s)|.
+    RETURN.
+  ENDIF.
+
+  " === EXACT SEARCH MODE (original behavior) ===
+  lv_tree_type = iv_tree_type.
+  lv_tree_id = iv_tree_id.
+  TRANSLATE lv_tree_type TO UPPER CASE.
+  TRANSLATE lv_tree_id TO UPPER CASE.
+
+  SELECT SINGLE * FROM dmee_tree
+    INTO @ls_tree
+    WHERE tree_type = @lv_tree_type
+      AND tree_id   = @lv_tree_id.
+
+  IF sy-subrc <> 0.
+    ev_rcode = '02'.
+    ev_message = 'DMEE tree not found'.
+    RETURN.
+  ENDIF.
+
+  SELECT SINGLE * FROM dmee_tree_t
+    INTO @ls_tree_t
+    WHERE langu     = @iv_langu
+      AND tree_type = @lv_tree_type
+      AND tree_id   = @lv_tree_id.
+
+  IF iv_version IS NOT INITIAL.
+    lv_version = iv_version.
+  ELSE.
+    SELECT MAX( version ) FROM dmee_tree_head
+      INTO @lv_version
+      WHERE tree_type = @lv_tree_type
+        AND tree_id   = @lv_tree_id.
+  ENDIF.
+
+  SELECT SINGLE * FROM dmee_tree_head
+    INTO @ls_head
+    WHERE tree_type = @lv_tree_type
+      AND tree_id   = @lv_tree_id
+      AND version   = @lv_version.
+
+  IF sy-subrc <> 0.
+    ev_rcode = '03'.
+    ev_message = 'Version not found'.
+    RETURN.
+  ENDIF.
+
+  ls_header-tree_type    = ls_tree-tree_type.
+  ls_header-tree_id      = ls_tree-tree_id.
+  ls_header-description  = ls_tree_t-text.
+  ls_header-version      = lv_version.
+  ls_header-crea_user    = ls_tree-crea_user.
+  ls_header-crea_date    = ls_tree-crea_date.
+  ls_header-chng_user    = ls_tree-chng_user.
+  ls_header-chng_date    = ls_tree-chng_date.
+  ls_header-release_flag = ls_tree-release_flag.
+  ls_header-param_struc  = ls_head-param_struc.
+  ls_header-charset      = ls_head-charset.
+  ls_header-vers_user    = ls_head-vers_user.
+  ls_header-vers_date    = ls_head-vers_date.
+
+  ev_header_json = /ui2/cl_json=>serialize(
+    data        = ls_header
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+  SELECT * FROM dmee_tree_node
+    INTO TABLE @lt_nodes
+    WHERE tree_type = @lv_tree_type
+      AND tree_id   = @lv_tree_id
+      AND version   = @lv_version
+    ORDER BY lev, node_id.
+
+  SELECT * FROM dmee_tree_node_t
+    INTO TABLE @lt_nodes_t
+    WHERE langu     = @iv_langu
+      AND tree_type = @lv_tree_type
+      AND tree_id   = @lv_tree_id
+      AND version   = @lv_version.
+
+  LOOP AT lt_nodes ASSIGNING FIELD-SYMBOL(<ls_node>).
+    CLEAR ls_result.
+    ls_result-node_id      = <ls_node>-node_id.
+    ls_result-tech_name    = <ls_node>-tech_name.
+    ls_result-parent_id    = <ls_node>-parent_id.
+    ls_result-node_type    = <ls_node>-node_type.
+    ls_result-lev          = <ls_node>-lev.
+    ls_result-length       = <ls_node>-length.
+    ls_result-data_type    = <ls_node>-data_type.
+    ls_result-mp_const     = <ls_node>-mp_const.
+    ls_result-mp_sc_tab    = <ls_node>-mp_sc_tab.
+    ls_result-mp_sc_fld    = <ls_node>-mp_sc_fld.
+    ls_result-mp_exit_func = <ls_node>-mp_exit_func.
+    ls_result-cv_rule      = <ls_node>-cv_rule.
+
+    READ TABLE lt_nodes_t ASSIGNING FIELD-SYMBOL(<ls_node_t>)
+      WITH KEY node_id = <ls_node>-node_id.
+    IF sy-subrc = 0.
+      ls_result-text         = <ls_node_t>-text.
+      ls_result-node_comment = <ls_node_t>-node_comment.
+    ENDIF.
+
+    APPEND ls_result TO lt_result.
+  ENDLOOP.
+
+  ev_nodes_json = /ui2/cl_json=>serialize(
+    data        = lt_result
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+  ev_rcode = '00'.
+  ev_message = 'Success'.
+
+ENDFUNCTION.

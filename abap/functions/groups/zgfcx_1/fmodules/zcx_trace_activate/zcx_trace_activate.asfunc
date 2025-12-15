@@ -1,0 +1,80 @@
+FUNCTION ZCX_TRACE_ACTIVATE
+  IMPORTING
+    VALUE(IV_TRACE_USER) TYPE SYUNAME DEFAULT SY-UNAME
+    VALUE(IV_CLIENT) TYPE SYMANDT DEFAULT SY-MANDT
+    VALUE(IV_TRACE_SQL) TYPE CHAR1 DEFAULT ABAP_TRUE
+    VALUE(IV_TRACE_BUFFER) TYPE CHAR1 DEFAULT ABAP_FALSE
+    VALUE(IV_TRACE_ENQUEUE) TYPE CHAR1 DEFAULT ABAP_FALSE
+    VALUE(IV_WITH_CALL_STACK) TYPE CHAR1 DEFAULT ABAP_TRUE
+  EXPORTING
+    VALUE(EV_SUCCESS) TYPE CHAR1
+    VALUE(EV_MESSAGE) TYPE STRING
+    VALUE(EV_START_DATE) TYPE SYDATUM
+    VALUE(EV_START_TIME) TYPE SYUZEIT.
+
+
+
+  DATA: ls_trace_types  TYPE st05_api_trace_types,
+        ls_trace_filter TYPE st05_api_trace_filter.
+
+  " Configure trace types
+  IF iv_trace_sql = abap_true.
+    ls_trace_types-sql_on = 'X'.
+  ENDIF.
+  IF iv_trace_buffer = abap_true.
+    ls_trace_types-buf_on = 'X'.
+  ENDIF.
+  IF iv_trace_enqueue = abap_true.
+    ls_trace_types-enq_on = 'X'.
+  ENDIF.
+
+  " Validate at least one trace type is enabled
+  IF ls_trace_types-sql_on IS INITIAL AND
+     ls_trace_types-buf_on IS INITIAL AND
+     ls_trace_types-enq_on IS INITIAL.
+    ev_success = abap_false.
+    ev_message = 'At least one trace type must be enabled'.
+    RETURN.
+  ENDIF.
+
+  " Configure filter
+  ls_trace_filter-trace_user = iv_trace_user.
+  ls_trace_filter-client = iv_client.
+  IF iv_with_call_stack = abap_true.
+    ls_trace_filter-stack_trace_on = 'X'.
+  ENDIF.
+
+  " Capture start time
+  ev_start_date = sy-datum.
+  ev_start_time = sy-uzeit.
+
+  " Activate trace
+  CALL FUNCTION 'ST05_ACTIVATE_TRACE'
+    EXPORTING
+      trace_types  = ls_trace_types
+      trace_filter = ls_trace_filter
+    EXCEPTIONS
+      no_authority       = 1
+      missing_trace_type = 2
+      activation_error   = 3
+      OTHERS             = 4.
+
+  IF sy-subrc <> 0.
+    ev_success = abap_false.
+    CASE sy-subrc.
+      WHEN 1.
+        ev_message = 'No authorization for ST05 trace (S_ADMI_FCD)'.
+      WHEN 2.
+        ev_message = 'Missing trace type - enable at least SQL, Buffer, or Enqueue'.
+      WHEN 3.
+        ev_message = 'Trace activation error - trace may already be active'.
+      WHEN OTHERS.
+        ev_message = |Trace activation failed: sy-subrc={ sy-subrc }|.
+    ENDCASE.
+    RETURN.
+  ENDIF.
+
+  ev_success = abap_true.
+  ev_message = |Trace activated for user { iv_trace_user } client { iv_client } at { ev_start_date } { ev_start_time }|.
+
+ENDFUNCTION.

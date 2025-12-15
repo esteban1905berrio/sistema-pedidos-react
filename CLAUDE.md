@@ -857,6 +857,36 @@ ENDFUNCTION.
 
 ---
 
+### ⚠️ REGLA: Evitar Lógica Redundante en Bifurcaciones ABAP
+
+**OBLIGATORIO**: En bifurcaciones (IF/ELSE, CASE), **solo** debe estar dentro de cada rama el código que **realmente difiere**.
+
+```abap
+" ❌ MAL - Código común duplicado en cada rama
+IF condicion.
+  [código común]      " DUPLICADO
+  [código específico A]
+  [código común]      " DUPLICADO
+ELSE.
+  [código común]      " DUPLICADO
+  [código específico B]
+  [código común]      " DUPLICADO
+ENDIF.
+
+" ✅ BIEN - Código común extraído
+[código común]
+IF condicion.
+  [código específico A]
+ELSE.
+  [código específico B]
+ENDIF.
+[código común]
+```
+
+**Documentación completa**: `docs/development_rules/abap_branching_rules.md`
+
+---
+
 ### ⚠️ REGLA: Manejo de JSON en ABAP con /ui2/cl_json
 
 **OBLIGATORIO**: Para serializar/deserializar JSON en ABAP, **SIEMPRE** usar la clase estándar `/ui2/cl_json`.

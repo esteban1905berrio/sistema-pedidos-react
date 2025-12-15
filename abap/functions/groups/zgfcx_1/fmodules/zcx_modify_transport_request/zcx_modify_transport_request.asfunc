@@ -613,6 +613,9 @@ FUNCTION ZCX_MODIFY_TRANSPORT_REQUEST
           iv_trkorr                   = iv_trkorr
           iv_dialog                   = abap_false
           iv_success_message          = abap_false
+          iv_without_objects_check    = abap_true
+          iv_without_locking          = abap_true
+          iv_ignore_warnings          = abap_true
         IMPORTING
           es_request                  = ls_request
           et_deleted_tasks            = lt_deleted

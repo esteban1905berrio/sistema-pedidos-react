@@ -27,13 +27,13 @@
     "interfaces" : 0,
     "programs" : 0,
     "includes" : 2,
-    "total_components" : 15,
+    "total_components" : 21,
     "function_groups" : 1,
-    "function_modules" : 12
+    "function_modules" : 18
   },
   "$schema" : "https://json-schema.org/draft/2020-12/schema",
   "source_system" : "GDC",
-  "extracted_date" : "2025-12-09",
+  "extracted_date" : "2025-12-15",
   "extracted_by" : "MCP Server",
   "function_groups" : [ {
     "name" : "ZGFCX_1",
@@ -114,6 +114,42 @@
       "name" : "Z_CX_GET_PACKAGE_OBJECTS",
       "description" : "Auto-detected FM (needs description)",
       "path" : "fmodules/z_cx_get_package_objects/z_cx_get_package_objects.asfunc",
+      "rfc_enabled" : false,
+      "mcp_tool" : "auto-detected"
+    }, {
+      "name" : "ZCX_TRACE_ACTIVATE",
+      "description" : "Auto-detected FM (needs description)",
+      "path" : "fmodules/zcx_trace_activate/zcx_trace_activate.asfunc",
+      "rfc_enabled" : false,
+      "mcp_tool" : "auto-detected"
+    }, {
+      "name" : "ZCX_TRACE_DEACTIVATE_AND_READ",
+      "description" : "Auto-detected FM (needs description)",
+      "path" : "fmodules/zcx_trace_deactivate_and_read/zcx_trace_deactivate_and_read.asfunc",
+      "rfc_enabled" : false,
+      "mcp_tool" : "auto-detected"
+    }, {
+      "name" : "ZCX_TRACE_TRANSACTION",
+      "description" : "Auto-detected FM (needs description)",
+      "path" : "fmodules/zcx_trace_transaction/zcx_trace_transaction.asfunc",
+      "rfc_enabled" : false,
+      "mcp_tool" : "auto-detected"
+    }, {
+      "name" : "ZCX_GET_ENHANCEMENT_SOURCE",
+      "description" : "Auto-detected FM (needs description)",
+      "path" : "fmodules/zcx_get_enhancement_source/zcx_get_enhancement_source.asfunc",
+      "rfc_enabled" : false,
+      "mcp_tool" : "auto-detected"
+    }, {
+      "name" : "ZCX_UTIL_GET_BADI_IMPL",
+      "description" : "Auto-detected FM (needs description)",
+      "path" : "fmodules/zcx_util_get_badi_impl/zcx_util_get_badi_impl.asfunc",
+      "rfc_enabled" : false,
+      "mcp_tool" : "auto-detected"
+    }, {
+      "name" : "ZCX_UTIL_GET_DMEE_TREE",
+      "description" : "Auto-detected FM (needs description)",
+      "path" : "fmodules/zcx_util_get_dmee_tree/zcx_util_get_dmee_tree.asfunc",
       "rfc_enabled" : false,
       "mcp_tool" : "auto-detected"
     } ]

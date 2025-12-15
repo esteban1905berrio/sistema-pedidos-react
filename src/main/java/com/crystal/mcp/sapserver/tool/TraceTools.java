@@ -189,10 +189,17 @@ public class TraceTools {
                     description = "SAP username to trace. " +
                             "Use the username of the person who will execute the transaction. " +
                             "Example: 'DEVELOPER', 'SAPUSER'. " +
-                            "Defaults to RFC connection user if not specified.",
+                            "Defaults to current user (SY-UNAME) if not specified.",
                     required = false
             )
             String traceUser,
+            @McpToolParam(
+                    description = "SAP client (mandant) to trace. " +
+                            "Example: '100', '200'. " +
+                            "Defaults to current client (SY-MANDT) if not specified.",
+                    required = false
+            )
+            String client,
             @McpToolParam(
                     description = "Enable SQL trace (database operations). " +
                             "Default: true. Set to false to exclude SQL from trace.",
@@ -220,6 +227,7 @@ public class TraceTools {
     ) {
         return traceService.activateTrace(
                 traceUser,
+                client,
                 traceSql != null ? traceSql : true,
                 traceBuffer != null ? traceBuffer : false,
                 traceEnqueue != null ? traceEnqueue : false,

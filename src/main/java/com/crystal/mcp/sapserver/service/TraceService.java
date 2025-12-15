@@ -250,7 +250,8 @@ public class TraceService {
      * After calling this, the USER should manually execute their transaction
      * in SAP GUI. Then call deactivateAndReadTrace() to get results.
      *
-     * @param traceUser     SAP user to trace (defaults to current user)
+     * @param traceUser     SAP user to trace (defaults to current user via SY-UNAME)
+     * @param client        SAP client to trace (defaults to current client via SY-MANDT)
      * @param traceSql      Enable SQL trace
      * @param traceBuffer   Enable buffer trace
      * @param traceEnqueue  Enable enqueue trace
@@ -259,18 +260,22 @@ public class TraceService {
      */
     public TraceActivationResult activateTrace(
             String traceUser,
+            String client,
             boolean traceSql,
             boolean traceBuffer,
             boolean traceEnqueue,
             boolean withCallStack) {
 
-        log.info("Activating trace | user: {} | sql: {} | buffer: {} | enqueue: {} | stack: {}",
-                traceUser, traceSql, traceBuffer, traceEnqueue, withCallStack);
+        log.info("Activating trace | user: {} | client: {} | sql: {} | buffer: {} | enqueue: {} | stack: {}",
+                traceUser, client, traceSql, traceBuffer, traceEnqueue, withCallStack);
 
         try {
             Map<String, String> params = new HashMap<>();
             if (traceUser != null && !traceUser.isEmpty()) {
                 params.put("IV_TRACE_USER", traceUser.toUpperCase());
+            }
+            if (client != null && !client.isEmpty()) {
+                params.put("IV_CLIENT", client);
             }
             params.put("IV_TRACE_SQL", traceSql ? "X" : " ");
             params.put("IV_TRACE_BUFFER", traceBuffer ? "X" : " ");
@@ -305,7 +310,7 @@ public class TraceService {
      * Simplified trace activation with defaults (SQL trace with call stack).
      */
     public TraceActivationResult activateTrace(String traceUser) {
-        return activateTrace(traceUser, true, false, false, true);
+        return activateTrace(traceUser, null, true, false, false, true);
     }
 
     /**

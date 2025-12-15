@@ -905,4 +905,609 @@ public class SapPromptProvider {
                 List.of(new PromptMessage(Role.USER, new TextContent(promptText)))
         );
     }
+
+    // ========================================================================
+    // 9. ANALYZE_PACKAGE_FOR_EXTRACTION - Package Extraction Analysis
+    // ========================================================================
+
+    /**
+     * Analyzes a package and recommends objects for extraction.
+     *
+     * Used by ABAP Ripper Tool to:
+     * - Identify valuable objects for training data
+     * - Filter out test/demo objects
+     * - Recommend extraction priorities
+     *
+     * @param packageName Package name to analyze
+     * @param objectList JSON list of objects in package
+     * @param purpose Extraction purpose (training, reference, audit)
+     * @return Structured extraction recommendation prompt
+     */
+    @McpPrompt(
+            name = "analyze_package_for_extraction",
+            title = "Analyze Package for Extraction",
+            description = "Analyzes SAP package contents and recommends which objects to extract for training data, reference, or audit purposes."
+    )
+    public GetPromptResult analyzePackageForExtraction(
+            @McpArg(name = "packageName", description = "Package/devclass name (e.g., ZFI, ZMMI)", required = true) String packageName,
+            @McpArg(name = "objectList", description = "JSON array of objects in package", required = true) String objectList,
+            @McpArg(name = "purpose", description = "Extraction purpose: training, reference, audit", required = false) String purpose
+    ) {
+        log.info("Prompt request: analyze_package_for_extraction for {}", packageName);
+
+        String purposeInfo = (purpose != null && !purpose.isBlank()) ? purpose : "training";
+
+        String promptText = """
+            # Package Extraction Analysis Request
+
+            You are an SAP ABAP architect analyzing a package for code extraction.
+
+            ## Package Information
+            - **Package**: %s
+            - **Purpose**: %s
+
+            ## Objects in Package
+            ```json
+            %s
+            ```
+
+            ## Analysis Requirements
+
+            Analyze the package and provide extraction recommendations:
+
+            ### 1. Object Classification
+
+            Classify each object into:
+            - **INCLUDE**: High-value objects for extraction
+            - **EXCLUDE**: Objects to skip (test, demo, generated)
+            - **REVIEW**: Objects needing manual review
+
+            ### 2. Inclusion Criteria (for %s)
+
+            **High Priority** (always include):
+            - Production classes with business logic
+            - Interfaces defining contracts
+            - Core function modules
+            - CDS Views with annotations
+            - Enhancement implementations
+
+            **Medium Priority** (include if well-documented):
+            - Helper/utility classes
+            - Data dictionary objects
+            - Forms and includes
+
+            **Exclude**:
+            - Objects starting with ZTEST*, ZDEMO*
+            - Objects in $TMP
+            - Generated artifacts (*_GENERATED)
+            - Empty or inactive objects
+
+            ### 3. Extraction Statistics
+
+            Provide counts:
+            - Total objects: X
+            - Recommended for extraction: Y
+            - Excluded: Z
+            - Need review: W
+
+            ### 4. Quality Indicators
+
+            Flag objects with:
+            - Missing documentation
+            - Non-standard naming
+            - Inactive status
+            - Potential duplicates
+
+            ## Output Format
+
+            **Summary**: Package overview and recommendation
+
+            **Extraction List**:
+            | Object | Type | Priority | Reason |
+            |--------|------|----------|--------|
+
+            **Exclusion List**:
+            | Object | Type | Reason for Exclusion |
+            |--------|------|----------------------|
+
+            **Quality Warnings**:
+            | Object | Warning | Suggestion |
+            |--------|---------|------------|
+
+            **Recommendation**: Final extraction strategy
+            """.formatted(packageName, purposeInfo, objectList, purposeInfo);
+
+        return new GetPromptResult(
+                "Package Analysis: " + packageName,
+                List.of(new PromptMessage(Role.USER, new TextContent(promptText)))
+        );
+    }
+
+    // ========================================================================
+    // 10. GENERATE_EXTRACTION_REPORT - Extraction Report Generation
+    // ========================================================================
+
+    /**
+     * Generates a comprehensive extraction report.
+     *
+     * Creates:
+     * - Summary of extracted objects
+     * - Quality metrics
+     * - Recommendations for use
+     *
+     * @param extractionId Extraction identifier
+     * @param statistics JSON with extraction statistics
+     * @param errors JSON with extraction errors
+     * @return Structured extraction report prompt
+     */
+    @McpPrompt(
+            name = "generate_extraction_report",
+            title = "Generate Extraction Report",
+            description = "Generates comprehensive report for ABAP code extraction with statistics, quality metrics, and recommendations."
+    )
+    public GetPromptResult generateExtractionReport(
+            @McpArg(name = "extractionId", description = "Extraction identifier or package name", required = true) String extractionId,
+            @McpArg(name = "statistics", description = "JSON with extraction statistics", required = true) String statistics,
+            @McpArg(name = "errors", description = "JSON array of extraction errors", required = false) String errors
+    ) {
+        log.info("Prompt request: generate_extraction_report for {}", extractionId);
+
+        String errorSection = (errors != null && !errors.isBlank())
+                ? "\n\n## Extraction Errors\n```json\n" + errors + "\n```"
+                : "";
+
+        String promptText = """
+            # Extraction Report Generation Request
+
+            You are an SAP technical analyst generating an extraction report.
+
+            ## Extraction Information
+            - **Extraction ID**: %s
+
+            ## Statistics
+            ```json
+            %s
+            ```
+            %s
+
+            ## Report Requirements
+
+            Generate a comprehensive extraction report:
+
+            ### 1. Executive Summary
+            - Overall extraction status
+            - Key metrics at a glance
+            - Quality assessment
+
+            ### 2. Object Statistics
+
+            | Object Type | Count | Size | Success Rate |
+            |-------------|-------|------|--------------|
+            | Classes | X | Y MB | Z%% |
+            | Programs | X | Y MB | Z%% |
+            | ...
+
+            ### 3. Quality Metrics
+
+            - **Code Coverage**: Objects with documentation
+            - **Naming Compliance**: Objects following conventions
+            - **Activation Status**: Active vs inactive ratio
+            - **Complexity**: Average lines per object
+
+            ### 4. Error Analysis
+
+            If errors occurred:
+            - Error categorization
+            - Most common failure reasons
+            - Retry recommendations
+
+            ### 5. Content Analysis
+
+            - Business domains covered
+            - Technology patterns found
+            - Framework usage (RAP, CDS, OData)
+
+            ### 6. Recommendations
+
+            - Objects that need attention
+            - Suggested follow-up extractions
+            - Quality improvements needed
+
+            ## Output Format
+
+            **Report Title**: ABAP Extraction Report - %s
+
+            **Date**: [Current date]
+
+            **Status**: SUCCESS/PARTIAL/FAILED
+
+            **Summary**: 2-3 sentence overview
+
+            **Detailed Statistics**: Tables and metrics
+
+            **Quality Score**: X/100 with breakdown
+
+            **Next Steps**: Recommended actions
+            """.formatted(extractionId, statistics, errorSection, extractionId);
+
+        return new GetPromptResult(
+                "Extraction Report: " + extractionId,
+                List.of(new PromptMessage(Role.USER, new TextContent(promptText)))
+        );
+    }
+
+    // ========================================================================
+    // 11. EXPLAIN_CDS_VIEW - CDS View Explanation
+    // ========================================================================
+
+    /**
+     * Explains a CDS View structure and associations.
+     *
+     * Provides:
+     * - View purpose and usage
+     * - Field descriptions
+     * - Association explanations
+     * - Annotation meanings
+     *
+     * @param cdsName CDS View name
+     * @param source CDS View source code
+     * @param context Optional business context
+     * @return Structured CDS explanation prompt
+     */
+    @McpPrompt(
+            name = "explain_cds_view",
+            title = "Explain CDS View",
+            description = "Explains CDS View structure, associations, annotations, and usage patterns in S/4HANA."
+    )
+    public GetPromptResult explainCdsView(
+            @McpArg(name = "cdsName", description = "CDS View name (e.g., I_BUSINESSPARTNER, ZCDS_INVOICE)", required = true) String cdsName,
+            @McpArg(name = "source", description = "CDS View DDL source code", required = true) String source,
+            @McpArg(name = "context", description = "Optional business context or usage scenario", required = false) String context
+    ) {
+        log.info("Prompt request: explain_cds_view for {}", cdsName);
+
+        String contextSection = (context != null && !context.isBlank())
+                ? "\n\n## Business Context\n" + context
+                : "";
+
+        String promptText = """
+            # CDS View Explanation Request
+
+            You are an SAP S/4HANA expert explaining a CDS View to a developer.
+
+            ## CDS View: %s
+
+            ## Source Code
+            ```sql
+            %s
+            ```
+            %s
+
+            ## Explanation Requirements
+
+            Provide comprehensive explanation covering:
+
+            ### 1. Purpose & Overview
+            - What business entity/process does this view represent?
+            - Is it a basic view, composite view, or consumption view?
+            - What is the view category (analytical, transactional)?
+
+            ### 2. Annotations Analysis
+
+            Explain key annotations:
+            - **@AbapCatalog**: Technical settings
+            - **@ObjectModel**: Semantic information
+            - **@UI**: Fiori UI generation
+            - **@Analytics**: Analytical queries
+            - **@Consumption**: Filter/parameter settings
+
+            ### 3. Data Model
+
+            | Field | Type | Description | Source |
+            |-------|------|-------------|--------|
+
+            ### 4. Associations
+
+            | Association | Target | Cardinality | Purpose |
+            |-------------|--------|-------------|---------|
+
+            ### 5. Parameters (if any)
+
+            | Parameter | Type | Purpose |
+            |-----------|------|---------|
+
+            ### 6. Usage Patterns
+
+            **As Data Source**:
+            ```abap
+            " Example ABAP consumption
+            ```
+
+            **In Fiori App**:
+            - How UI annotations generate UI
+            - Search help behavior
+            - Value help configuration
+
+            ### 7. Performance Considerations
+            - Aggregations and calculations
+            - Association cardinality impact
+            - Filter pushdown capabilities
+
+            ### 8. Related Views
+            - Parent/child views
+            - Extension points
+            - Similar standard views
+
+            ## Output Format
+
+            **Summary**: One paragraph overview
+
+            **View Type**: Basic/Composite/Consumption
+
+            **Key Annotations**: Table of important annotations
+
+            **Field Reference**: Complete field documentation
+
+            **Usage Example**: Code snippet for common usage
+
+            **Best Practices**: Tips for using this view
+            """.formatted(cdsName, source, contextSection);
+
+        return new GetPromptResult(
+                "CDS View Explanation: " + cdsName,
+                List.of(new PromptMessage(Role.USER, new TextContent(promptText)))
+        );
+    }
+
+    // ========================================================================
+    // 12. EXPLAIN_ENHANCEMENT - Enhancement/BAdI Explanation
+    // ========================================================================
+
+    /**
+     * Explains an enhancement or BAdI implementation.
+     *
+     * Provides:
+     * - Enhancement spot/BAdI purpose
+     * - Implementation details
+     * - Business logic explanation
+     * - Testing recommendations
+     *
+     * @param enhancementName Enhancement or BAdI implementation name
+     * @param enhancementType Type: BADI, ENHO, CMOD, BTE
+     * @param source Implementation source code
+     * @param definition Optional enhancement definition
+     * @return Structured enhancement explanation prompt
+     */
+    @McpPrompt(
+            name = "explain_enhancement",
+            title = "Explain Enhancement/BAdI",
+            description = "Explains SAP enhancement implementations (BAdI, Enhancement Spot, CMOD, BTE) with business logic and testing guidance."
+    )
+    public GetPromptResult explainEnhancement(
+            @McpArg(name = "enhancementName", description = "Enhancement or BAdI implementation name", required = true) String enhancementName,
+            @McpArg(name = "enhancementType", description = "Type: BADI, ENHO, CMOD, BTE", required = true) String enhancementType,
+            @McpArg(name = "source", description = "Implementation source code", required = true) String source,
+            @McpArg(name = "definition", description = "Enhancement spot or BAdI definition", required = false) String definition
+    ) {
+        log.info("Prompt request: explain_enhancement for {} ({})", enhancementName, enhancementType);
+
+        String defSection = (definition != null && !definition.isBlank())
+                ? "\n\n## Enhancement Definition\n```abap\n" + definition + "\n```"
+                : "";
+
+        String promptText = """
+            # Enhancement Explanation Request
+
+            You are an SAP ABAP expert explaining an enhancement implementation.
+
+            ## Enhancement Information
+            - **Name**: %s
+            - **Type**: %s
+
+            ## Implementation
+            ```abap
+            %s
+            ```
+            %s
+
+            ## Explanation Requirements
+
+            Provide comprehensive explanation covering:
+
+            ### 1. Enhancement Overview
+            - What standard SAP process is being enhanced?
+            - What is the business requirement?
+            - When is this enhancement triggered?
+
+            ### 2. Enhancement Technology
+
+            Explain based on type (%s):
+            - **BAdI**: Business Add-In with filter values
+            - **ENHO**: Enhancement Implementation with hook
+            - **CMOD**: Customer modification project
+            - **BTE**: Business Transaction Event
+
+            ### 3. Trigger Point
+            - Standard program/transaction being enhanced
+            - Exact point where enhancement executes
+            - Execution sequence (before/after standard)
+
+            ### 4. Implementation Logic
+
+            Break down the code logic:
+            - Input parameters used
+            - Business rules applied
+            - Output/modifications made
+            - Exception handling
+
+            ### 5. Data Flow
+
+            | Input | Processing | Output |
+            |-------|------------|--------|
+
+            ### 6. Filter Values (for BAdI)
+
+            If applicable:
+            - Filter criteria
+            - Multiple implementations handling
+            - Fallback behavior
+
+            ### 7. Testing Strategy
+
+            - Unit test approach
+            - Integration test scenarios
+            - Test data requirements
+            - Transactions for testing
+
+            ### 8. Dependencies
+            - Custom tables used
+            - External calls
+            - Authorization checks
+            - Configuration dependencies
+
+            ### 9. Risks & Considerations
+            - Upgrade impact
+            - Performance implications
+            - Maintenance considerations
+
+            ## Output Format
+
+            **Summary**: What this enhancement does
+
+            **Business Purpose**: Why it was implemented
+
+            **Technical Details**:
+            | Aspect | Value |
+            |--------|-------|
+            | Enhancement Spot | X |
+            | Trigger Point | Y |
+            | Execution Time | Before/After |
+
+            **Logic Breakdown**: Step-by-step explanation
+
+            **Testing Checklist**: Key scenarios to test
+
+            **Maintenance Notes**: Important considerations
+            """.formatted(enhancementName, enhancementType, source, defSection, enhancementType);
+
+        return new GetPromptResult(
+                "Enhancement Explanation: " + enhancementName,
+                List.of(new PromptMessage(Role.USER, new TextContent(promptText)))
+        );
+    }
+
+    // ========================================================================
+    // 13. EVALUATE_CODE_QUALITY_BATCH - Batch Code Quality Evaluation
+    // ========================================================================
+
+    /**
+     * Evaluates code quality for multiple objects.
+     *
+     * Used for:
+     * - Pre-extraction quality assessment
+     * - Package-wide quality audit
+     * - Training data filtering
+     *
+     * @param objectList JSON array of objects with source code
+     * @param qualityCriteria Optional custom quality criteria
+     * @return Structured batch quality evaluation prompt
+     */
+    @McpPrompt(
+            name = "evaluate_code_quality_batch",
+            title = "Batch Code Quality Evaluation",
+            description = "Evaluates code quality for multiple ABAP objects, providing quality scores and recommendations for extraction filtering."
+    )
+    public GetPromptResult evaluateCodeQualityBatch(
+            @McpArg(name = "objectList", description = "JSON array of objects with name, type, and source", required = true) String objectList,
+            @McpArg(name = "qualityCriteria", description = "Optional custom quality criteria JSON", required = false) String qualityCriteria
+    ) {
+        log.info("Prompt request: evaluate_code_quality_batch");
+
+        String criteriaSection = (qualityCriteria != null && !qualityCriteria.isBlank())
+                ? "\n\n## Custom Quality Criteria\n```json\n" + qualityCriteria + "\n```"
+                : "";
+
+        String promptText = """
+            # Batch Code Quality Evaluation Request
+
+            You are an SAP code quality analyst evaluating multiple ABAP objects.
+
+            ## Objects to Evaluate
+            ```json
+            %s
+            ```
+            %s
+
+            ## Evaluation Requirements
+
+            Evaluate each object using these quality dimensions:
+
+            ### 1. Quality Dimensions (Score 1-10)
+
+            | Dimension | Weight | Criteria |
+            |-----------|--------|----------|
+            | Readability | 20%% | Clear naming, formatting, comments |
+            | Maintainability | 20%% | Method size, complexity, modularity |
+            | Performance | 15%% | Efficient DB access, loop optimization |
+            | Security | 15%% | Input validation, auth checks |
+            | Standards | 15%% | Naming conventions, ABAP guidelines |
+            | Documentation | 15%% | Comments, method docs, README |
+
+            ### 2. Evaluation Criteria
+
+            **Excellent (9-10)**: Production-ready, exemplary code
+            **Good (7-8)**: Minor improvements possible
+            **Acceptable (5-6)**: Functional but needs improvement
+            **Poor (3-4)**: Significant issues, needs refactoring
+            **Unacceptable (1-2)**: Should not be used/extracted
+
+            ### 3. Quality Flags
+
+            Flag objects with:
+            - 🔴 CRITICAL: Security vulnerabilities, data corruption risk
+            - 🟡 WARNING: Performance issues, missing error handling
+            - 🟢 INFO: Style improvements, documentation gaps
+
+            ### 4. Training Data Suitability
+
+            For each object, assess suitability for LLM training:
+            - **INCLUDE**: High-quality, good patterns to learn
+            - **EXCLUDE**: Bad practices, would teach wrong patterns
+            - **CONDITIONAL**: Include with warnings/annotations
+
+            ## Output Format
+
+            **Evaluation Summary**:
+            - Objects evaluated: X
+            - Average quality score: Y/10
+            - Recommended for extraction: Z
+
+            **Detailed Results**:
+            | Object | Type | Score | Flags | Training? |
+            |--------|------|-------|-------|-----------|
+
+            **Quality Distribution**:
+            - Excellent (9-10): X objects
+            - Good (7-8): Y objects
+            - Acceptable (5-6): Z objects
+            - Poor/Unacceptable (<5): W objects
+
+            **Top Issues Found**:
+            1. [Most common issue]
+            2. [Second issue]
+            3. [Third issue]
+
+            **Recommendations**:
+            - Objects to prioritize for extraction
+            - Objects needing improvement before extraction
+            - Objects to exclude from extraction
+
+            **Batch Quality Score**: X/100
+            """.formatted(objectList, criteriaSection);
+
+        return new GetPromptResult(
+                "Batch Quality Evaluation",
+                List.of(new PromptMessage(Role.USER, new TextContent(promptText)))
+        );
+    }
 }

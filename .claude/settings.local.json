@@ -151,7 +151,8 @@
       "WebFetch(domain:piotrminkowski.com)",
       "mcp__github__search_code",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "mcp__sap-docs__sap_help_get"
     ],
     "deny": [],
     "ask": []
