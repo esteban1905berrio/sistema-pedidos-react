@@ -1,0 +1,29 @@
+CLASS zclcxr1002_unittest_framework DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+
+      save_result
+        IMPORTING
+          VALUE(i_t_data)  TYPE REF TO data
+          i_report_name    TYPE syrepid DEFAULT sy-repid
+          i_ejecution_date TYPE d DEFAULT sy-datum.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclcxr1002_unittest_framework IMPLEMENTATION.
+  METHOD save_result.
+
+    DATA(s_json) = /ui2/cl_json=>serialize( data = i_t_data compress = abap_true pretty_name = /ui2/cl_json=>pretty_mode-camel_case ).
+
+  ENDMETHOD.
+
+ENDCLASS.

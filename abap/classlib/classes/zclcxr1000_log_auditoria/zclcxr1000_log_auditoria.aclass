@@ -1,0 +1,22 @@
+CLASS zclcxr1000_log_auditoria DEFINITION ABSTRACT
+  PUBLIC
+  CREATE PUBLIC .
+  PUBLIC SECTION.
+
+    CLASS-DATA:
+      gc_i TYPE char1 VALUE 'I', ".Insert
+      gc_n TYPE char1 VALUE 'N', ".Nuevo
+      gc_d TYPE char1 VALUE 'D'. ".Delete
+
+    METHODS:
+      "! Manejo de Log CDHDR-CDPOS
+      "! @parameter i_es_data | Informacion para ser registrada
+      "! @parameter i_accion | Action (I,U,D)
+      registrar_log ABSTRACT
+        IMPORTING i_es_data TYPE any
+                  i_accion  TYPE comt_boolean.
+
+ENDCLASS.
+
+CLASS zclcxr1000_log_auditoria IMPLEMENTATION.
+ENDCLASS.

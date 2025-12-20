@@ -1,0 +1,257 @@
+class YCL_HELLO4 definition
+  public
+  create public .
+
+public section.
+
+  types:
+    BEGIN OF gtp_listado,
+    vbeln TYPE likp-vbeln,
+    vkorg TYPE likp-vkorg,
+    kunnr TYPE likp-kunnr,
+    namer TYPE kna1-name1,
+    kunag TYPE likp-kunag,
+    nameg TYPE kna1-name1,
+    posnr TYPE lips-posnr,
+    matnr TYPE lips-matnr,
+    werks TYPE lips-werks,
+    lgort TYPE lips-lgort,
+    charg TYPE lips-charg,
+    lfimg TYPE lips-lfimg,
+    meins TYPE lips-meins,
+  END OF gtp_listado .
+  types:
+    gtp_ti_listado TYPE STANDARD TABLE OF gtp_listado .
+
+  methods CONSTRUCTOR .
+  methods MT_START_OF_SELECTION
+    importing
+      !ISS_RN_VBELN type MSR_T_INSP_VBELN_VL_RANGE
+      !ISS_RN_VKORG type FARRIC_CHECK_RT_VKORG
+      !ISS_RN_KUNNR type FARR_RT_RAI_KUNNR
+      !ISS_RN_MATNR type CRMS4T_SOM_PROD_RANGE
+      !ISS_RN_WERKS type FRE_RANGE_T_WERKS
+      !ISS_RN_LGORT type RANGE_T_LGORT_D
+      !ISS_RN_CHARG type /ACCGO/CAS_TT_BATCH_RANGE .
+protected section.
+private section.
+
+  methods MT_VALIDACION
+    importing
+      !IV_RN_VBELN type MSR_T_INSP_VBELN_VL_RANGE
+    exporting
+      !E_RESPUESTA type CHAR1 .
+  methods MT_GET_DATA
+    importing
+      !IGD_RN_VBELN type FARRIC_CHECK_RT_VBELN
+      !IGD_RN_VKORG type FARRIC_CHECK_RT_VKORG
+      !IGD_RN_KUNNR type FARR_RT_RAI_KUNNR
+      !IGD_RN_MATNR type /ACCGO/CAS_TT_MATERIAL
+      !IGD_RN_WERKS type /ACCGO/CAS_TT_PLANT
+      !IGD_RN_LGORT type /ACCGO/CAS_TT_SLOC_RANGE
+      !IGD_RN_CHARG type /ACCGO/CAS_TT_BATCH_RANGE
+    exporting
+      !EGD_TI_LISTADO type GTP_TI_LISTADO .
+  methods MT_SET_DATA
+    importing
+      !ISD_GTI_LISTADO type GTP_TI_LISTADO
+    exporting
+      !ESD_GTI_LISTADO type GTP_TI_LISTADO .
+  methods MT_DISPLAY
+    importing
+      !ID_TI_LISTADO type GTP_TI_LISTADO .
+ENDCLASS.
+
+
+
+CLASS YCL_HELLO4 IMPLEMENTATION.
+
+
+  METHOD constructor.
+
+  ENDMETHOD.
+
+
+  METHOD mt_start_of_selection.
+    DATA:
+      lc_respuesta TYPE char1,
+      ti_listado TYPE gtp_ti_listado,
+      ti_listado_alv TYPE gtp_ti_listado.
+
+    mt_validacion(
+      EXPORTING
+        iv_rn_vbeln = iss_rn_vbeln                " Selection range Delivery Number (Inbound or Outbound)
+      IMPORTING
+        e_respuesta = lc_respuesta                " Indicador de respuesta
+    ).
+    IF lc_respuesta <> '1'.
+      MESSAGE TEXT-002 TYPE 'I' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    mt_get_data(
+      EXPORTING
+        igd_rn_vbeln = iss_rn_vbeln                 " Ranges Table for Sales and Distribution Document Number
+        igd_rn_vkorg = iss_rn_vkorg                 " Range Table for sales organization
+        igd_rn_kunnr = iss_rn_kunnr                 " Ranges Table for FARR_RS_KUNNR
+        igd_rn_matnr = iss_rn_matnr                 " Range table for material
+        igd_rn_werks = iss_rn_werks                 " Range table for plant
+        igd_rn_lgort = iss_rn_lgort                 " Range table for Storage location
+        igd_rn_charg = iss_rn_charg                 " Range Table for Batch
+      IMPORTING
+        egd_ti_listado = ti_listado
+    ).
+
+    mt_set_data(
+      EXPORTING
+        isd_gti_listado = ti_listado
+      IMPORTING
+        esd_gti_listado = ti_listado_alv
+    ).
+
+    mt_display( id_ti_listado = ti_listado_alv ).
+  ENDMETHOD.
+
+
+  METHOD mt_validacion.
+
+    e_respuesta = '1'.
+    IF iv_rn_vbeln IS INITIAL.
+      CALL FUNCTION 'POPUP_TO_CONFIRM'
+        EXPORTING
+          titlebar              = TEXT-t01 "'Alerta'
+          text_question         = 'Desea ejecutar sin numero de entrega?'
+          text_button_1         = 'Yes'
+          icon_button_1         = 'ICON_CHECKED'
+          text_button_2         = 'No'
+          icon_button_2         = 'ICON_INCOMPLETE'
+          default_button        = '2'
+          display_cancel_button = ' '
+        IMPORTING
+          answer                = e_respuesta
+        EXCEPTIONS
+          text_not_found        = 1
+          OTHERS                = 2.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  method MT_DISPLAY.
+   DATA:
+    o_alv TYPE REF TO cl_salv_table.
+
+   DATA:
+    o_columns   TYPE REF TO cl_salv_columns_table,
+    o_settings  TYPE REF TO cl_salv_display_settings,
+    o_fucntions TYPE REF TO cl_salv_functions.
+
+   DATA(ti_listado_aux) = id_ti_listado.
+
+  TRY.
+      cl_salv_table=>factory(
+        IMPORTING
+          r_salv_table = o_alv
+        CHANGING
+          t_table      = ti_listado_aux ).
+    CATCH cx_salv_msg.
+  ENDTRY.
+  ".variable que devuelve como valor 'X'
+*  if_salv_c_bool_sap=>true
+
+  ".Set all Function
+  o_fucntions = o_alv->get_functions( ).
+  o_fucntions->set_all( if_salv_c_bool_sap=>true ).
+
+  ".Set Column Optimized
+  o_columns = o_alv->get_columns( ).
+  o_columns->set_optimize( if_salv_c_bool_sap=>true ).
+
+  ".Enable Zebra Layout
+  o_settings = o_alv->get_display_settings( ).
+  o_settings->set_striped_pattern( if_salv_c_bool_sap=>true ).
+
+  o_alv->display( ).
+
+  endmethod.
+
+
+  method MT_GET_DATA.
+    SELECT t1~vbeln, t1~vkorg, t1~kunnr, t1~kunag,t2~posnr, t2~matnr,
+           t2~werks, t2~lgort, t2~charg, t2~lfimg, t2~meins
+    FROM likp AS t1
+    INNER JOIN lips AS t2 ON t1~vbeln = t2~vbeln AND
+                             t2~lfimg > 0
+    WHERE t1~vbeln IN @igd_rn_vbeln
+    AND t1~vkorg IN @igd_rn_vkorg
+    AND t1~kunnr IN @igd_rn_kunnr
+    AND t2~matnr IN @igd_rn_matnr
+    AND t2~werks IN @igd_rn_werks
+    AND t2~lgort IN @igd_rn_lgort
+    AND t2~charg IN @igd_rn_charg
+    INTO CORRESPONDING FIELDS OF TABLE @egd_ti_listado.
+
+    IF egd_ti_listado IS INITIAL.
+      MESSAGE TEXT-003 TYPE 'I' DISPLAY LIKE 'E'.
+      EXIT.
+    ENDIF.
+
+    DELETE egd_ti_listado WHERE kunnr EQ space OR kunnr IS INITIAL.
+  endmethod.
+
+
+  METHOD mt_set_data.
+    DATA: rg_kunnr  TYPE farr_rt_rai_kunnr,
+          res_kunnr TYPE farr_rs_kunnr.
+    DATA(ti_listado_aux) = isd_gti_listado.
+
+    ".Ordenamos por kunnr
+    SORT ti_listado_aux BY kunnr.
+    ".Eliminamos registros duplicados
+    DELETE ADJACENT DUPLICATES FROM ti_listado_aux COMPARING kunnr.
+
+    LOOP AT ti_listado_aux INTO DATA(es_listado).
+      ".Para no tener en cuenta los vacios
+      IF es_listado-kunnr IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      res_kunnr-sign = 'I'.
+      res_kunnr-option = 'EQ'.
+      res_kunnr-low = es_listado-kunnr.
+      APPEND res_kunnr TO rg_kunnr.
+    ENDLOOP.
+
+    CLEAR ti_listado_aux.
+    ti_listado_aux = isd_gti_listado.
+    SORT ti_listado_aux BY kunag.
+    DELETE ADJACENT DUPLICATES FROM ti_listado_aux COMPARING kunag.
+
+    LOOP AT ti_listado_aux INTO es_listado.
+      ".Para no tener en cuenta los vacios
+      IF es_listado-kunag IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      res_kunnr-sign = 'I'.
+      res_kunnr-option = 'EQ'.
+      res_kunnr-low = es_listado-kunag.
+      APPEND res_kunnr TO rg_kunnr.
+    ENDLOOP.
+
+    SORT rg_kunnr BY low.
+    DELETE ADJACENT DUPLICATES FROM rg_kunnr COMPARING low.
+
+    SELECT kunnr, name1
+      FROM kna1
+      WHERE kunnr IN @rg_kunnr
+      INTO TABLE @DATA(ti_kna1).
+
+    CLEAR ti_listado_aux.
+    ti_listado_aux = isd_gti_listado.
+
+    LOOP AT ti_listado_aux INTO es_listado.
+      es_listado-namer = VALUE #( ti_kna1[ kunnr = es_listado-kunnr ]-name1 OPTIONAL ).
+      es_listado-nameg = VALUE #( ti_kna1[ kunnr = es_listado-kunag ]-name1 OPTIONAL ).
+      INSERT es_listado INTO TABLE esd_gti_listado.
+    ENDLOOP.
+  ENDMETHOD.
+ENDCLASS.

@@ -1,0 +1,197 @@
+FUNCTION ZCX_TMS_IMPORT_REQUEST
+  IMPORTING
+    VALUE(IV_TARGET_SYSTEM) TYPE CHAR3 OPTIONAL
+    VALUE(IV_TARGET_CLIENT) TYPE CHAR3 OPTIONAL
+    VALUE(IV_TRANSPORTS) TYPE STRING
+    VALUE(IV_IGNORE_LOCK) TYPE CHAR1 DEFAULT ' '
+    VALUE(IV_IMPORT_AGAIN) TYPE CHAR1 DEFAULT 'X'
+  EXPORTING
+    VALUE(EV_SUCCESS) TYPE CHAR1
+    VALUE(EV_MESSAGE) TYPE STRING
+    VALUE(EV_RESULTS_JSON) TYPE STRING
+  EXCEPTIONS
+    SYSTEM_INVALID
+    CLIENT_INVALID
+    NO_TRANSPORTS
+    IMPORT_FAILED
+    PRODUCTION_NOT_ALLOWED.
+
+
+
+  DATA: lt_transport_list TYPE TABLE OF string,
+        lt_cts_reqs       TYPE TABLE OF cts_req,
+        ls_cts_req        TYPE cts_req,
+        lv_transport      TYPE string,
+        lv_retcode        TYPE char3,
+        lv_message        TYPE text80,
+        lv_success_count  TYPE i VALUE 0,
+        lv_error_count    TYPE i VALUE 0,
+        lv_total          TYPE i VALUE 0,
+        lv_json_results   TYPE string,
+        lv_first          TYPE abap_bool,
+        lv_item_success   TYPE abap_bool,
+        lv_status_msg     TYPE string,
+        lv_target_system  TYPE tmssysnam,
+        lv_target_client  TYPE mandt,
+        lv_first_transport TYPE trkorr,
+        lv_systyp         TYPE char1,
+        lv_total_str         TYPE string,
+        lv_success_count_str TYPE string,
+        lv_error_count_str   TYPE string,
+        lv_sys_str           TYPE string,
+        lv_cli_str           TYPE string.
+
+  CLEAR: ev_success, ev_message, ev_results_json.
+
+  IF iv_transports IS INITIAL.
+    ev_message = 'At least one transport is required'.
+    RAISE no_transports.
+  ENDIF.
+
+  SPLIT iv_transports AT ',' INTO TABLE lt_transport_list.
+  DESCRIBE TABLE lt_transport_list LINES lv_total.
+
+  IF lv_total = 0.
+    ev_message = 'No valid transports found in input'.
+    RAISE no_transports.
+  ENDIF.
+
+  READ TABLE lt_transport_list INTO lv_transport INDEX 1.
+  CONDENSE lv_transport NO-GAPS.
+  lv_first_transport = lv_transport.
+
+  IF iv_target_system IS INITIAL.
+    SELECT SINGLE tarsystem FROM e070
+      INTO lv_target_system
+      WHERE trkorr = lv_first_transport.
+    IF sy-subrc <> 0 OR lv_target_system IS INITIAL.
+      ev_message = 'Could not determine target system from transport'.
+      RAISE system_invalid.
+    ENDIF.
+  ELSE.
+    lv_target_system = iv_target_system.
+  ENDIF.
+
+  SELECT SINGLE systyp FROM tmscsys
+    INTO lv_systyp
+    WHERE sysnam = lv_target_system
+      AND limbo = ' '.
+
+  IF lv_systyp = 'P'.
+    ev_message = 'Import to PRODUCTION system is NOT allowed'.
+    RAISE production_not_allowed.
+  ENDIF.
+
+  IF iv_target_client IS INITIAL.
+    lv_target_client = sy-mandt.
+  ELSE.
+    lv_target_client = iv_target_client.
+  ENDIF.
+
+  LOOP AT lt_transport_list INTO lv_transport.
+    CONDENSE lv_transport NO-GAPS.
+    IF lv_transport IS NOT INITIAL.
+      CLEAR ls_cts_req.
+      ls_cts_req-request = lv_transport.
+      APPEND ls_cts_req TO lt_cts_reqs.
+    ENDIF.
+  ENDLOOP.
+
+  CALL FUNCTION 'CTS_API_IMPORT_CHANGE_REQUEST'
+    EXPORTING
+      system   = lv_target_system(3)
+      client   = lv_target_client
+    IMPORTING
+      retcode  = lv_retcode
+      message  = lv_message
+    TABLES
+      requests = lt_cts_reqs
+    EXCEPTIONS
+      OTHERS   = 1.
+
+  IF sy-subrc <> 0.
+    ev_success = ' '.
+    ev_message = lv_message.
+    RAISE import_failed.
+  ENDIF.
+
+  lv_json_results = '['.
+  lv_first = abap_true.
+
+  LOOP AT lt_cts_reqs INTO ls_cts_req.
+    IF lv_first = abap_false.
+      lv_json_results = lv_json_results && ','.
+    ENDIF.
+    lv_first = abap_false.
+
+    IF ls_cts_req-retcode = '000' OR
+       ls_cts_req-retcode = '001' OR
+       ls_cts_req-retcode = '002' OR
+       ls_cts_req-retcode = '003' OR
+       ls_cts_req-retcode = '004'.
+      lv_item_success = abap_true.
+    ELSE.
+      lv_item_success = abap_false.
+    ENDIF.
+
+    IF lv_item_success = abap_true.
+      lv_success_count = lv_success_count + 1.
+    ELSE.
+      lv_error_count = lv_error_count + 1.
+    ENDIF.
+
+    CASE ls_cts_req-retcode.
+      WHEN '000'.
+        lv_status_msg = 'Imported successfully'.
+      WHEN '008'.
+        lv_status_msg = 'Import with warnings'.
+      WHEN '012'.
+        lv_status_msg = 'Import failed'.
+      WHEN OTHERS.
+        CONCATENATE 'Return code:' ls_cts_req-retcode INTO lv_status_msg SEPARATED BY space.
+    ENDCASE.
+
+    CONCATENATE lv_json_results
+      '{"transport":"' ls_cts_req-request '",'
+      '"status":"' ls_cts_req-retcode '",'
+      '"message":"' lv_status_msg '",'
+      '"success":'
+      INTO lv_json_results.
+
+    IF lv_item_success = abap_true.
+      CONCATENATE lv_json_results 'true}' INTO lv_json_results.
+    ELSE.
+      CONCATENATE lv_json_results 'false}' INTO lv_json_results.
+    ENDIF.
+  ENDLOOP.
+
+  CONCATENATE lv_json_results ']' INTO lv_json_results.
+
+  lv_total_str = lv_total.
+  lv_success_count_str = lv_success_count.
+  lv_error_count_str = lv_error_count.
+  lv_sys_str = lv_target_system.
+  lv_cli_str = lv_target_client.
+
+  CONDENSE: lv_total_str, lv_success_count_str, lv_error_count_str, lv_sys_str, lv_cli_str.
+
+  CONCATENATE
+    '{"targetSystem":"' lv_sys_str '",'
+    '"targetClient":"' lv_cli_str '",'
+    '"totalRequests":' lv_total_str ','
+    '"successCount":' lv_success_count_str ','
+    '"errorCount":' lv_error_count_str ','
+    '"results":' lv_json_results '}'
+    INTO ev_results_json.
+
+  IF lv_error_count = 0.
+    ev_success = 'X'.
+    CONCATENATE lv_success_count_str 'transport(s) imported to' lv_sys_str 'successfully'
+      INTO ev_message SEPARATED BY space.
+  ELSE.
+    ev_success = ' '.
+    CONCATENATE lv_error_count_str 'of' lv_total_str 'transport(s) failed'
+      INTO ev_message SEPARATED BY space.
+  ENDIF.
+
+ENDFUNCTION.

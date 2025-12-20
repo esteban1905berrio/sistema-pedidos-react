@@ -1,0 +1,99 @@
+CLASS zclcxr1002_util_idoc DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: gtp_r_numero_idoc     TYPE RANGE OF edi_docnum,
+           gtp_r_numero_segmento TYPE RANGE OF idocdsgnum,
+           gtp_r_nombre_segmento TYPE RANGE OF edi_segnam.
+
+    CLASS-DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS:
+      modificar_segmento_idoc
+        IMPORTING
+          VALUE(i_r_numero_idoc) TYPE gtp_r_numero_idoc
+          VALUE(i_nombre_campo)  TYPE string
+          VALUE(i_valor_campo)   TYPE string
+          i_r_nombre_segmento    TYPE gtp_r_nombre_segmento
+          i_r_numero_segmento    TYPE gtp_r_numero_segmento
+        RETURNING
+          VALUE(r_ti_mensajes)   TYPE bapiret2_t.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclcxr1002_util_idoc IMPLEMENTATION.
+
+  METHOD modificar_segmento_idoc.
+
+    DATA: r_es_segmento TYPE REF TO data,
+          ti_datos_idoc TYPE STANDARD TABLE OF edid4.
+
+    FIELD-SYMBOLS: <fs_es_valor_campo> TYPE any,
+                   <fs_es_segmento>    TYPE any.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    SELECT dd~*
+    FROM edid4 AS dd
+    INNER JOIN edidc AS c
+    ON c~docnum = dd~docnum
+    WHERE dd~docnum IN @i_r_numero_idoc
+    AND dd~segnam   IN @i_r_nombre_segmento
+    AND dd~segnum   IN @i_r_numero_segmento
+    AND c~status    NE '53'
+    AND c~status    NE '70'
+    INTO TABLE @ti_datos_idoc.
+
+    CHECK sy-subrc IS INITIAL.
+
+    LOOP AT ti_datos_idoc ASSIGNING FIELD-SYMBOL(<fs_es_dato_idoc>).
+
+      UNASSIGN: <fs_es_segmento>, <fs_es_valor_campo>.
+      FREE: r_es_segmento.
+
+      CREATE DATA: r_es_segmento TYPE (<fs_es_dato_idoc>-segnam).
+      CHECK r_es_segmento IS NOT INITIAL.
+
+      ASSIGN: r_es_segmento->* TO <fs_es_segmento>.
+      CHECK <fs_es_segmento> IS ASSIGNED.
+
+      <fs_es_segmento> =  <fs_es_dato_idoc>-sdata.
+
+      ASSIGN COMPONENT i_nombre_campo OF STRUCTURE <fs_es_segmento>
+      TO <fs_es_valor_campo>.
+
+      CHECK sy-subrc IS INITIAL.
+
+      <fs_es_valor_campo> = i_valor_campo.
+
+      <fs_es_dato_idoc>-sdata = <fs_es_segmento>.
+
+      UPDATE edid4
+      SET dtint2 = <fs_es_dato_idoc>-dtint2
+          sdata  = <fs_es_dato_idoc>-sdata
+      WHERE docnum  =  <fs_es_dato_idoc>-docnum
+      AND   counter = <fs_es_dato_idoc>-counter
+      AND   segnum  = <fs_es_dato_idoc>-segnum.
+
+      "satus 69
+      UPDATE edidc SET status = '69'
+      WHERE docnum = <fs_es_dato_idoc>-docnum.
+
+      COMMIT WORK AND WAIT.
+      go_log->set_es_log( i_es = VALUE #( id = '/PF1/MSG_RD' number = '097' type = 'S'
+                                          message_v1 = <fs_es_dato_idoc>-docnum  ) ).
+
+    ENDLOOP.
+
+    r_ti_mensajes = CORRESPONDING #( go_log->get_log( ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.

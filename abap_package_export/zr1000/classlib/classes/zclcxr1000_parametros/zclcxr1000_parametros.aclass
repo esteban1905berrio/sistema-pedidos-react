@@ -1,0 +1,700 @@
+CLASS zclcxr1000_parametros DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    CONSTANTS:
+      gc_i  TYPE char1 VALUE 'I',
+      gc_eq TYPE char2 VALUE 'EQ'.
+    TYPES:
+
+      BEGIN OF gtp_parametros,
+        modulo    TYPE ztcxr1000_1-modulo,
+        ricefw    TYPE ztcxr1000_1-ricefw,
+        idcomo    TYPE ztcxr1000_1-idcomo,
+        idparam   TYPE ztcxr1000_1-idparam,
+        consec    TYPE ztcxr1000_2-consec,
+        sign      TYPE ztcxr1000_2-sign,
+        opti      TYPE ztcxr1000_2-opti,
+        low       TYPE ztcxr1000_2-low,
+        high      TYPE ztcxr1000_2-high,
+        descparam TYPE ztcxr1000_1-descparam,
+      END OF gtp_parametros,
+
+      tp_ti_parametros TYPE STANDARD TABLE OF gtp_parametros WITH EMPTY KEY,
+      tp_ti_comodin    TYPE RANGE OF ztcxr1000_1-idcomo.
+
+    DATA:
+      gti_parametros       TYPE tp_ti_parametros.
+
+    METHODS:
+
+      "! Método Constructor
+      "!
+      "! @parameter i_modulo | Modulo
+      "! @parameter i_ricefw | RICEFW
+      constructor
+        IMPORTING
+          VALUE(i_modulo) TYPE zzedmodulo OPTIONAL
+          VALUE(i_ricefw) TYPE zzedricefw OPTIONAL,
+
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Obtenemos los parametros de aplicacion<br/>
+      "! </p>
+      "! <strong>Identificador:</strong>
+                                                            "! R1000
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Jose Miguel Valencia
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 26.02.2021  \ S4DK900059 \ Jose Miguel Valencia \ Creacion Inicial \
+      "!
+      "! @parameter i_modulo | Modulo
+      "! @parameter i_ricefw | RICEFW
+      "! @parameter i_comodin | Comodin
+      "! @parameter i_idparam | ID Parámetro
+      "! @parameter e_ti_valrango |Valor del Parametro Rango
+      get_parametro
+        IMPORTING
+          VALUE(i_modulo)  TYPE ztcxr1000_1-modulo  OPTIONAL
+          VALUE(i_ricefw)  TYPE ztcxr1000_1-ricefw  OPTIONAL
+          i_comodin        TYPE ztcxr1000_1-idcomo OPTIONAL
+          VALUE(i_idparam) TYPE ztcxr1000_1-idparam
+        EXPORTING
+          e_ti_valrango    TYPE STANDARD TABLE
+        EXCEPTIONS
+          parametro_no_encontrado.
+
+    CLASS-METHODS:
+      copiar_parametro_en_mandante,
+      copiar_homologacion_mandante.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclcxr1000_parametros IMPLEMENTATION.
+
+
+  METHOD constructor.
+
+    ".Consultamos la informacion de los parametros
+    SELECT t1~modulo, t1~ricefw, t1~idcomo, t1~idparam, t2~consec,
+           t2~sign, t2~opti, t2~low, t2~high, t1~descparam
+      FROM ztcxr1000_1 AS t1
+      LEFT OUTER JOIN ztcxr1000_2 AS t2
+           ON t1~modulo EQ t2~modulo AND
+              t1~ricefw EQ t2~ricefw AND
+              t1~idcomo EQ t2~idcomo AND
+              t1~idparam EQ t2~idparam
+     WHERE t1~modulo EQ @i_modulo
+       AND t1~ricefw EQ @i_ricefw
+      INTO TABLE @gti_parametros.
+
+  ENDMETHOD.
+
+  METHOD get_parametro.
+    DATA:
+      es_rango    TYPE REF TO data.
+
+    FIELD-SYMBOLS:
+      <fs_rango>       TYPE any,
+      <fs_campo>       TYPE any,
+      <fs_param_rango> TYPE gtp_parametros.
+
+    DATA:
+      rcomodin   TYPE tp_ti_comodin,
+      es_comodin LIKE LINE OF rcomodin.
+
+    CLEAR: e_ti_valrango.
+
+    es_comodin = VALUE #( sign     = gc_i
+                          option   = gc_eq
+                          low      = i_comodin ).
+    APPEND es_comodin TO rcomodin.
+
+    CREATE DATA es_rango LIKE LINE OF e_ti_valrango.
+
+    IF i_modulo IS SUPPLIED AND
+       i_ricefw IS SUPPLIED AND
+       i_comodin IS SUPPLIED.
+
+      ".Consultamos la informacion de los parametros rango
+      SELECT t2~modulo, t2~ricefw, t2~idcomo, t2~idparam, t2~consec,
+             t2~sign, t2~opti, t2~low, t2~high, t1~descparam
+        FROM ztcxr1000_1 AS t1 INNER JOIN ztcxr1000_2 AS t2
+             ON t1~modulo EQ t2~modulo AND
+                t1~ricefw EQ t2~ricefw AND
+                t1~idcomo EQ t2~idcomo AND
+                t1~idparam EQ t2~idparam
+       WHERE t1~modulo  EQ @i_modulo
+         AND t1~ricefw  EQ @i_ricefw
+         AND t1~idcomo  IN @rcomodin
+         AND t1~idparam EQ @i_idparam
+        INTO TABLE @DATA(ti_param_rango).
+
+      IF lines( ti_param_rango ) GT 0.
+
+        ".Recorremos al informacion de los rangos
+        LOOP AT ti_param_rango ASSIGNING <fs_param_rango>.
+          ASSIGN es_rango->* TO <fs_rango>.
+
+          ASSIGN COMPONENT 'SIGN' OF STRUCTURE <fs_rango> TO <fs_campo>.
+          IF <fs_param_rango>-sign IS INITIAL.
+            <fs_campo> = 'I'.
+          ELSE.
+            <fs_campo> = <fs_param_rango>-sign.
+          ENDIF.
+
+          ASSIGN COMPONENT 'OPTION' OF STRUCTURE <fs_rango> TO <fs_campo>.
+          <fs_campo> = <fs_param_rango>-opti.
+
+          ASSIGN COMPONENT 'LOW' OF STRUCTURE <fs_rango> TO <fs_campo>.
+          <fs_campo> = <fs_param_rango>-low.
+
+          ASSIGN COMPONENT 'HIGH' OF STRUCTURE <fs_rango> TO <fs_campo>.
+          <fs_campo> = <fs_param_rango>-high.
+
+          APPEND <fs_rango> TO e_ti_valrango.
+        ENDLOOP.
+        EXIT.
+      ELSE.
+        RAISE parametro_no_encontrado.
+      ENDIF.
+    ENDIF.
+
+    IF NOT line_exists( gti_parametros[ idparam = i_idparam ] ).
+      RAISE parametro_no_encontrado.
+    ENDIF.
+
+    ".Recorremos al informacion de los rangos
+    LOOP AT gti_parametros ASSIGNING <fs_param_rango>
+      WHERE idcomo  IN rcomodin
+        AND idparam EQ i_idparam.
+      ASSIGN es_rango->* TO <fs_rango>.
+
+      CHECK NOT ( <fs_param_rango>-sign IS INITIAL AND
+         <fs_param_rango>-opti IS INITIAL AND
+         <fs_param_rango>-low  IS INITIAL AND
+         <fs_param_rango>-high IS INITIAL ).
+
+
+      ASSIGN COMPONENT 'SIGN' OF STRUCTURE <fs_rango> TO <fs_campo>.
+      IF <fs_param_rango>-sign IS INITIAL.
+        <fs_campo> = 'I'.
+      ELSE.
+        <fs_campo> = <fs_param_rango>-sign.
+      ENDIF.
+
+      ASSIGN COMPONENT 'OPTION' OF STRUCTURE <fs_rango> TO <fs_campo>.
+      <fs_campo> = <fs_param_rango>-opti.
+
+      ASSIGN COMPONENT 'LOW' OF STRUCTURE <fs_rango> TO <fs_campo>.
+      <fs_campo> = <fs_param_rango>-low.
+
+      ASSIGN COMPONENT 'HIGH' OF STRUCTURE <fs_rango> TO <fs_campo>.
+      <fs_campo> = <fs_param_rango>-high.
+
+      APPEND <fs_rango> TO e_ti_valrango.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD copiar_parametro_en_mandante.
+
+    DATA: ti_campos_pantalla TYPE STANDARD TABLE OF sval,
+          r_ricefw           TYPE RANGE OF ztcxr1000_1-ricefw,
+          ricefw             TYPE string,
+          r_modulo           TYPE RANGE OF ztcxr1000_1-modulo,
+          mandante_fuente    TYPE ztcxr1000_1-mandt,
+          mandante_destino   TYPE ztcxr1000_1-mandt,
+          codigo_retorno     TYPE string.
+
+    ti_campos_pantalla =  VALUE #( ( tabname = 'ZTCXR1000_1' fieldname = 'MODULO' )
+                                   ( tabname = 'ZTCXR1000_1' fieldname = 'RICEFW' )
+                                   ( tabname = 'ZTCXR1000_1' field_obl = abap_true fieldname = 'MANDT' fieldtext = 'Mandante Fuente' )
+                                   ( tabname = 'ZTCXR1000_2' field_obl = abap_true fieldname = 'MANDT'
+                                     fieldtext = 'Mandante Destino' value = sy-mandt )
+                                 ).
+
+    CALL FUNCTION 'POPUP_GET_VALUES'
+      EXPORTING
+*       no_value_check  = space
+        popup_title     = TEXT-001
+        start_column    = '5'
+        start_row       = '5'
+      IMPORTING
+        returncode      = codigo_retorno
+      TABLES
+        fields          = ti_campos_pantalla
+      EXCEPTIONS
+        error_in_fields = 1
+        OTHERS          = 2.
+
+    IF codigo_retorno IS INITIAL AND
+       ( NOT line_exists( ti_campos_pantalla[ fieldname = 'MODULO' value = space ] ) OR
+         NOT line_exists( ti_campos_pantalla[ fieldname = 'RICEFW' value = space ] )
+       ).
+
+      r_ricefw = VALUE #( ( sign = 'I' option = 'EQ' low = ti_campos_pantalla[ fieldname = 'RICEFW' ]-value ) ).
+      r_modulo = VALUE #( ( sign = 'I' option = 'EQ' low = ti_campos_pantalla[ fieldname = 'MODULO' ]-value ) ).
+      DELETE r_ricefw WHERE low = space.
+      DELETE r_modulo WHERE low = space.
+      mandante_fuente =  ti_campos_pantalla[ tabname = 'ZTCXR1000_1' fieldname = 'MANDT' ]-value.
+      mandante_destino = ti_campos_pantalla[ tabname = 'ZTCXR1000_2' fieldname = 'MANDT' ]-value.
+
+      SELECT *
+      FROM ztcxr1000_1
+      USING CLIENT @mandante_fuente
+      WHERE modulo IN @r_modulo
+      AND ricefw IN @r_ricefw
+      INTO TABLE @DATA(ti_ztcxr1000_1).
+
+      SORT ti_ztcxr1000_1 BY modulo ricefw idcomo idparam.
+
+      IF ti_ztcxr1000_1 IS NOT INITIAL.
+        SELECT *
+        FROM ztcxr1000_2
+        USING CLIENT @mandante_fuente
+        FOR ALL ENTRIES IN @ti_ztcxr1000_1
+        WHERE modulo = @ti_ztcxr1000_1-modulo
+        AND   ricefw = @ti_ztcxr1000_1-ricefw
+        INTO TABLE @DATA(ti_ztcxr1000_2).
+
+        SORT ti_ztcxr1000_2 BY modulo ricefw idcomo idparam consec.
+
+        MODIFY ti_ztcxr1000_1 FROM VALUE #( mandt = mandante_destino )
+        TRANSPORTING mandt
+        WHERE mandt IS NOT INITIAL.
+        MODIFY ti_ztcxr1000_2 FROM VALUE #( mandt = mandante_destino )
+        TRANSPORTING mandt
+        WHERE mandt IS NOT INITIAL.
+
+        MODIFY ztcxr1000_1 FROM TABLE ti_ztcxr1000_1.
+        MODIFY ztcxr1000_2 FROM TABLE ti_ztcxr1000_2.
+      ENDIF.
+
+      IF sy-subrc IS INITIAL.
+        COMMIT WORK AND WAIT.
+        MESSAGE i039(zcx01).
+      ELSE.
+        LOOP AT ti_ztcxr1000_1 ASSIGNING FIELD-SYMBOL(<fs_es_ztcxr1000_1>).
+          ricefw = |{ ricefw } { <fs_es_ztcxr1000_1>-ricefw }|.
+        ENDLOOP.
+        MESSAGE i038(zcx01) WITH ti_ztcxr1000_1[ 1 ]-modulo ricefw.
+      ENDIF.
+
+    ELSE.
+      IF sy-msgid IS NOT INITIAL.
+        MESSAGE ID sy-msgid  TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+    ENDIF.
+
+
+  ENDMETHOD.
+
+  METHOD copiar_homologacion_mandante.
+    DATA: ti_campos_pantalla TYPE STANDARD TABLE OF sval,
+          ricefw             TYPE ztcxr1000_1-ricefw,
+          codigo_retorno     TYPE string.
+
+    APPEND VALUE #( tabname = 'ZTCXR1000_1' fieldname = 'RICEFW' )
+    TO ti_campos_pantalla.
+
+    CALL FUNCTION 'POPUP_GET_VALUES'
+      EXPORTING
+*       no_value_check  = space
+        popup_title     = TEXT-001
+        start_column    = '5'
+        start_row       = '5'
+      IMPORTING
+        returncode      = codigo_retorno
+      TABLES
+        fields          = ti_campos_pantalla
+      EXCEPTIONS
+        error_in_fields = 1
+        OTHERS          = 2.
+
+    IF codigo_retorno IS INITIAL AND
+       NOT line_exists( ti_campos_pantalla[ value = space ] ).
+
+      ricefw = ti_campos_pantalla[ 1 ]-value.
+
+      SELECT *
+      FROM ztmmi1009_1
+      USING CLIENT '100'
+      WHERE ricefw = @ricefw
+      INTO TABLE @DATA(ti_ztmmi1009_1).
+
+
+      MODIFY ztmmi1009_1 FROM TABLE ti_ztmmi1009_1.
+
+      IF sy-subrc IS INITIAL.
+        COMMIT WORK AND WAIT.
+        MESSAGE i039(zcx01).
+      ELSE.
+        MESSAGE i038(zcx01) WITH ricefw.
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclcxr1000_parametros DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    CONSTANTS:
+      gc_i  TYPE char1 VALUE 'I',
+      gc_eq TYPE char2 VALUE 'EQ'.
+    TYPES:
+
+      BEGIN OF gtp_parametros,
+        modulo    TYPE ztcxr1000_1-modulo,
+        ricefw    TYPE ztcxr1000_1-ricefw,
+        idcomo    TYPE ztcxr1000_1-idcomo,
+        idparam   TYPE ztcxr1000_1-idparam,
+        consec    TYPE ztcxr1000_2-consec,
+        sign      TYPE ztcxr1000_2-sign,
+        opti      TYPE ztcxr1000_2-opti,
+        low       TYPE ztcxr1000_2-low,
+        high      TYPE ztcxr1000_2-high,
+        descparam TYPE ztcxr1000_1-descparam,
+      END OF gtp_parametros,
+
+      tp_ti_parametros TYPE STANDARD TABLE OF gtp_parametros WITH EMPTY KEY,
+      tp_ti_comodin    TYPE RANGE OF ztcxr1000_1-idcomo.
+
+    DATA:
+      gti_parametros       TYPE tp_ti_parametros.
+
+    METHODS:
+
+      "! Método Constructor
+      "!
+      "! @parameter i_modulo | Modulo
+      "! @parameter i_ricefw | RICEFW
+      constructor
+        IMPORTING
+          VALUE(i_modulo) TYPE zzedmodulo OPTIONAL
+          VALUE(i_ricefw) TYPE zzedricefw OPTIONAL,
+
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Obtenemos los parametros de aplicacion<br/>
+      "! </p>
+      "! <strong>Identificador:</strong>
+                                                            "! R1000
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Jose Miguel Valencia
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 26.02.2021  \ S4DK900059 \ Jose Miguel Valencia \ Creacion Inicial \
+      "!
+      "! @parameter i_modulo | Modulo
+      "! @parameter i_ricefw | RICEFW
+      "! @parameter i_comodin | Comodin
+      "! @parameter i_idparam | ID Parámetro
+      "! @parameter e_ti_valrango |Valor del Parametro Rango
+      get_parametro
+        IMPORTING
+          VALUE(i_modulo)  TYPE ztcxr1000_1-modulo  OPTIONAL
+          VALUE(i_ricefw)  TYPE ztcxr1000_1-ricefw  OPTIONAL
+          i_comodin        TYPE ztcxr1000_1-idcomo OPTIONAL
+          VALUE(i_idparam) TYPE ztcxr1000_1-idparam
+        EXPORTING
+          e_ti_valrango    TYPE STANDARD TABLE
+        EXCEPTIONS
+          parametro_no_encontrado.
+
+    CLASS-METHODS:
+      copiar_parametro_en_mandante,
+      copiar_homologacion_mandante.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclcxr1000_parametros IMPLEMENTATION.
+
+
+  METHOD constructor.
+
+    ".Consultamos la informacion de los parametros
+    SELECT t1~modulo, t1~ricefw, t1~idcomo, t1~idparam, t2~consec,
+           t2~sign, t2~opti, t2~low, t2~high, t1~descparam
+      FROM ztcxr1000_1 AS t1
+      LEFT OUTER JOIN ztcxr1000_2 AS t2
+           ON t1~modulo EQ t2~modulo AND
+              t1~ricefw EQ t2~ricefw AND
+              t1~idcomo EQ t2~idcomo AND
+              t1~idparam EQ t2~idparam
+     WHERE t1~modulo EQ @i_modulo
+       AND t1~ricefw EQ @i_ricefw
+      INTO TABLE @gti_parametros.
+
+  ENDMETHOD.
+
+  METHOD get_parametro.
+    DATA:
+      es_rango    TYPE REF TO data.
+
+    FIELD-SYMBOLS:
+      <fs_rango>       TYPE any,
+      <fs_campo>       TYPE any,
+      <fs_param_rango> TYPE gtp_parametros.
+
+    DATA:
+      rcomodin   TYPE tp_ti_comodin,
+      es_comodin LIKE LINE OF rcomodin.
+
+    CLEAR: e_ti_valrango.
+
+    es_comodin = VALUE #( sign     = gc_i
+                          option   = gc_eq
+                          low      = i_comodin ).
+    APPEND es_comodin TO rcomodin.
+
+    CREATE DATA es_rango LIKE LINE OF e_ti_valrango.
+
+    IF i_modulo IS SUPPLIED AND
+       i_ricefw IS SUPPLIED AND
+       i_comodin IS SUPPLIED.
+
+      ".Consultamos la informacion de los parametros rango
+      SELECT t2~modulo, t2~ricefw, t2~idcomo, t2~idparam, t2~consec,
+             t2~sign, t2~opti, t2~low, t2~high, t1~descparam
+        FROM ztcxr1000_1 AS t1 INNER JOIN ztcxr1000_2 AS t2
+             ON t1~modulo EQ t2~modulo AND
+                t1~ricefw EQ t2~ricefw AND
+                t1~idcomo EQ t2~idcomo AND
+                t1~idparam EQ t2~idparam
+       WHERE t1~modulo  EQ @i_modulo
+         AND t1~ricefw  EQ @i_ricefw
+         AND t1~idcomo  IN @rcomodin
+         AND t1~idparam EQ @i_idparam
+        INTO TABLE @DATA(ti_param_rango).
+
+      IF lines( ti_param_rango ) GT 0.
+
+        ".Recorremos al informacion de los rangos
+        LOOP AT ti_param_rango ASSIGNING <fs_param_rango>.
+          ASSIGN es_rango->* TO <fs_rango>.
+
+          ASSIGN COMPONENT 'SIGN' OF STRUCTURE <fs_rango> TO <fs_campo>.
+          IF <fs_param_rango>-sign IS INITIAL.
+            <fs_campo> = 'I'.
+          ELSE.
+            <fs_campo> = <fs_param_rango>-sign.
+          ENDIF.
+
+          ASSIGN COMPONENT 'OPTION' OF STRUCTURE <fs_rango> TO <fs_campo>.
+          <fs_campo> = <fs_param_rango>-opti.
+
+          ASSIGN COMPONENT 'LOW' OF STRUCTURE <fs_rango> TO <fs_campo>.
+          <fs_campo> = <fs_param_rango>-low.
+
+          ASSIGN COMPONENT 'HIGH' OF STRUCTURE <fs_rango> TO <fs_campo>.
+          <fs_campo> = <fs_param_rango>-high.
+
+          APPEND <fs_rango> TO e_ti_valrango.
+        ENDLOOP.
+        EXIT.
+      ELSE.
+        RAISE parametro_no_encontrado.
+      ENDIF.
+    ENDIF.
+
+    IF NOT line_exists( gti_parametros[ idparam = i_idparam ] ).
+      RAISE parametro_no_encontrado.
+    ENDIF.
+
+    ".Recorremos al informacion de los rangos
+    LOOP AT gti_parametros ASSIGNING <fs_param_rango>
+      WHERE idcomo  IN rcomodin
+        AND idparam EQ i_idparam.
+      ASSIGN es_rango->* TO <fs_rango>.
+
+      CHECK NOT ( <fs_param_rango>-sign IS INITIAL AND
+         <fs_param_rango>-opti IS INITIAL AND
+         <fs_param_rango>-low  IS INITIAL AND
+         <fs_param_rango>-high IS INITIAL ).
+
+
+      ASSIGN COMPONENT 'SIGN' OF STRUCTURE <fs_rango> TO <fs_campo>.
+      IF <fs_param_rango>-sign IS INITIAL.
+        <fs_campo> = 'I'.
+      ELSE.
+        <fs_campo> = <fs_param_rango>-sign.
+      ENDIF.
+
+      ASSIGN COMPONENT 'OPTION' OF STRUCTURE <fs_rango> TO <fs_campo>.
+      <fs_campo> = <fs_param_rango>-opti.
+
+      ASSIGN COMPONENT 'LOW' OF STRUCTURE <fs_rango> TO <fs_campo>.
+      <fs_campo> = <fs_param_rango>-low.
+
+      ASSIGN COMPONENT 'HIGH' OF STRUCTURE <fs_rango> TO <fs_campo>.
+      <fs_campo> = <fs_param_rango>-high.
+
+      APPEND <fs_rango> TO e_ti_valrango.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD copiar_parametro_en_mandante.
+
+    DATA: ti_campos_pantalla TYPE STANDARD TABLE OF sval,
+          r_ricefw           TYPE RANGE OF ztcxr1000_1-ricefw,
+          ricefw             TYPE string,
+          r_modulo           TYPE RANGE OF ztcxr1000_1-modulo,
+          mandante_fuente    TYPE ztcxr1000_1-mandt,
+          mandante_destino   TYPE ztcxr1000_1-mandt,
+          codigo_retorno     TYPE string.
+
+    ti_campos_pantalla =  VALUE #( ( tabname = 'ZTCXR1000_1' fieldname = 'MODULO' )
+                                   ( tabname = 'ZTCXR1000_1' fieldname = 'RICEFW' )
+                                   ( tabname = 'ZTCXR1000_1' field_obl = abap_true fieldname = 'MANDT' fieldtext = 'Mandante Fuente' )
+                                   ( tabname = 'ZTCXR1000_2' field_obl = abap_true fieldname = 'MANDT'
+                                     fieldtext = 'Mandante Destino' value = sy-mandt )
+                                 ).
+
+    CALL FUNCTION 'POPUP_GET_VALUES'
+      EXPORTING
+*       no_value_check  = space
+        popup_title     = TEXT-001
+        start_column    = '5'
+        start_row       = '5'
+      IMPORTING
+        returncode      = codigo_retorno
+      TABLES
+        fields          = ti_campos_pantalla
+      EXCEPTIONS
+        error_in_fields = 1
+        OTHERS          = 2.
+
+    IF codigo_retorno IS INITIAL AND
+       ( NOT line_exists( ti_campos_pantalla[ fieldname = 'MODULO' value = space ] ) OR
+         NOT line_exists( ti_campos_pantalla[ fieldname = 'RICEFW' value = space ] )
+       ).
+
+      r_ricefw = VALUE #( ( sign = 'I' option = 'EQ' low = ti_campos_pantalla[ fieldname = 'RICEFW' ]-value ) ).
+      r_modulo = VALUE #( ( sign = 'I' option = 'EQ' low = ti_campos_pantalla[ fieldname = 'MODULO' ]-value ) ).
+      DELETE r_ricefw WHERE low = space.
+      DELETE r_modulo WHERE low = space.
+      mandante_fuente =  ti_campos_pantalla[ tabname = 'ZTCXR1000_1' fieldname = 'MANDT' ]-value.
+      mandante_destino = ti_campos_pantalla[ tabname = 'ZTCXR1000_2' fieldname = 'MANDT' ]-value.
+
+      SELECT *
+      FROM ztcxr1000_1
+      USING CLIENT @mandante_fuente
+      WHERE modulo IN @r_modulo
+      AND ricefw IN @r_ricefw
+      INTO TABLE @DATA(ti_ztcxr1000_1).
+
+      SORT ti_ztcxr1000_1 BY modulo ricefw idcomo idparam.
+
+      IF ti_ztcxr1000_1 IS NOT INITIAL.
+        SELECT *
+        FROM ztcxr1000_2
+        USING CLIENT @mandante_fuente
+        FOR ALL ENTRIES IN @ti_ztcxr1000_1
+        WHERE modulo = @ti_ztcxr1000_1-modulo
+        AND   ricefw = @ti_ztcxr1000_1-ricefw
+        INTO TABLE @DATA(ti_ztcxr1000_2).
+
+        SORT ti_ztcxr1000_2 BY modulo ricefw idcomo idparam consec.
+
+        MODIFY ti_ztcxr1000_1 FROM VALUE #( mandt = mandante_destino )
+        TRANSPORTING mandt
+        WHERE mandt IS NOT INITIAL.
+        MODIFY ti_ztcxr1000_2 FROM VALUE #( mandt = mandante_destino )
+        TRANSPORTING mandt
+        WHERE mandt IS NOT INITIAL.
+
+        MODIFY ztcxr1000_1 FROM TABLE ti_ztcxr1000_1.
+        MODIFY ztcxr1000_2 FROM TABLE ti_ztcxr1000_2.
+      ENDIF.
+
+      IF sy-subrc IS INITIAL.
+        COMMIT WORK AND WAIT.
+        MESSAGE i039(zcx01).
+      ELSE.
+        LOOP AT ti_ztcxr1000_1 ASSIGNING FIELD-SYMBOL(<fs_es_ztcxr1000_1>).
+          ricefw = |{ ricefw } { <fs_es_ztcxr1000_1>-ricefw }|.
+        ENDLOOP.
+        MESSAGE i038(zcx01) WITH ti_ztcxr1000_1[ 1 ]-modulo ricefw.
+      ENDIF.
+
+    ELSE.
+      IF sy-msgid IS NOT INITIAL.
+        MESSAGE ID sy-msgid  TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+    ENDIF.
+
+
+  ENDMETHOD.
+
+  METHOD copiar_homologacion_mandante.
+    DATA: ti_campos_pantalla TYPE STANDARD TABLE OF sval,
+          ricefw             TYPE ztcxr1000_1-ricefw,
+          codigo_retorno     TYPE string.
+
+    APPEND VALUE #( tabname = 'ZTCXR1000_1' fieldname = 'RICEFW' )
+    TO ti_campos_pantalla.
+
+    CALL FUNCTION 'POPUP_GET_VALUES'
+      EXPORTING
+*       no_value_check  = space
+        popup_title     = TEXT-001
+        start_column    = '5'
+        start_row       = '5'
+      IMPORTING
+        returncode      = codigo_retorno
+      TABLES
+        fields          = ti_campos_pantalla
+      EXCEPTIONS
+        error_in_fields = 1
+        OTHERS          = 2.
+
+    IF codigo_retorno IS INITIAL AND
+       NOT line_exists( ti_campos_pantalla[ value = space ] ).
+
+      ricefw = ti_campos_pantalla[ 1 ]-value.
+
+      SELECT *
+      FROM ztmmi1009_1
+      USING CLIENT '100'
+      WHERE ricefw = @ricefw
+      INTO TABLE @DATA(ti_ztmmi1009_1).
+
+
+      MODIFY ztmmi1009_1 FROM TABLE ti_ztmmi1009_1.
+
+      IF sy-subrc IS INITIAL.
+        COMMIT WORK AND WAIT.
+        MESSAGE i039(zcx01).
+      ELSE.
+        MESSAGE i038(zcx01) WITH ricefw.
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.
