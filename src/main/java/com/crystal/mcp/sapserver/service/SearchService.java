@@ -63,15 +63,13 @@ public class SearchService {
      * </objectReferences>
      *
      * @param query      search keyword (e.g., "ZCL_", "payment", "*invoice*")
-     * @param maxResults maximum results to return (default: 10, max: 100)
+     * @param maxResults maximum results to return (default: 10, no upper limit)
      * @return SearchResult containing list of matching objects
      * @throws RuntimeException if search fails
      */
     public SearchResult searchObjects(String query, Integer maxResults) {
-        // Set default max results
-        int actualMaxResults = (maxResults != null && maxResults > 0)
-                ? Math.min(maxResults, 100)
-                : 10;
+        // Set default max results (no upper limit - ADT API handles pagination)
+        int actualMaxResults = (maxResults != null && maxResults > 0) ? maxResults : 10;
 
         // Build ADT API URI
         String uri = "/sap/bc/adt/repository/informationsystem/search";

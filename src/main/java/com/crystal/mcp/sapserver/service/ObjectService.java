@@ -11,7 +11,13 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import java.io.ByteArrayInputStream;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -50,8 +56,10 @@ public class ObjectService {
     /**
      * Get structure/metadata for any ABAP object without source code.
      *
-     * This is Progressive Discovery Stage 2: Get metadata before fetching full source.
-     * Returns object components (methods, attributes, includes) without source code.
+     * This is Progressive Discovery Stage 2: Get metadata before fetching full
+     * source.
+     * Returns object components (methods, attributes, includes) without source
+     * code.
      *
      * Progressive Discovery Stage 2:
      * - Use after search_objects (Stage 1) identifies objects
@@ -98,8 +106,7 @@ public class ObjectService {
                     null,
                     new HashMap<>(),
                     "",
-                    "application/xml"
-            );
+                    "application/xml");
 
             // Check HTTP status
             if (response.statusCode() == 200) {
@@ -112,8 +119,7 @@ public class ObjectService {
                 String errorMsg = String.format(
                         "Failed to get object structure: HTTP %d - %s",
                         response.statusCode(),
-                        response.text()
-                );
+                        response.text());
                 log.error(errorMsg);
                 throw new RuntimeException(errorMsg);
             }
@@ -148,8 +154,7 @@ public class ObjectService {
         factory.setNamespaceAware(true);
         DocumentBuilder builder = factory.newDocumentBuilder();
         Document doc = builder.parse(new ByteArrayInputStream(
-                xml.getBytes(StandardCharsets.UTF_8)
-        ));
+                xml.getBytes(StandardCharsets.UTF_8)));
 
         Element root = doc.getDocumentElement();
 
@@ -194,8 +199,7 @@ public class ObjectService {
             }
 
             components.add(new ObjectStructure.Component(
-                    compName, compType, compUri, compDescription, compLinks
-            ));
+                    compName, compType, compUri, compDescription, compLinks));
         }
 
         return new ObjectStructure(name, type, objectUri, description, components, links);
@@ -239,7 +243,8 @@ public class ObjectService {
      * - Function Groups: /sap/bc/adt/functions/groups/{name}/source/main
      * - Interfaces: /sap/bc/adt/oo/interfaces/{name}/source/main
      *
-     * @param objectUri ADT URI for the object (obtained from search or structure queries)
+     * @param objectUri ADT URI for the object (obtained from search or structure
+     *                  queries)
      * @param version   version to retrieve ("active" or "inactive")
      * @return ObjectSourceResult containing source code and metadata
      * @throws RuntimeException if object not found or access fails
@@ -279,8 +284,7 @@ public class ObjectService {
                     null,
                     params,
                     "",
-                    "text/plain"
-            );
+                    "text/plain");
 
             // Check HTTP status
             if (response.statusCode() == 200) {
@@ -289,22 +293,20 @@ public class ObjectService {
 
                 // Build metadata
                 Map<String, Object> metadata = new HashMap<>();
-                metadata.put("uri", sourceUri);  // Use sourceUri (with /source/main)
+                metadata.put("uri", sourceUri); // Use sourceUri (with /source/main)
                 metadata.put("responseHeaders", response.headers());
                 metadata.put("sourceLength", response.text().length());
 
                 return new ObjectSourceResult(
                         response.text(),
-                        sourceUri,  // Use sourceUri (with /source/main)
+                        sourceUri, // Use sourceUri (with /source/main)
                         actualVersion,
-                        metadata
-                );
+                        metadata);
             } else {
                 String errorMsg = String.format(
                         "Failed to get object source: HTTP %d - %s",
                         response.statusCode(),
-                        response.text()
-                );
+                        response.text());
                 log.error(errorMsg);
                 throw new RuntimeException(errorMsg);
             }
@@ -314,5 +316,115 @@ public class ObjectService {
                     objectUri, e.getMessage(), e);
             throw new RuntimeException("Failed to retrieve object source", e);
         }
+    }
+
+    /**
+     * Get list of Function Modules in a Function Group.
+     *
+     * Uses ADT repository/nodestructure endpoint as suggested by user.
+     * POST /sap/bc/adt/repository/nodestructure
+     *
+     * @param fgName Function Group name
+     * @return List of Function Module names
+     */
+    public List<String> getFunctionGroupModules(String fgName) {
+        List<String> modules = new ArrayList<>();
+        if (fgName == null || fgName.isEmpty())
+            return modules;
+
+        try {
+            log.debug("Fetching FMs for Group {} via ADT nodestructure", fgName);
+
+            // Build request XML
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.newDocument();
+
+            Element root = doc.createElement("asx:abap");
+            root.setAttribute("xmlns:asx", "http://www.sap.com/abapxml");
+            root.setAttribute("version", "1.0");
+            doc.appendChild(root);
+
+            Element values = doc.createElement("asx:values");
+            root.appendChild(values);
+
+            Element data = doc.createElement("DATA");
+            values.appendChild(data);
+
+            addTextElement(doc, data, "TV_NODEKEY", "000000");
+
+            String requestXml = xmlToString(doc);
+
+            // Execute node structure request
+            String nodeStructureUri = "/sap/bc/adt/repository/nodestructure";
+            Map<String, String> params = Map.of(
+                    "parent_name", fgName,
+                    "parent_tech_name", fgName, // User suggested using same name
+                    "parent_type", "FUGR/F",
+                    "withShortDescriptions", "true");
+
+            RfcAdapter.RfcResponse response = rfcAdapter.request(
+                    nodeStructureUri,
+                    "POST",
+                    Map.of(
+                            "Accept",
+                            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.RepositoryObjectTreeContent",
+                            "Content-Type", "application/vnd.sap.as+xml; charset=UTF-8; dataname=null"),
+                    params,
+                    requestXml,
+                    "application/vnd.sap.as+xml");
+
+            if (response.statusCode() == 200) {
+                // Parse response to find FMs
+                Document responseDoc = builder
+                        .parse(new ByteArrayInputStream(response.text().getBytes(StandardCharsets.UTF_8)));
+
+                // Iterate over SEU_ADT_REPOSITORY_OBJ_NODE elements
+                NodeList nodes = responseDoc.getElementsByTagName("SEU_ADT_REPOSITORY_OBJ_NODE");
+                for (int i = 0; i < nodes.getLength(); i++) {
+                    Element element = (Element) nodes.item(i);
+
+                    String name = getTagValue(element, "OBJECT_NAME");
+                    String type = getTagValue(element, "OBJECT_TYPE");
+
+                    if (name != null && !name.isEmpty() && "FUGR/FF".equals(type)) {
+                        modules.add(name);
+                    }
+                }
+                log.info("Found {} FMs in Group {} via ADT nodestructure", modules.size(), fgName);
+            } else {
+                log.warn("ADT nodestructure returned status {}: {}", response.statusCode(), response.text());
+            }
+
+        } catch (Exception e) {
+            log.warn("Failed to get modules for FG {}: {}", fgName, e.getMessage());
+        }
+        return modules;
+    }
+
+    private String getTagValue(Element element, String tagName) {
+        NodeList nodeList = element.getElementsByTagName(tagName);
+        if (nodeList != null && nodeList.getLength() > 0) {
+            return nodeList.item(0).getTextContent();
+        }
+        return null;
+    }
+
+    private void addTextElement(Document doc, Element parent, String tagName, String textContent) {
+        Element element = doc.createElement(tagName);
+        if (textContent != null && !textContent.isEmpty()) {
+            element.setTextContent(textContent);
+        }
+        parent.appendChild(element);
+    }
+
+    private String xmlToString(Document doc) throws Exception {
+        TransformerFactory tf = TransformerFactory.newInstance();
+        Transformer transformer = tf.newTransformer();
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        transformer.setOutputProperty(OutputKeys.INDENT, "no");
+        StringWriter writer = new StringWriter();
+        transformer.transform(new DOMSource(doc), new StreamResult(writer));
+        return writer.getBuffer().toString();
     }
 }

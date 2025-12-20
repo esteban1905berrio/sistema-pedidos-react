@@ -5,7 +5,7 @@ import com.crystal.mcp.sapserver.model.EnhancementSearchResult.EnhancementRefere
 import com.crystal.mcp.sapserver.model.EnhancementSourceResult;
 import com.crystal.mcp.sapserver.model.EnhancementSourceResult.EnhancementHeader;
 import com.crystal.mcp.sapserver.model.EnhancementSourceResult.EnhancementElement;
-import com.crystal.mcp.sapserver.model.EnhancementSourceResult.EnhancementSourceLine;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -21,15 +21,18 @@ import java.util.Map;
 /**
  * Service for Enhancement Implementation operations.
  *
- * This service provides business logic for retrieving Enhancement Implementation
- * (ENHO) source code and metadata from SAP systems via custom RFC function module.
+ * This service provides business logic for retrieving Enhancement
+ * Implementation
+ * (ENHO) source code and metadata from SAP systems via custom RFC function
+ * module.
  *
  * Enhancement Implementations contain:
  * - Hook Implementations (source code injected into enhancement spots)
  * - BAdI Implementations (implementing classes for Business Add-Ins)
  *
  * RFC Function Module:
- * ZCX_GET_ENHANCEMENT_SOURCE - Custom FM that retrieves enhancement data as JSON
+ * ZCX_GET_ENHANCEMENT_SOURCE - Custom FM that retrieves enhancement data as
+ * JSON
  *
  * Progressive Discovery Integration:
  * - Stage 1: search_objects (SearchService) → Find ENHO objects
@@ -55,8 +58,9 @@ public class EnhancementService {
      * - Elements: list of hooks or BAdI implementations
      * - Sources: actual ABAP source code for each element
      *
-     * @param enhancementName name of enhancement implementation (e.g., "ZENH_INVOICE_BADI")
-     * @param version version number (default 00000 for active)
+     * @param enhancementName name of enhancement implementation (e.g.,
+     *                        "ZENH_INVOICE_BADI")
+     * @param version         version number (default 00000 for active)
      * @return EnhancementSourceResult containing all enhancement data
      * @throws RuntimeException if RFC call fails or enhancement not found
      */
@@ -73,8 +77,7 @@ public class EnhancementService {
 
             RfcAdapter.RfcFunctionResponse response = rfcAdapter.callFunctionModule(
                     FM_GET_ENHANCEMENT_SOURCE,
-                    importParams
-            );
+                    importParams);
 
             String rcode = response.getExportParam("EV_RCODE");
             if (!"0".equals(rcode) && !rcode.isBlank()) {
@@ -85,20 +88,16 @@ public class EnhancementService {
                 log.warn("Enhancement retrieval failed: {} (RCODE: {})", errorMsg, rcode);
                 throw new RuntimeException(String.format(
                         "Enhancement '%s' not found or access denied: %s",
-                        normalizedName, errorMsg
-                ));
+                        normalizedName, errorMsg));
             }
 
             String headerJson = response.getExportParam("EV_HEADER_JSON");
             String elementsJson = response.getExportParam("EV_ELEMENTS_JSON");
-            String sourcesJson = response.getExportParam("EV_SOURCE_JSON");
-
             EnhancementHeader header = parseHeader(headerJson);
             List<EnhancementElement> elements = parseElements(elementsJson);
-            List<EnhancementSourceLine> sourceLines = parseSourceLines(sourcesJson);
 
-            log.info("Successfully retrieved Enhancement {} ({} elements, {} source lines)",
-                    normalizedName, elements.size(), sourceLines.size());
+            log.info("Successfully retrieved Enhancement {} ({} elements)",
+                    normalizedName, elements.size());
 
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("functionModule", FM_GET_ENHANCEMENT_SOURCE);
@@ -108,9 +107,7 @@ public class EnhancementService {
                     normalizedName,
                     header,
                     elements,
-                    sourceLines,
-                    metadata
-            );
+                    metadata);
 
         } catch (RuntimeException e) {
             throw e;
@@ -128,7 +125,7 @@ public class EnhancementService {
      * Searches ENHO table for enhancements matching the pattern.
      * Supports wildcards: "Z*" (prefix), "*INVOICE*" (contains), "*_BADI" (suffix).
      *
-     * @param pattern wildcard pattern (e.g., "Z*", "*INVOICE*")
+     * @param pattern    wildcard pattern (e.g., "Z*", "*INVOICE*")
      * @param maxResults maximum results to return (default: 100)
      * @return EnhancementSearchResult containing matching enhancements
      * @throws RuntimeException if RFC call fails
@@ -146,8 +143,7 @@ public class EnhancementService {
 
             RfcAdapter.RfcFunctionResponse response = rfcAdapter.callFunctionModule(
                     FM_GET_ENHANCEMENT_SOURCE,
-                    importParams
-            );
+                    importParams);
 
             String resultsJson = response.getExportParam("EV_RESULTS_JSON");
 
@@ -159,8 +155,7 @@ public class EnhancementService {
                     normalizedPattern,
                     limit,
                     results.size(),
-                    results
-            );
+                    results);
 
         } catch (Exception e) {
             String errorMsg = String.format("Error searching Enhancements with pattern %s: %s",
@@ -175,12 +170,12 @@ public class EnhancementService {
      *
      * Expected JSON format from FM:
      * [
-     *   {
-     *     "enhancement_name": "ZENH_INVOICE",
-     *     "object_type": "CLAS",
-     *     "object_name": "ZCL_INVOICE_PROCESSOR"
-     *   },
-     *   ...
+     * {
+     * "enhancement_name": "ZENH_INVOICE",
+     * "object_type": "CLAS",
+     * "object_name": "ZCL_INVOICE_PROCESSOR"
+     * },
+     * ...
      * ]
      */
     private List<EnhancementReference> parseSearchResults(String resultsJson) {
@@ -193,15 +188,15 @@ public class EnhancementService {
             mapper.setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
 
             List<Map<String, Object>> resultsList = mapper.readValue(resultsJson,
-                    new TypeReference<List<Map<String, Object>>>() {});
+                    new TypeReference<List<Map<String, Object>>>() {
+                    });
 
             List<EnhancementReference> results = new ArrayList<>();
             for (Map<String, Object> item : resultsList) {
                 results.add(new EnhancementReference(
                         getString(item, "enhancement_name"),
                         getString(item, "object_type"),
-                        getString(item, "object_name")
-                ));
+                        getString(item, "object_name")));
             }
             return results;
         } catch (Exception e) {
@@ -223,7 +218,8 @@ public class EnhancementService {
             mapper.setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
 
             Map<String, Object> headerMap = mapper.readValue(headerJson,
-                    new TypeReference<Map<String, Object>>() {});
+                    new TypeReference<Map<String, Object>>() {
+                    });
 
             return new EnhancementHeader(
                     getString(headerMap, "enhancement_name"),
@@ -234,8 +230,7 @@ public class EnhancementService {
                     getString(headerMap, "author"),
                     getString(headerMap, "created_on"),
                     getString(headerMap, "changed_by"),
-                    getString(headerMap, "changed_on")
-            );
+                    getString(headerMap, "changed_on"));
         } catch (Exception e) {
             log.warn("Failed to parse header JSON: {}", e.getMessage());
             return null;
@@ -255,7 +250,8 @@ public class EnhancementService {
             mapper.setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
 
             List<Map<String, Object>> elementsList = mapper.readValue(elementsJson,
-                    new TypeReference<List<Map<String, Object>>>() {});
+                    new TypeReference<List<Map<String, Object>>>() {
+                    });
 
             List<EnhancementElement> elements = new ArrayList<>();
             for (Map<String, Object> elem : elementsList) {
@@ -268,42 +264,12 @@ public class EnhancementService {
                         getString(elem, "badi_impl"),
                         getString(elem, "impl_class"),
                         getString(elem, "interface_name"),
-                        getBoolean(elem, "active")
-                ));
+                        getBoolean(elem, "active"),
+                        getString(elem, "source_code")));
             }
             return elements;
         } catch (Exception e) {
             log.warn("Failed to parse elements JSON: {}", e.getMessage());
-            return new ArrayList<>();
-        }
-    }
-
-    /**
-     * Parse source lines JSON array from ABAP FM response.
-     * GDC FM returns array of {line_no, code} objects.
-     */
-    private List<EnhancementSourceLine> parseSourceLines(String sourcesJson) {
-        if (sourcesJson == null || sourcesJson.isBlank() || sourcesJson.equals("[]")) {
-            return new ArrayList<>();
-        }
-
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
-
-            List<Map<String, Object>> sourcesList = mapper.readValue(sourcesJson,
-                    new TypeReference<List<Map<String, Object>>>() {});
-
-            List<EnhancementSourceLine> sourceLines = new ArrayList<>();
-            for (Map<String, Object> src : sourcesList) {
-                sourceLines.add(new EnhancementSourceLine(
-                        getInteger(src, "line_no"),
-                        getString(src, "code")
-                ));
-            }
-            return sourceLines;
-        } catch (Exception e) {
-            log.warn("Failed to parse source lines JSON: {}", e.getMessage());
             return new ArrayList<>();
         }
     }
@@ -315,23 +281,13 @@ public class EnhancementService {
 
     private Boolean getBoolean(Map<String, Object> map, String key) {
         Object value = map.get(key);
-        if (value == null) return null;
-        if (value instanceof Boolean) return (Boolean) value;
-        if (value instanceof String) return "X".equalsIgnoreCase((String) value) || "true".equalsIgnoreCase((String) value);
+        if (value == null)
+            return null;
+        if (value instanceof Boolean)
+            return (Boolean) value;
+        if (value instanceof String)
+            return "X".equalsIgnoreCase((String) value) || "true".equalsIgnoreCase((String) value);
         return null;
     }
 
-    private Integer getInteger(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        if (value == null) return null;
-        if (value instanceof Number) return ((Number) value).intValue();
-        if (value instanceof String) {
-            try {
-                return Integer.parseInt((String) value);
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-        return null;
-    }
 }

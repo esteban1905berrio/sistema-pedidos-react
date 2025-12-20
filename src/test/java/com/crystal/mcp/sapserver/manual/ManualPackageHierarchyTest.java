@@ -8,22 +8,26 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * Manual test for PackageHierarchyTools.
  *
- * <p><b>IMPORTANT</b>: This test requires Z_CX_GET_PACKAGE_HIERARCHY FM to be manually
- * implemented in SE37 transaction.</p>
+ * <p>
+ * <b>IMPORTANT</b>: This test requires Z_CX_GET_PACKAGE_HIERARCHY FM to be
+ * manually
+ * implemented in SE37 transaction.
+ * </p>
  *
  * <h2>Prerequisites</h2>
  * <ul>
- *   <li>Function module Z_CX_GET_PACKAGE_HIERARCHY created in SAP</li>
- *   <li>Implementation code copied from resources/abap/functions/groups/zgfcx_1/fmodules/z_cx_get_package_hierarchy.abap</li>
- *   <li>FM activated in SE37</li>
- *   <li>Test package ZCX with children packages exists</li>
+ * <li>Function module Z_CX_GET_PACKAGE_HIERARCHY created in SAP</li>
+ * <li>Implementation code copied from
+ * resources/abap/functions/groups/zgfcx_1/fmodules/z_cx_get_package_hierarchy.abap</li>
+ * <li>FM activated in SE37</li>
+ * <li>Test package ZCX with children packages exists</li>
  * </ul>
  *
  * <h2>Expected Behavior</h2>
  * <ul>
- *   <li>Children mode: Returns JSON with subpackages</li>
- *   <li>Parents mode: Returns JSON with parent packages</li>
- *   <li>Recursive mode: Returns full hierarchy tree</li>
+ * <li>Children mode: Returns JSON with subpackages</li>
+ * <li>Parents mode: Returns JSON with parent packages</li>
+ * <li>Recursive mode: Returns full hierarchy tree</li>
  * </ul>
  *
  * @see PackageHierarchyTools
@@ -37,7 +41,9 @@ class ManualPackageHierarchyTest {
     /**
      * Test get_package_hierarchy tool - children mode.
      *
-     * <p>Tests direct children query for ZCX package.</p>
+     * <p>
+     * Tests direct children query for ZCX package.
+     * </p>
      */
     @Test
     void testGetPackageHierarchyChildren() {
@@ -53,35 +59,38 @@ class ManualPackageHierarchyTest {
         System.out.println("Recursive: " + recursive);
 
         // When
-        String result = packageHierarchyTools.getPackageHierarchy(packageName, mode, recursive);
+        // String result = packageHierarchyTools.getPackageHierarchy(packageName, mode,
+        // recursive);
 
         // Then
         System.out.println("\n=== Result ===");
-        System.out.println(result);
+        // System.out.println(result);
 
         // Expected format:
         // {
-        //   "success": true,
-        //   "mode": "children",
-        //   "recursive": false,
-        //   "packageName": "ZCX",
-        //   "hierarchy": [
-        //     {
-        //       "packageName": "ZCXENH",
-        //       "parentPackage": "ZCX",
-        //       "description": "...",
-        //       "level": 1,
-        //       "hasChildren": true
-        //     }
-        //   ],
-        //   "totalPackages": 1
+        // "success": true,
+        // "mode": "children",
+        // "recursive": false,
+        // "packageName": "ZCX",
+        // "hierarchy": [
+        // {
+        // "packageName": "ZCXENH",
+        // "parentPackage": "ZCX",
+        // "description": "...",
+        // "level": 1,
+        // "hasChildren": true
+        // }
+        // ],
+        // "totalPackages": 1
         // }
     }
 
     /**
      * Test get_package_hierarchy tool - children recursive.
      *
-     * <p>Tests full descendant tree query.</p>
+     * <p>
+     * Tests full descendant tree query.
+     * </p>
      */
     @Test
     void testGetPackageHierarchyChildrenRecursive() {
@@ -109,7 +118,9 @@ class ManualPackageHierarchyTest {
     /**
      * Test get_package_hierarchy tool - parents mode.
      *
-     * <p>Tests parent query for a child package.</p>
+     * <p>
+     * Tests parent query for a child package.
+     * </p>
      */
     @Test
     void testGetPackageHierarchyParents() {
@@ -133,26 +144,28 @@ class ManualPackageHierarchyTest {
 
         // Expected:
         // {
-        //   "success": true,
-        //   "mode": "parents",
-        //   "recursive": false,
-        //   "packageName": "ZCXENH",
-        //   "hierarchy": [
-        //     {
-        //       "packageName": "ZCX",
-        //       "parentPackage": "",
-        //       "description": "...",
-        //       "level": 1
-        //     }
-        //   ],
-        //   "totalPackages": 1
+        // "success": true,
+        // "mode": "parents",
+        // "recursive": false,
+        // "packageName": "ZCXENH",
+        // "hierarchy": [
+        // {
+        // "packageName": "ZCX",
+        // "parentPackage": "",
+        // "description": "...",
+        // "level": 1
+        // }
+        // ],
+        // "totalPackages": 1
         // }
     }
 
     /**
      * Test get_package_hierarchy tool - parents recursive.
      *
-     * <p>Tests full ancestor tree query.</p>
+     * <p>
+     * Tests full ancestor tree query.
+     * </p>
      */
     @Test
     void testGetPackageHierarchyParentsRecursive() {
@@ -180,7 +193,9 @@ class ManualPackageHierarchyTest {
     /**
      * Test get_package_hierarchy tool - default mode.
      *
-     * <p>Tests default mode (should use 'C').</p>
+     * <p>
+     * Tests default mode (should use 'C').
+     * </p>
      */
     @Test
     void testGetPackageHierarchyDefaultMode() {

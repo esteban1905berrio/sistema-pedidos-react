@@ -6,14 +6,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * RFC Adapter - HTTP-to-RFC Bridge.
  *
- * This adapter mimics HTTP request/response patterns but executes requests via SAP RFC
- * using the SADT_REST_RFC_ENDPOINT function module. This allows calling ADT (ABAP Development Tools)
+ * This adapter mimics HTTP request/response patterns but executes requests via
+ * SAP RFC
+ * using the SADT_REST_RFC_ENDPOINT function module. This allows calling ADT
+ * (ABAP Development Tools)
  * REST APIs through RFC instead of HTTP.
  *
  * Architecture Pattern:
@@ -21,8 +25,10 @@ import java.util.Map;
  * - Transforms into RFC call structures for SADT_REST_RFC_ENDPOINT
  * - Parses RFC response back into HTTP-style response
  *
- * This design allows the service layer to use familiar HTTP patterns while communicating
- * with SAP via RFC, maintaining compatibility with the Python implementation's architecture.
+ * This design allows the service layer to use familiar HTTP patterns while
+ * communicating
+ * with SAP via RFC, maintaining compatibility with the Python implementation's
+ * architecture.
  *
  * Stateful Connection Support (Phase 1 Implementation):
  * - Supports stateful workflows via JCoContext (SAP JCo feature)
@@ -30,7 +36,8 @@ import java.util.Map;
  * - Uses ThreadLocal to track active contexts per thread
  * - Prevents nested contexts and memory leaks
  *
- * Thread Safety: This class is thread-safe because JCoDestination is thread-safe
+ * Thread Safety: This class is thread-safe because JCoDestination is
+ * thread-safe
  * and stateful contexts are isolated per thread via ThreadLocal.
  */
 @Slf4j
@@ -49,8 +56,7 @@ public class RfcAdapter {
      * - Memory leaks por contextos no cerrados
      * - Confusión de estado entre threads
      */
-    private static final ThreadLocal<Boolean> statefulContextActive =
-            ThreadLocal.withInitial(() -> false);
+    private static final ThreadLocal<Boolean> statefulContextActive = ThreadLocal.withInitial(() -> false);
 
     /**
      * Inicia un contexto stateful para workflows que requieren sesión única SAP.
@@ -65,6 +71,7 @@ public class RfcAdapter {
      * - Cualquier workflow que requiera estado persistente entre llamadas
      *
      * Patrón de Uso (OBLIGATORIO):
+     * 
      * <pre>
      * {@code
      * rfcAdapter.beginStatefulContext();
@@ -87,7 +94,7 @@ public class RfcAdapter {
      * - Contexto es Thread-Local (cada thread tiene su propio contexto)
      *
      * @throws IllegalStateException si ya existe un contexto activo en este thread
-     * @throws JCoException si falla la inicialización del contexto JCo
+     * @throws JCoException          si falla la inicialización del contexto JCo
      *
      * @see #endStatefulContext()
      * @see JCoContext#begin(JCoDestination)
@@ -96,9 +103,8 @@ public class RfcAdapter {
         if (statefulContextActive.get()) {
             throw new IllegalStateException(
                     "Stateful context already active in this thread. " +
-                    "Nested stateful contexts are not allowed. " +
-                    "Ensure endStatefulContext() was called before starting a new context."
-            );
+                            "Nested stateful contexts are not allowed. " +
+                            "Ensure endStatefulContext() was called before starting a new context.");
         }
 
         log.info("🔵 BEGIN STATEFUL CONTEXT | Thread: {} | Destination: {} | Instance: {}",
@@ -177,7 +183,8 @@ public class RfcAdapter {
      *
      * This method replicates the Python RfcAdapter.request() behavior.
      *
-     * @param uri         ADT API endpoint (e.g., "/sap/bc/adt/oo/classes/CL_TEST/source/main")
+     * @param uri         ADT API endpoint (e.g.,
+     *                    "/sap/bc/adt/oo/classes/CL_TEST/source/main")
      * @param method      HTTP method (GET, POST, PUT, DELETE)
      * @param headers     custom HTTP headers (can be null)
      * @param params      query parameters (can be null)
@@ -192,8 +199,7 @@ public class RfcAdapter {
             Map<String, String> headers,
             Map<String, String> params,
             String body,
-            String contentType
-    ) throws JCoException {
+            String contentType) throws JCoException {
 
         String fullUri = buildUri(uri, params);
         Map<String, String> requestHeaders = buildHeaders(headers, contentType);
@@ -213,8 +219,7 @@ public class RfcAdapter {
             if (function == null) {
                 throw new RuntimeException(
                         "SADT_REST_RFC_ENDPOINT not found in SAP system. " +
-                                "Ensure ADT is installed and user has authorization."
-                );
+                                "Ensure ADT is installed and user has authorization.");
             }
 
             // Build REQUEST structure
@@ -312,8 +317,8 @@ public class RfcAdapter {
         // Default Accept header
         String acceptType = contentType.startsWith("application/vnd.sap.adt") ||
                 contentType.equals("text/plain")
-                ? contentType
-                : "*/*";
+                        ? contentType
+                        : "*/*";
 
         requestHeaders.put("Accept", acceptType);
         requestHeaders.put("Content-Type", contentType);
@@ -390,8 +395,7 @@ public class RfcAdapter {
 
             if (function == null) {
                 throw new RuntimeException(
-                        "Function module " + functionName + " not found in SAP system."
-                );
+                        "Function module " + functionName + " not found in SAP system.");
             }
 
             // Set import parameters
@@ -423,7 +427,32 @@ public class RfcAdapter {
                 }
             }
 
-            return new RfcFunctionResponse(exportParams);
+            // Extract tables
+            JCoParameterList tables = function.getTableParameterList();
+            Map<String, List<Map<String, Object>>> responseTables = new HashMap<>();
+
+            if (tables != null) {
+                for (JCoField field : tables) {
+                    if (field.isTable()) {
+                        JCoTable table = field.getTable();
+                        List<Map<String, Object>> rows = new ArrayList<>();
+                        if (!table.isEmpty()) {
+                            table.firstRow();
+                            do {
+                                Map<String, Object> rowMap = new HashMap<>();
+                                for (JCoField col : table) {
+                                    rowMap.put(col.getName(), col.getValue());
+                                }
+                                rows.add(rowMap);
+                            } while (table.nextRow());
+                        }
+                        responseTables.put(field.getName(), rows);
+                        log.debug("Table {}: {} rows", field.getName(), rows.size());
+                    }
+                }
+            }
+
+            return new RfcFunctionResponse(exportParams, responseTables);
 
         } catch (JCoException e) {
             log.error("FM call failed: {}", e.getMessage(), e);
@@ -442,18 +471,24 @@ public class RfcAdapter {
     public record RfcResponse(
             int statusCode,
             String text,
-            Map<String, String> headers
-    ) {
+            Map<String, String> headers) {
     }
 
     /**
      * Response wrapper for direct FM calls.
      *
-     * Contains export parameters from the function module.
+     * Contains export parameters and tables from the function module.
      */
     public record RfcFunctionResponse(
-            Map<String, String> exportParams
-    ) {
+            Map<String, String> exportParams,
+            Map<String, List<Map<String, Object>>> tables) {
+        /**
+         * Constructor for backward compatibility (only exports)
+         */
+        public RfcFunctionResponse(Map<String, String> exportParams) {
+            this(exportParams, new HashMap<>());
+        }
+
         /**
          * Get export parameter value by name.
          *
@@ -462,6 +497,16 @@ public class RfcAdapter {
          */
         public String getExportParam(String paramName) {
             return exportParams.getOrDefault(paramName, "");
+        }
+
+        /**
+         * Get table content by name.
+         *
+         * @param tableName Table name (e.g., "ET_DATA")
+         * @return List of rows (Maps of field name -> value), or empty list not found
+         */
+        public List<Map<String, Object>> getTable(String tableName) {
+            return tables.getOrDefault(tableName, new ArrayList<>());
         }
     }
 }

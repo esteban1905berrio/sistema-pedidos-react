@@ -6,7 +6,6 @@ FUNCTION ZCX_GET_ENHANCEMENT_SOURCE
   EXPORTING
     VALUE(EV_HEADER_JSON) TYPE STRING
     VALUE(EV_ELEMENTS_JSON) TYPE STRING
-    VALUE(EV_SOURCE_JSON) TYPE STRING
     VALUE(EV_RESULTS_JSON) TYPE STRING
     VALUE(EV_RCODE) TYPE SY-SUBRC
     VALUE(EV_MESSAGE) TYPE STRING
@@ -39,14 +38,9 @@ FUNCTION ZCX_GET_ENHANCEMENT_SOURCE
            impl_class     TYPE string,
            interface_name TYPE string,
            active         TYPE abap_bool,
+           source_code    TYPE string,
          END OF ty_element,
          tt_elements TYPE STANDARD TABLE OF ty_element WITH DEFAULT KEY.
-
-  TYPES: BEGIN OF ty_source_line,
-           line_no TYPE i,
-           code    TYPE string,
-         END OF ty_source_line,
-         tt_source TYPE STANDARD TABLE OF ty_source_line WITH DEFAULT KEY.
 
   TYPES: BEGIN OF ty_search_result,
            enhancement_name TYPE enhname,
@@ -61,10 +55,7 @@ FUNCTION ZCX_GET_ENHANCEMENT_SOURCE
         ls_header      TYPE ty_header,
         lt_elements    TYPE tt_elements,
         ls_element     TYPE ty_element,
-        lt_source      TYPE tt_source,
-        ls_source      TYPE ty_source_line,
         lv_state       TYPE r3state,
-        lv_line_no     TYPE i,
         lv_enhname     TYPE enhname,
         lv_pattern     TYPE string,
         lt_results     TYPE tt_search_results,
@@ -76,7 +67,7 @@ FUNCTION ZCX_GET_ENHANCEMENT_SOURCE
         lt_hook_data TYPE enh_hook_impl_it,
         ls_hook_data TYPE enh_hook_impl.
 
-  CLEAR: ev_header_json, ev_elements_json, ev_source_json, ev_results_json, ev_rcode, ev_message.
+  CLEAR: ev_header_json, ev_elements_json, ev_results_json, ev_rcode, ev_message.
 
   " Detect wildcard search
   IF iv_enhancement_name CS '*'.
@@ -211,24 +202,15 @@ FUNCTION ZCX_GET_ENHANCEMENT_SOURCE
         ls_element-program_name = ls_hook_data-programname.
         ls_element-full_name = ls_hook_data-full_name.
 
-        APPEND ls_element TO lt_elements.
+        " Concatenate source lines into single string with newlines
+        CONCATENATE LINES OF ls_hook_data-source INTO ls_element-source_code SEPARATED BY cl_abap_char_utilities=>newline.
 
-        lv_line_no = 0.
-        LOOP AT ls_hook_data-source INTO DATA(lv_source_line).
-          lv_line_no = lv_line_no + 1.
-          ls_source-line_no = lv_line_no.
-          ls_source-code = lv_source_line.
-          APPEND ls_source TO lt_source.
-        ENDLOOP.
+        APPEND ls_element TO lt_elements.
       ENDLOOP.
   ENDCASE.
 
   ev_elements_json = /ui2/cl_json=>serialize(
     data        = lt_elements
-    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
-
-  ev_source_json = /ui2/cl_json=>serialize(
-    data        = lt_source
     pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
 
   ev_rcode = 0.

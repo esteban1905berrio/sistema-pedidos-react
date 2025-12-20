@@ -10,48 +10,39 @@ import java.util.Map;
  * and source code for each element.
  */
 public record EnhancementSourceResult(
-        String enhancementName,
-        EnhancementHeader header,
-        List<EnhancementElement> elements,
-        List<EnhancementSourceLine> sourceLines,
-        Map<String, Object> metadata
-) {
+                String enhancementName,
+                EnhancementHeader header,
+                List<EnhancementElement> elements,
+                Map<String, Object> metadata) {
 
-    /**
-     * Enhancement header information.
-     */
-    public record EnhancementHeader(
-            String enhancementName,
-            String description,
-            String toolType,
-            String toolTypeText,
-            String devclass,
-            String author,
-            String createdOn,
-            String changedBy,
-            String changedOn
-    ) {}
+        /**
+         * Enhancement header information.
+         */
+        public record EnhancementHeader(
+                        String enhancementName,
+                        String description,
+                        String toolType,
+                        String toolTypeText,
+                        String devclass,
+                        String author,
+                        String createdOn,
+                        String changedBy,
+                        String changedOn) {
+        }
 
-    /**
-     * Enhancement element (hook or BAdI implementation).
-     */
-    public record EnhancementElement(
-            String elementType,
-            String spotName,
-            String programName,
-            String fullName,
-            String badiName,
-            String badiImpl,
-            String implClass,
-            String interfaceName,
-            Boolean active
-    ) {}
-
-    /**
-     * Source code line for hook implementations.
-     */
-    public record EnhancementSourceLine(
-            Integer lineNo,
-            String code
-    ) {}
+        /**
+         * Enhancement element (hook or BAdI implementation).
+         */
+        public record EnhancementElement(
+                        String elementType,
+                        String spotName,
+                        String programName,
+                        String fullName,
+                        String badiName,
+                        String badiImpl,
+                        String implClass,
+                        String interfaceName,
+                        Boolean active,
+                        String sourceCode) {
+        }
 }

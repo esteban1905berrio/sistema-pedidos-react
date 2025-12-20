@@ -1,8 +1,8 @@
-# ABAP Object Ripper Tool - Planificación
+# ABAP Extraction Tool - Planificación
 
 **Fecha**: 2025-12-15
-**Estado**: ✅ COMPLETADO (Fase 5 completada)
-**Versión**: 0.8.0
+**Estado**: 🔄 EN DESARROLLO (Fase 6 - Extraction Tool)
+**Versión**: 0.9.2
 
 ---
 
@@ -13,16 +13,146 @@
 | **Propósito** | Referencia técnica + Análisis de código + Training Data (fase posterior) |
 | **Prefijo FMs** | `ZCX_UTIL_*` |
 | **Function Group** | `ZGFCX_1` (existente) |
-| **Selección objetos** | Por paquete (con recursividad) |
+| **Ámbitos de extracción** | 4 tipos: Usuario, Paquete, OT, Lista específica |
+| **Límite de objetos** | **SIN LÍMITE** (eliminar cap de 100 en SearchService) |
 | **Metadatos DDIC** | Completo (campos, textos, FK, índices, includes) |
 | **Variants** | ❌ No incluir, solo código fuente |
 | **Textos/Traducciones** | ❌ No incluir, solo código |
-| **Límite tamaño** | Sin límite |
 | **Objetos con errores** | ✅ Extraer con flag de warning en metadata |
 | **Formato source** | Pretty-print normalizado |
 | **Historial transportes** | ❌ No, solo código actual |
 | **Paralelismo** | Configurable (default: 4 hilos) |
-| **Output path** | Sugerir default `./extracted/<package>` + confirmar |
+| **Output path** | Sugerir default `./extracted/<scope>` + confirmar |
+| **Flujo de trabajo** | Descubrir → Mostrar resumen → Pedir aprobación → Extraer |
+
+---
+
+## Ámbitos de Extracción (4 Tipos)
+
+La herramienta soporta **4 ámbitos de extracción** diferentes, cada uno con su estrategia de descubrimiento:
+
+### Ámbito 1: Objetos de Usuario
+
+**Descripción**: Extraer todos los objetos creados o modificados por un usuario específico en el sistema.
+
+**Servicios ADT a Utilizar**:
+
+
+GET /sap/bc/adt/repository/informationsystem/search?operation=quickSearch&query=*&userName=L_ABAPS_ITA HTTP/1.1
+
+Header Key         : Header Value
+=========================================================================================================
+Accept             : application/xml
+User-Agent         : Eclipse/4.36.0.v20250528-1830 (macosx; aarch64; Java 21.0.9) ADT/3.50.0 (devedition)
+X-sap-adt-profiling: server-time
+
+-Response:
+
+<?xml version="1.0" encoding="UTF-8"?><adtcore:objectReferences xmlns:adtcore="http://www.sap.com/adt/core">
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/y_fg_test/includes/ly_fg_testtop" adtcore:type="FUGR/I" adtcore:name="LY_FG_TESTTOP" adtcore:packageName="$TMP" adtcore:description="ZRESPDPFB60"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/y_fg_test/fmodules/y_fm_test" adtcore:type="FUGR/I" adtcore:name="LY_FG_TESTU01" adtcore:packageName="$TMP" adtcore:description="ZMMTRUMIR7"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zbadi_fiape005/includes/lzbadi_fiape005i01" adtcore:type="FUGR/I" adtcore:name="LZBADI_FIAPE005I01" adtcore:packageName="ZFI" adtcore:description="ZFMGETAPPS"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zbadi_fiape005/includes/lzbadi_fiape005i02" adtcore:type="FUGR/I" adtcore:name="LZBADI_FIAPE005I02" adtcore:packageName="ZFI" adtcore:description="ZFMGETAPM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zbadi_fiape005/includes/lzbadi_fiape005o01" adtcore:type="FUGR/I" adtcore:name="LZBADI_FIAPE005O01" adtcore:packageName="ZFI" adtcore:description="ZFIPP_DPMOD"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zbadi_fiape005/includes/lzbadi_fiape005top" adtcore:type="FUGR/I" adtcore:name="LZBADI_FIAPE005TOP" adtcore:packageName="ZFI" adtcore:description="ZFIPP_RELMAN"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcxc0000_1/includes/lzcxc0000_1f01" adtcore:type="FUGR/I" adtcore:name="LZCXC0000_1F01" adtcore:packageName="ZC0000" adtcore:description="ZMMMIR7APPR"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcxc0000_1/includes/lzcxc0000_1top" adtcore:type="FUGR/I" adtcore:name="LZCXC0000_1TOP" adtcore:packageName="ZC0000" adtcore:description="ZMODIFMMDP"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcxc0000_1/fmodules/zalsm_excel_to_internal_table" adtcore:type="FUGR/I" adtcore:name="LZCXC0000_1U01" adtcore:packageName="ZC0000" adtcore:description="ZMMTSCOMPDP"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcx_util_1/includes/lzcx_util_101i" adtcore:type="FUGR/I" adtcore:name="LZCX_UTIL_101I" adtcore:packageName="ZFI" adtcore:description="ZMMIVSETAPPR"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcx_util_1/includes/lzcx_util_101o" adtcore:type="FUGR/I" adtcore:name="LZCX_UTIL_101O" adtcore:packageName="ZFI" adtcore:description="ZMMIVPOSTPRE"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcx_util_1/includes/lzcx_util_101p" adtcore:type="FUGR/I" adtcore:name="LZCX_UTIL_101P" adtcore:packageName="ZFI" adtcore:description="ZFMGETLEVELS"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcx_util_1/includes/lzcx_util_1f01" adtcore:type="FUGR/I" adtcore:name="LZCX_UTIL_1F01" adtcore:packageName="ZFI" adtcore:description="ZFMGETLEVEM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcx_util_1/includes/lzcx_util_1top" adtcore:type="FUGR/I" adtcore:name="LZCX_UTIL_1TOP" adtcore:packageName="ZFI" adtcore:description="ZFMMOD_LOCK"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zcx_util_1/fmodules/zcx_mostraralv_01" adtcore:type="FUGR/I" adtcore:name="LZCX_UTIL_1U01" adtcore:packageName="ZFI" adtcore:description="ZFMGET_REAS"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfiaac002_1/includes/lzfiaac002_1top" adtcore:type="FUGR/I" adtcore:name="LZFIAAC002_1TOP" adtcore:packageName="ZFI" adtcore:description="ZFMDECISION"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfiaac002_1/fmodules/zfiaac002_carga_activos_fijos" adtcore:type="FUGR/I" adtcore:name="LZFIAAC002_1U01" adtcore:packageName="ZFI" adtcore:description="ZFMBCS_deci2"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfiapw001/includes/lzfiapw001top" adtcore:type="FUGR/I" adtcore:name="LZFIAPW001TOP" adtcore:packageName="ZFI" adtcore:description="ZFMGET_REAS2"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfiapw001/fmodules/zfiapw001_r1" adtcore:type="FUGR/I" adtcore:name="LZFIAPW001U01" adtcore:packageName="ZFI" adtcore:description="ZWFI_PRDMANU"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfiapw001/fmodules/zfiapw001_r2" adtcore:type="FUGR/I" adtcore:name="LZFIAPW001U02" adtcore:packageName="ZFI" adtcore:description="Liber.MMIV21"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfiarc003_1/includes/lzfiarc003_1f01" adtcore:type="FUGR/I" adtcore:name="LZFIARC003_1F01" adtcore:packageName="ZFIARC003" adtcore:description="ZZFM_APPDPRE"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfiarc003_1/includes/lzfiarc003_1top" adtcore:type="FUGR/I" adtcore:name="LZFIARC003_1TOP" adtcore:packageName="ZFIARC003" adtcore:description="ZZFM_APPMPRE"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfiarc003_1/fmodules/zfiarc003_losd_1" adtcore:type="FUGR/I" adtcore:name="LZFIARC003_1U01" adtcore:packageName="ZFIARC003"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfidmee_1/includes/lzfidmee_1f01" adtcore:type="FUGR/I" adtcore:name="LZFIDMEE_1F01" adtcore:packageName="ZFI"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfidmee_1/includes/lzfidmee_1t99" adtcore:type="FUGR/I" adtcore:name="LZFIDMEE_1T99" adtcore:packageName="ZFI" adtcore:description="Include LBADI_EXAMPLE_FDCB_BASI01"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfidmee_1/includes/lzfidmee_1top" adtcore:type="FUGR/I" adtcore:name="LZFIDMEE_1TOP" adtcore:packageName="ZFI" adtcore:description="Include LZBADI_FIAPE005I02"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/functions/groups/zfidmee_1/fmodules/zfi_dmee_nro_trasl_dav" adtcore:type="FUGR/I" adtcore:name="LZFIDMEE_1U01" adtcore:packageName="ZFI" adtcore:description="Include LBADI_EXAMPLE_FDCB_BASO01"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdacmr/object_name/91000001" adtcore:type="PDAC/MR" adtcore:name="91000001" adtcore:packageName="ZFI"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdacmr/object_name/91000002" adtcore:type="PDAC/MR" adtcore:name="91000002" adtcore:packageName="ZFI" adtcore:description="Include LZCXC0000_1F01"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdacmr/object_name/91000003" adtcore:type="PDAC/MR" adtcore:name="91000003" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdacmr/object_name/91000004" adtcore:type="PDAC/MR" adtcore:name="91000004" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000001" adtcore:type="PDTS/MA" adtcore:name="91000001" adtcore:packageName="ZFI" adtcore:description="PAI"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000002" adtcore:type="PDTS/MA" adtcore:name="91000002" adtcore:packageName="ZFI" adtcore:description="PBO"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000003" adtcore:type="PDTS/MA" adtcore:name="91000003" adtcore:packageName="ZFI" adtcore:description="Local clasess"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000004" adtcore:type="PDTS/MA" adtcore:name="91000004" adtcore:packageName="ZFI" adtcore:description="Subrutinas"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000005" adtcore:type="PDTS/MA" adtcore:name="91000005" adtcore:packageName="ZFI"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000006" adtcore:type="PDTS/MA" adtcore:name="91000006" adtcore:packageName="ZFI"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000007" adtcore:type="PDTS/MA" adtcore:name="91000007" adtcore:packageName="ZFI"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000008" adtcore:type="PDTS/MA" adtcore:name="91000008" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000009" adtcore:type="PDTS/MA" adtcore:name="91000009" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000010" adtcore:type="PDTS/MA" adtcore:name="91000010" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000011" adtcore:type="PDTS/MA" adtcore:name="91000011" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000012" adtcore:type="PDTS/MA" adtcore:name="91000012" adtcore:packageName="ZFM" adtcore:description="Include LZFIARC003_1F01"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000013" adtcore:type="PDTS/MA" adtcore:name="91000013" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdtsma/object_name/91000014" adtcore:type="PDTS/MA" adtcore:name="91000014" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdwsmm/object_name/91000004" adtcore:type="PDWS/MM" adtcore:name="91000004" adtcore:packageName="ZFI" adtcore:description="lzfiaac002_1f01"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdwsmm/object_name/91000005" adtcore:type="PDWS/MM" adtcore:name="91000005" adtcore:packageName="ZFI"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdwsmm/object_name/91000006" adtcore:type="PDWS/MM" adtcore:name="91000006" adtcore:packageName="ZFM" adtcore:description="Include LZFIDMEE_1TOP"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/vit/wb/object_type/pdwsmm/object_name/91000007" adtcore:type="PDWS/MM" adtcore:name="91000007" adtcore:packageName="ZFM"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/ddic/structures/ci_anlu" adtcore:type="TABL/DS" adtcore:name="CI_ANLU" adtcore:packageName="ZFI" adtcore:description="Ampliacion C_ANLU"/>
+  <adtcore:objectReference adtcore:uri="/sap/bc/adt/ddic/structures/ci_prps" adtcore:type="TABL/DS" adtcore:name="CI_PRPS" adtcore:packageName="ZPS" adtcore:description="Ampliacion elementos PEP"/>
+</adtcore:objectReferences>
+
+### Ámbito 1: Objetos de Usuario
+
+**Descripción**: Extraer todos los objetos creados o modificados por un usuario específico en el sistema.
+
+**Servicios ADT a Utilizar**:
+
+GET /sap/bc/adt/repository/informationsystem/search?operation=quickSearch&query=*&userName=L_ABAPS_ITA HTTP/1.1
+
+**Estado**: ✅ COMPLETADO (2025-12-15)
+
+**Implementación en AbapExtractionService.java**:
+- `discoverUserObjects(username)` → Orquestador (Solo ADT)
+- `discoverUserObjectsViaAdt(username)` → Llamada ADT REST API
+
+**Nota**: El fallback a FM `ZCX_UTIL_GET_USER_OBJECTS` ha sido eliminado por políticas de "Clean SAP", ya que ADT cubre los requerimientos.
+
+### Ámbito 2: Objetos de Paquete (Recursivo)
+
+**Descripción**: Extraer todos los objetos de un paquete y sus subpaquetes (recursivo).
+
+**Servicios utilizados**:
+- `PackageHierarchyService.getPackageHierarchy(pkg, 'C', false)` → Verificar si tiene hijos
+- `NavigationService.getPackageObjects(pkg)` → Objetos por paquete
+
+### Ámbito 3: Objetos de OT (Transport Request)
+
+**Descripción**: Extraer todos los objetos contenidos en una o más OTs específicas.
+
+**Servicios utilizados**:
+- `TransportService.getTransportObjects(transportNumber)` → Sin límite
+
+### Ámbito 4: Lista Específica de Objetos
+
+**Descripción**: Extraer objetos específicos indicados por el usuario (cualquier tipo).
+
+**Ejemplo de input**: `ZCL_UTIL, ZFIAAC002_1, ZTFIAAE002_1, Z_FI_PROCESS_DATA`
+
+**Servicios utilizados**:
+- `SearchService.searchObjects(objectName)` → Para resolver tipo de objeto
+
+---
+
+## Unificación de Herramientas
+
+Se ha decidido unificar la tool propuesta `extract_abap_objects` con la existente `extract_abap_components`.
+La tool `extract_abap_components` ahora soportará scopes dinámicos:
+- `manifest` (comportamiento legacy)
+- `user`
+- `package`
+- `transport`
+- `list`
 
 ---
 
@@ -39,6 +169,7 @@ Herramienta MCP modular para extraer objetos ABAP relevantes de sistemas SAP S/4
 2. **Discreto**: FMs con naming genérico (`ZCX_UTIL_*`)
 3. **Modular**: LLM solo para análisis, Java para extracción
 4. **Estructura ADT**: Compatible con Eclipse ADT file structure
+5. **Transparente**: Descubrir → Resumir → Aprobar → Extraer (sin intervención manual del LLM)
 
 ---
 
@@ -219,14 +350,14 @@ Herramienta MCP modular para extraer objetos ABAP relevantes de sistemas SAP S/4
 
 ### 5.1 FMs Custom a Crear
 
-| FM | Propósito | Complejidad |
-|----|-----------|-------------|
-| `ZCX_UTIL_GET_PKG_OBJECTS` | Listar objetos de un paquete con filtros | Media |
-| `ZCX_UTIL_GET_DDIC_FULL` | Estructura DDIC completa (campos, FK, índices) | Alta |
-| `ZCX_UTIL_GET_DMEE_TREE` | Extraer árbol DMEE completo | Alta |
-| `ZCX_UTIL_GET_ENHANCEMENT` | Obtener implementaciones de enhancement | Media |
-| `ZCX_UTIL_GET_BADI_IMPL` | Obtener implementaciones BADI | Media |
-| `ZCX_UTIL_GET_CDS_SOURCE` | Obtener source de CDS View | Baja |
+| FM | Propósito | Complejidad | Estado |
+|----|-----------|-------------|--------|
+| `Z_CX_GET_PACKAGE_OBJECTS` | Listar objetos de un paquete con filtros | Media | ✅ ACTIVO (RFC-enabled en gdcmcp) |
+| `ZCX_GETDDICSOURCE` | Estructura DDIC completa (campos, FK, índices) | Alta | ✅ ACTIVO |
+| `ZCX_UTIL_GET_DMEE_TREE` | Extraer árbol DMEE completo | Alta | ✅ ACTIVO |
+| `ZCX_GET_ENHANCEMENT_SOURCE` | Obtener implementaciones de enhancement | Media | ✅ ACTIVO |
+| `ZCX_UTIL_GET_BADI_IMPL` | Obtener implementaciones BADI | Media | ✅ ACTIVO |
+| **`ZCX_UTIL_GET_USER_OBJECTS`** | **Buscar objetos por AUTHOR en TADIR** | Baja | ⏳ PENDIENTE (Fase 6) |
 
 ### 5.2 FMs/APIs Estándar a Usar
 
@@ -242,63 +373,106 @@ Herramienta MCP modular para extraer objetos ABAP relevantes de sistemas SAP S/4
 
 ## 6. MCP Tools a Implementar
 
-### 6.1 Tools de Análisis (LLM-Driven)
+### 6.1 Tool Principal: `extract_abap_objects` (Fase 6) 🆕
+
+**Descripción**: Herramienta unificada de extracción con 4 ámbitos.
 
 ```java
-@Tool(description = "Analyze packages and recommend objects for extraction")
-analyzePackagesForExtraction(
-    List<String> packageNames,
-    boolean recursive,
-    String purpose  // "training", "reference", "audit"
-) → ExtractionRecommendation
+@McpTool(description = "Extract ABAP objects to local filesystem. " +
+        "Supports 4 extraction scopes: user (objects in user's open transports), " +
+        "package (recursive package hierarchy), transport (specific OT), " +
+        "or list (specific object names). " +
+        "Workflow: Discover → Show summary → Request approval → Extract.")
+public ExtractionResult extract_abap_objects(
+    @McpToolParam(description = "Extraction scope: 'user', 'package', 'transport', or 'list'",
+                  required = true)
+    String scope,
 
-@Tool(description = "Evaluate code quality of objects before extraction")
-evaluateCodeQuality(
-    String objectUri,
-    String objectType
-) → QualityReport
-```
+    @McpToolParam(description = "Scope-specific input: " +
+            "- user: null (uses current user) " +
+            "- package: 'ZCX' or 'ZCX,ZFIE' (comma-separated) " +
+            "- transport: 'CADK911088' or 'CADK911088,CADK911089' " +
+            "- list: 'ZCL_UTIL,ZFIAAC002,Z_FM_PROCESS'",
+            required = false)
+    String scopeInput,
 
-### 6.2 Tools de Extracción (Java-Only, No LLM)
-
-```java
-@Tool(description = "Extract all objects from packages to local filesystem")
-extractPackageObjects(
-    List<String> packageNames,
+    @McpToolParam(description = "Output directory path. " +
+            "Default: './extracted/<scope_name>'",
+            required = false)
     String outputPath,
-    ExtractionConfig config
-) → ExtractionResult
 
-@Tool(description = "Extract DDIC structure with full metadata")
-extractDdicStructure(
-    String objectName,
-    String objectType,  // TABLE, STRUCTURE, DTEL, DOMA
-    String outputPath
-) → DdicExtractionResult
+    @McpToolParam(description = "For 'package' scope: include subpackages recursively. " +
+            "Default: true",
+            required = false)
+    Boolean recursive,
 
-@Tool(description = "Extract DMEE payment format tree")
-extractDmeeTree(
-    String treeId,
-    String formatType,
-    String outputPath
-) → DmeeExtractionResult
+    @McpToolParam(description = "Parallel extraction threads. " +
+            "Default: 4",
+            required = false)
+    Integer parallelThreads,
 
-@Tool(description = "Extract enhancement/BADI implementations")
-extractEnhancements(
-    String packageName,
-    String outputPath
-) → EnhancementExtractionResult
+    @McpToolParam(description = "Skip user approval and extract immediately. " +
+            "Default: false (shows summary and waits for approval)",
+            required = false)
+    Boolean autoApprove
+)
 ```
 
-### 6.3 Tools de Utilidad
-
-```java
-@Tool(description = "Get extraction progress and statistics")
-getExtractionStatus(String extractionId) → ExtractionStatus
-
-@Tool(description = "Validate extracted objects integrity")
-validateExtraction(String outputPath) → ValidationResult
+**Response Structure**:
+```json
+{
+  "success": true,
+  "scope": "package",
+  "scopeInput": "ZCX",
+  "outputPath": "./extracted/ZCX",
+  "discovery": {
+    "packages": ["ZCX", "ZCXR1001", "ZCXR1002", "..."],
+    "totalPackages": 16,
+    "objectsByType": {
+      "CLAS": 45,
+      "PROG": 30,
+      "FUGR": 12,
+      "FUNC": 28,
+      "TABL": 15,
+      "...": "..."
+    },
+    "totalObjects": 156,
+    "estimatedSizeMb": 12.5
+  },
+  "extraction": {
+    "status": "completed",
+    "objectsExtracted": 156,
+    "objectsFailed": 2,
+    "filesWritten": 312,
+    "durationSeconds": 45,
+    "errors": [
+      {"object": "ZCL_LEGACY", "type": "CLAS", "error": "Inactive object"},
+      {"object": "ZTEST_TEMP", "type": "PROG", "error": "Empty source"}
+    ]
+  },
+  "manifest": {
+    "path": "./extracted/ZCX/manifest.json",
+    "generated": true
+  }
+}
 ```
+
+### 6.2 Tools de Análisis (LLM-Driven) - Ya implementados via Prompts
+
+Los prompts MCP (`analyze_package_for_extraction`, `evaluate_code_quality_batch`) cubren esta funcionalidad.
+
+### 6.3 Tools de Extracción Específica (Existentes)
+
+| Tool | Estado | Uso con extract_abap_objects |
+|------|--------|------------------------------|
+| `get_class_source` | ✅ Existente | Llamado internamente para CLAS |
+| `get_program_source` | ✅ Existente | Llamado internamente para PROG |
+| `get_object_source` | ✅ Existente | Llamado internamente para INTF, FUGR, FUNC |
+| `get_cds_source` | ✅ Existente | Llamado internamente para DDLS |
+| `get_ddic_source` | ✅ Existente | Llamado internamente para TABL, DTEL |
+| `get_enhancement_source` | ✅ Existente | Llamado internamente para ENHO |
+| `get_badi_implementation` | ✅ Existente | Llamado internamente para SXCI |
+| `get_dmee_tree` | ✅ Existente | Llamado internamente para DMEE |
 
 ---
 
@@ -401,30 +575,73 @@ Usuario                    LLM (Claude)                 Java Service
 
 ## 9. Fases de Implementación
 
-### Fase 1: Core Extraction (MVP)
-- [ ] Crear FM `ZCX_UTIL_GET_PKG_OBJECTS`
-- [ ] Crear FM `ZCX_UTIL_GET_DDIC_FULL`
-- [ ] Implementar `RipperService.java`
-- [ ] Implementar `extractPackageObjects()` tool
-- [ ] Implementar `extractDdicStructure()` tool
-- [ ] Estructura de carpetas ADT
-- [ ] manifest.json generation
+### Fase 1: CDS Views ✅ COMPLETADA
+- [x] Implementar `CdsService.java` usando ADT endpoint
+- [x] Crear `CdsTools.java` con tool `get_cds_source`
+- [x] Crear model `CdsSourceResult.java`
+- [x] Test manual
 
-### Fase 2: Enhancements & DMEE
-- [ ] Crear FM `ZCX_UTIL_GET_DMEE_TREE`
-- [ ] Crear FM `ZCX_UTIL_GET_ENHANCEMENT`
-- [ ] Crear FM `ZCX_UTIL_GET_BADI_IMPL`
-- [ ] Implementar `extractDmeeTree()` tool
-- [ ] Implementar `extractEnhancements()` tool
+### Fase 2: Prompts ✅ COMPLETADA
+- [x] 5 prompts nuevos en `SapPromptProvider.java`
 
-### Fase 3: Analysis & Quality
-- [ ] Implementar `analyzePackagesForExtraction()` (LLM)
-- [ ] Implementar `evaluateCodeQuality()` (LLM)
-- [ ] Quality flags en metadata
-- [ ] Extraction recommendations
+### Fase 3: Enhancement Tool ✅ COMPLETADA
+- [x] FM `ZCX_GET_ENHANCEMENT_SOURCE` activo en GDC
+- [x] `EnhancementService.java`, `EnhancementTools.java`, `EnhancementSourceResult.java`
 
-### Fase 4: Fiori/CDS
-- [ ] Implementar extracción CDS Views
+### Fase 4: BAdI Tool ✅ COMPLETADA
+- [x] FM `ZCX_UTIL_GET_BADI_IMPL` activo en GDC
+- [x] `BadiService.java`, `BadiTools.java`, `BadiImplementationResult.java`
+
+### Fase 5: DMEE Tool ✅ COMPLETADA
+- [x] FM `ZCX_UTIL_GET_DMEE_TREE` activo en GIRAL y GDC
+- [x] `DmeeService.java`, `DmeeTools.java`, `DmeeTreeResult.java`
+
+### Fase 6: Extraction Tool 🔄 EN DESARROLLO
+
+**Objetivo**: Herramienta unificada `extract_abap_objects` con 4 ámbitos.
+
+#### 6.1 Pre-requisitos
+- [x] Eliminar límite de 100 en `SearchService.java:72` ✅ COMPLETADO
+- [x] Verificar `PackageHierarchyService.getPackageHierarchy()` con recursive=true ✅ FUNCIONA
+- [x] Verificar `NavigationService.getPackageObjects()` - FM `Z_CX_GET_PACKAGE_OBJECTS` RFC-enabled ✅
+- [ ] Crear FM `ZCX_UTIL_GET_USER_OBJECTS` en SAP para ámbito USER
+
+#### 6.2 Arquitectura
+```
+src/main/java/com/crystal/mcp/sapserver/
+├── service/
+│   └── AbapExtractionService.java    # Orquestador principal
+├── tool/
+│   └── AbapExtractionTools.java      # MCP Tool definition
+└── model/
+    ├── ExtractionScope.java          # Enum: USER, PACKAGE, TRANSPORT, LIST
+    ├── ExtractionDiscovery.java      # Resultado de discovery
+    └── ExtractionResult.java         # Resultado final (ya existe, reutilizar)
+```
+
+#### 6.3 Implementación por Scope
+
+| Scope | Discovery Method | Extraction Flow |
+|-------|------------------|-----------------|
+| `user` | **FM `ZCX_UTIL_GET_USER_OBJECTS`** (busca en TADIR por AUTHOR) | Username → Objetos → Extraer |
+| `package` | `PackageHierarchyService.getPackageHierarchy()` → `NavigationService.getPackageObjects()` | Paquetes → Objetos → Extraer |
+| `transport` | `TransportService.getTransportObjects(ot)` | OT → Objetos → Extraer |
+| `list` | `SearchService.searchObjects(name)` para resolver tipo | Nombres → Tipos → Extraer |
+
+#### 6.4 Tareas
+- [x] Crear `AbapExtractionService.java` con métodos:
+  - [x] `discoverUserObjects(username)` - Ámbito 1 ✅ (ADT-first + FM fallback)
+  - [ ] `discoverPackageObjects(packages, recursive)` - Ámbito 2 (usa `getPackageHierarchy` + `getPackageObjects`)
+  - [ ] `discoverTransportObjects(transports)` - Ámbito 3 (usa `getTransportObjects`)
+  - [ ] `discoverSpecificObjects(names)` - Ámbito 4 (usa `searchObjects` para resolver tipos)
+  - [ ] `extractObjects(discovery, outputPath, config)` - Extracción común
+- [x] Crear `AbapExtractionTools.java` con tool `discover_extraction_objects` ✅
+- [x] Crear modelos `ExtractionScope.java`, `ExtractionDiscovery.java` ✅
+- [ ] Integrar con `FileWriterService` existente (de `ComponentExtractionService`)
+- [x] Test manual: Extender `ManualAbapRipperToolsTest.java` con `extract-user` ✅
+- [ ] **SAP**: Crear FM `ZCX_UTIL_GET_USER_OBJECTS` en `ZGFCX_1` (opcional - ADT funciona)
+
+### Fase 7: Fiori/OData (Futura)
 - [ ] Implementar extracción OData services
 - [ ] Implementar extracción annotations
 
@@ -881,5 +1098,8 @@ SapPromptProvider.java      # Fase 2 ✅ (+5 prompts)
 | 2025-12-15 | 0.5.0 | **Fase 2 COMPLETADA**: 5 prompts nuevos implementados en SapPromptProvider.java (analyze_package_for_extraction, generate_extraction_report, explain_cds_view, explain_enhancement, evaluate_code_quality_batch) |
 | 2025-12-15 | 0.6.0 | **Fase 3 COMPLETADA**: `get_enhancement_source` tool implementado (EnhancementService, EnhancementTools, EnhancementSourceResult). FM `ZCX_GET_ENHANCEMENT_SOURCE` activo en GDC. Cobertura ~90% |
 | 2025-12-15 | 0.7.0 | **Fase 4 COMPLETADA**: `get_badi_implementation` tool implementado (BadiService, BadiTools, BadiImplementationResult). FM `ZCX_UTIL_GET_BADI_IMPL` activo en GDC. Cobertura ~95% |
-| 2025-12-15 | 0.8.0 | **Fase 5 COMPLETADA**: `get_dmee_tree` tool implementado (DmeeService, DmeeTools, DmeeTreeResult). FM `ZCX_UTIL_GET_DMEE_TREE` activo en GIRAL (S/4HANA) y GDC (ECC con adaptación sin DMEEX). Test consolidado ManualAbapRipperToolsTest.java. **PROYECTO COMPLETADO** - Cobertura ~100% |
+| 2025-12-15 | 0.8.0 | **Fase 5 COMPLETADA**: `get_dmee_tree` tool implementado (DmeeService, DmeeTools, DmeeTreeResult). FM `ZCX_UTIL_GET_DMEE_TREE` activo en GIRAL (S/4HANA) y GDC (ECC con adaptación sin DMEEX). Test consolidado ManualAbapRipperToolsTest.java. Cobertura ~100% de tools individuales |
+| 2025-12-15 | 0.9.0 | **Fase 6 INICIADA**: Renombrado a `abap_extraction_tool.md`. Definidos 4 ámbitos de extracción: user, package, transport, list. Diseño de `extract_abap_objects` tool unificado. Identificado fix requerido: eliminar límite de 100 en SearchService.java:75. Workflow: Descubrir → Resumir → Aprobar → Extraer |
+| 2025-12-15 | 0.9.1 | **Fase 6 - Decisiones finales**: (1) Ámbito USER usará nuevo FM `ZCX_UTIL_GET_USER_OBJECTS` (busca por AUTHOR en TADIR). (2) Ámbito PACKAGE usa `getPackageHierarchy` → `getPackageObjects` (FM `Z_CX_GET_PACKAGE_OBJECTS` ya RFC-enabled en gdcmcp). (3) Límite de 100 eliminado en SearchService.java:72 ✅. (4) Test manual: extender `ManualAbapRipperToolsTest.java` existente |
+| 2025-12-15 | 0.9.2 | **Ámbito 1 (USER) COMPLETADO**: Implementado flujo ADT-first + FM fallback en `discoverUserObjects()`. Métodos: `discoverUserObjectsViaAdt()`, `discoverUserObjectsViaFm()`, `parseUserSearchResults()`. Test `extract-user` agregado a ManualAbapRipperToolsTest.java. Compilación exitosa ✅ |
 
