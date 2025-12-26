@@ -1,0 +1,162 @@
+CLASS zclfi_exits_gestion_activofijo DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_faa_general_services .
+
+    CLASS-METHODS:
+      modificar_idoc_activo_fijo
+        CHANGING
+          c_ti_datos_idoc TYPE edidd_tt,
+
+      sustituir_digitos_activos
+        CHANGING
+          !c_ti_acdoca TYPE finst_acdoca .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_exits_gestion_activofijo IMPLEMENTATION.
+
+  METHOD modificar_idoc_activo_fijo.
+    zclfii1008_integracion_afs=>modificar_idoc_activo_fijo( CHANGING c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~provide_master_data.
+
+    zclfii1008_integracion_afs=>enviar_idoc_activo_fijo(
+      EXPORTING
+        i_evento    = iv_event
+        i_ti_anlh   = it_anlh
+        i_ti_anla   = it_anla
+        i_ti_anlb   = it_anlb
+        i_ti_anlbza = it_anlbza
+        i_ti_anlc   = it_anlc
+        i_ti_anlu   = it_anlu
+        i_ti_anlz   = it_anlz
+        i_ti_anek   = it_anek
+        i_ti_anep   = it_anep
+        i_ti_anea   = it_anea
+        i_ti_anlv   = it_anlv
+        i_ti_anlk   = it_anlk
+        i_ti_anli   = it_anli ).
+
+  ENDMETHOD.
+
+
+
+  METHOD sustituir_digitos_activos.
+
+    zclfie1009_sustitucion_activos=>sustitucion_activos( CHANGING c_ti_acdoca = c_ti_acdoca ).
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~prepare_depr_posting_data.
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~process_badi_call_in_test_run.
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~provide_depr_posting_data.
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~provide_depr_recalc_data.
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~provide_posting_data.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfi_exits_gestion_activofijo DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_faa_general_services .
+
+    CLASS-METHODS:
+      modificar_idoc_activo_fijo
+        CHANGING
+          c_ti_datos_idoc TYPE edidd_tt,
+
+      sustituir_digitos_activos
+        CHANGING
+          !c_ti_acdoca TYPE finst_acdoca .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_exits_gestion_activofijo IMPLEMENTATION.
+
+  METHOD modificar_idoc_activo_fijo.
+    zclfii1008_integracion_afs=>modificar_idoc_activo_fijo( CHANGING c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~provide_master_data.
+
+    zclfii1008_integracion_afs=>enviar_idoc_activo_fijo(
+      EXPORTING
+        i_evento    = iv_event
+        i_ti_anlh   = it_anlh
+        i_ti_anla   = it_anla
+        i_ti_anlb   = it_anlb
+        i_ti_anlbza = it_anlbza
+        i_ti_anlc   = it_anlc
+        i_ti_anlu   = it_anlu
+        i_ti_anlz   = it_anlz
+        i_ti_anek   = it_anek
+        i_ti_anep   = it_anep
+        i_ti_anea   = it_anea
+        i_ti_anlv   = it_anlv
+        i_ti_anlk   = it_anlk
+        i_ti_anli   = it_anli ).
+
+  ENDMETHOD.
+
+
+
+  METHOD sustituir_digitos_activos.
+
+    zclfie1009_sustitucion_activos=>sustitucion_activos( CHANGING c_ti_acdoca = c_ti_acdoca ).
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~prepare_depr_posting_data.
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~process_badi_call_in_test_run.
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~provide_depr_posting_data.
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~provide_depr_recalc_data.
+
+  ENDMETHOD.
+
+  METHOD if_faa_general_services~provide_posting_data.
+
+  ENDMETHOD.
+
+ENDCLASS.

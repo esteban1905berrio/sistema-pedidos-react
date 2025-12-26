@@ -1,0 +1,3304 @@
+CLASS zclfir1113_control_elementos DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES: if_amdp_marker_hdb.
+
+    CONSTANTS: gc_ricefw                      TYPE zzedricefw VALUE 'R1113',
+               gc_ricefw_integracion          TYPE zzedricefw VALUE 'I1217',
+               gc_modulo                      TYPE zzedmodulo VALUE 'FI',
+               gc_clase_mensajes              TYPE symsgid VALUE 'ZFI01',
+               gc_semielaborado               TYPE string VALUE 'SEMIELABORADO',
+               gc_empaque                     TYPE string VALUE 'EMPAQUE',
+               gc_materia_prima               TYPE string VALUE 'PRIMA',
+               gc_producto_quimico            TYPE string VALUE 'QUIMICO',
+               gc_mano_obra                   TYPE string VALUE 'MANO_OBRA',
+               gc_nombre_campo_material_padre TYPE string VALUE 'MATERIAL_PADRE',
+               gc_gif                         TYPE string VALUE 'GIF'.
+
+    TYPES: BEGIN OF gtp_es_categoria_material,
+             kalnr          TYPE keko-kalnr,
+             kadky          TYPE keko-kadky,
+             material_padre TYPE keko-matnr,
+             material       TYPE ckis-matnr,
+             descripcion    TYPE makt-maktx,
+             tipo_material  TYPE zed_tipo_material_concatenado,
+             cantidad       TYPE ckis-menge,
+             um             TYPE mara-meins,
+             valor_total    TYPE ckis-wertn,
+           END OF gtp_es_categoria_material,
+
+           BEGIN OF gtp_es_cabecera_costo,
+             mandt    TYPE mara-mandt,
+             kalnr    TYPE keko-kalnr,
+             kadky    TYPE keko-kadky,
+             tvers    TYPE keko-tvers,
+             material TYPE keko-matnr,
+           END OF gtp_es_cabecera_costo,
+
+           BEGIN OF gtp_es_tipo_material,
+             mtart TYPE mara-mtart,
+           END OF gtp_es_tipo_material,
+
+           BEGIN OF gtp_es_clase_actividad,
+             setname TYPE setleaf-setname,
+           END OF gtp_es_clase_actividad,
+
+           BEGIN OF gtp_es_material,
+             mandt                TYPE mara-mandt,
+             material             TYPE mara-matnr,
+             color                TYPE mara-color,
+             talla                TYPE mara-size1,
+             caracteristica       TYPE wrf_charvalt-atinn,
+             valor_caracteristica TYPE wrf_charvalt-atwtb,
+           END OF gtp_es_material,
+
+           BEGIN OF gtp_es_dt_clase_actividad,
+             kalnr           TYPE keko-kalnr,
+             kadky           TYPE keko-kadky,
+             material_padre  TYPE keko-matnr,
+             clase_actividad TYPE zed_clase_actividad,
+             cantidad        TYPE ckis-menge,
+             um              TYPE ckis-meeht,
+             valor           TYPE ckis-wertn,
+             sufijo          TYPE string,
+           END OF gtp_es_dt_clase_actividad,
+
+           BEGIN OF gtp_es_control_elementos_cab,
+             kalnr                        TYPE keko-kalnr,
+             kadky                        TYPE keko-kadky,
+             material                     TYPE keko-matnr,
+             descripcion_referencia_venta TYPE makt-maktx,
+             talla                        TYPE mara-size1,
+             color                        TYPE mara-color,
+             tono                         TYPE wrf_charvalt-atwtb,
+             tipo_material                TYPE mara-mtart,
+             categoria_valoracion         TYPE mbew-bklas,
+             marca                        TYPE mara-brand_id,
+             genero                       TYPE wrf_charvalt-atwtb,
+             extension_marca              TYPE wrf_charvalt-atwtb,
+             version_fabricacion          TYPE zed_version_fab_concatenada,
+             umb                          TYPE mara-meins,
+             unidades_x_paquete           TYPE zed_um_alternativa,
+             material_generico            TYPE zed_materialgen,
+             numero_antiguo_material      TYPE mara-bismt,
+             currency                     TYPE keko-fwaer_kpf,
+             kalst                        TYPE keko-kalst,
+           END OF gtp_es_control_elementos_cab,
+
+           BEGIN OF gtp_es_procesos_adicionales,
+             kalnr                      TYPE keko-kalnr,
+             kadky                      TYPE keko-kadky,
+             material                   TYPE keko-matnr,
+             registro_info              TYPE eina-infnr,
+             cantidad_proceso_adicional TYPE eine-norbm,
+             valor_total_pa             TYPE eine-netpr,
+           END OF gtp_es_procesos_adicionales,
+
+           BEGIN OF gtp_es_control_elementos,
+             seleccionado                  TYPE zed_procesar_registro.
+             INCLUDE TYPE gtp_es_control_elementos_cab.
+    TYPES:
+      "Material (Semielaborado)
+        material_semielaborado        TYPE zed_material_semielaborado,
+             descripcion_semielaborado     TYPE makt-maktx,
+             tipo_material_semielaborado   TYPE zed_tipo_material_concatenado,
+             cantidad_semielaborado        TYPE ckis-menge,
+             um_semielaborado              TYPE mara-meins,
+             valor_total_semielaborado     TYPE ckis-wertn,
+             "Materia Prima
+             material_prima                TYPE zed_material_materia_prima,
+             descripcion_prima             TYPE makt-maktx,
+             tipo_material_prima           TYPE zed_tipo_material_concatenado,
+             cantidad_prima                TYPE ckis-menge,
+             um_prima                      TYPE mara-meins,
+             valor_total_prima             TYPE ckis-wertn,
+             "Material Empaque
+             material_empaque              TYPE zed_material_empaque,
+             descripcion_empaque           TYPE makt-maktx,
+             tipo_material_empaque         TYPE zed_tipo_material_concatenado,
+             cantidad_empaque              TYPE ckis-menge,
+             um_empaque                    TYPE mara-meins,
+             valor_total_empaque           TYPE ckis-wertn,
+             "Material Quimico
+             material_quimico              TYPE zed_material_quimico,
+             descripcion_quimico           TYPE makt-maktx,
+             tipo_material_quimico         TYPE zed_tipo_material_concatenado,
+             cantidad_quimico              TYPE ckis-menge,
+             um_quimico                    TYPE mara-meins,
+             valor_total_quimico           TYPE ckis-wertn,
+             "Mano de Obra Directa
+             sufijo_mano_obra              TYPE ckis-lstar,
+             clase_actividad_mano_obra     TYPE zed_clase_actividad,
+             cantidad_mano_obra            TYPE ckis-menge,
+             um_mano_obra                  TYPE ckis-meeht,
+             valor_mano_obra               TYPE ckis-wertn,
+             "procesos adicionales
+             registro_info                 TYPE eina-infnr,
+             precio_neto_proceso_adicional TYPE eine-netpr,
+             cantidad_proceso_adicional    TYPE ckis-menge,
+             valor_total_pa                TYPE ckis-wertn,
+             "Costo directo
+             costo_directo                 TYPE ckis-wertn,
+             "GIF / Gastos indirectos de Fabricación
+             sufijo_gif                    TYPE ckis-lstar,
+             clase_actividad_gif           TYPE zed_clase_actividad,
+             cantidad_gif                  TYPE ckis-menge,
+             um_gif                        TYPE ckis-meeht,
+             valor_gif                     TYPE ckis-wertn,
+             "Costo fabricacion
+             costo_fabrica                 TYPE ckis-wertn,
+             costo_total_referencia        TYPE ckis-wertn,
+             costo_total                   TYPE ckis-wertn,
+             "Conversión de metros a kilos o viceversa según las siguientes reglas de conversión (para telas).
+             x_conversion                  TYPE zed_ct_elementos_conversion,
+           END OF gtp_es_control_elementos.
+
+
+    TYPES: gtp_ti_control_elementos     TYPE STANDARD TABLE OF gtp_es_control_elementos WITH EMPTY KEY,
+           gtp_ti_control_elementos_cab TYPE STANDARD TABLE OF gtp_es_control_elementos_cab WITH EMPTY KEY,
+           gtp_ti_categoria_material    TYPE STANDARD TABLE OF gtp_es_categoria_material WITH EMPTY KEY,
+           gtp_ti_cabecera_costo        TYPE STANDARD TABLE OF gtp_es_cabecera_costo WITH EMPTY KEY,
+           gtp_ti_dt_clase_actividad    TYPE STANDARD TABLE OF gtp_es_dt_clase_actividad WITH EMPTY KEY,
+           gtp_ti_tipo_material         TYPE STANDARD TABLE OF gtp_es_tipo_material WITH EMPTY KEY,
+           gtp_ti_clase_actividad       TYPE STANDARD TABLE OF gtp_es_clase_actividad WITH EMPTY KEY,
+           gtp_ti_procesos_adicionales  TYPE STANDARD TABLE OF gtp_es_procesos_adicionales WITH EMPTY KEY,
+           gtp_ti_material              TYPE STANDARD TABLE OF gtp_es_material WITH EMPTY KEY.
+
+    TYPES: gtp_r_fecha TYPE RANGE OF keko-kadat.
+
+    DATA: go_alv                         TYPE REF TO cl_gui_alv_grid,
+          go_dock_container              TYPE REF TO cl_gui_docking_container,
+          go_parametros                  TYPE REF TO zclcxr1000_parametros,
+          go_log                         TYPE REF TO zclcxr1002_log_aplicacion,
+          gti_control_elemento_detallado TYPE gtp_ti_control_elementos,
+          gti_control_elementos          TYPE REF TO data,
+          gr_excluir_columnas_agrupado   TYPE RANGE OF string,
+          gr_excluir_columnas_detallado  TYPE RANGE OF string,
+          gr_r_material_grupo1           TYPE RANGE OF mara-mtart,
+          gr_r_material_grupo2           TYPE RANGE OF mara-mtart,
+          gr_tp_material_telas           TYPE RANGE OF mara-mtart,
+          gr_equivalencia_caracteristica TYPE RANGE OF string.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      cargar_parametros,
+      iniciar_proceso_datos
+        IMPORTING
+          VALUE(i_r_matnr)   TYPE data
+          VALUE(i_r_werks)   TYPE data
+          VALUE(i_r_kadat)   TYPE gtp_r_fecha
+          VALUE(i_r_klvar)   TYPE data
+          VALUE(i_detallado) TYPE flag
+          VALUE(i_agrupado)  TYPE flag,
+      visualizar_reporte
+        IMPORTING
+          i_reporte  TYPE syrepid
+          i_layout   TYPE disvariant-variant
+          i_agrupado TYPE flag,
+      preparar_datos_para_legado,
+      enviar_a_sistema_legado
+        EXPORTING
+          e_ti_return   TYPE bapiret2_t
+        CHANGING
+          i_datos_proxy TYPE REF TO data.
+
+    CLASS-METHODS:
+      consultar_reporte_detallado
+        IMPORTING
+          VALUE(i_filtros_cabecera)          TYPE string
+          VALUE(i_fecha_cc_desde)            TYPE d
+          VALUE(i_agrupado)                  TYPE flag
+        EXPORTING
+          VALUE(e_ti_cabecera)               TYPE gtp_ti_control_elementos_cab
+          VALUE(e_ti_dt_semielaborado)       TYPE gtp_ti_categoria_material
+          VALUE(e_ti_dt_materia_prima)       TYPE gtp_ti_categoria_material
+          VALUE(e_ti_dt_empaque)             TYPE gtp_ti_categoria_material
+          VALUE(e_ti_dt_producto_quimico)    TYPE gtp_ti_categoria_material
+          VALUE(e_ti_cl_actividad_mano_obra) TYPE gtp_ti_dt_clase_actividad
+          VALUE(e_ti_cl_actividad_gif)       TYPE gtp_ti_dt_clase_actividad
+          VALUE(e_ti_procesos_adicionales)   TYPE gtp_ti_procesos_adicionales
+        ,
+      consultar_reporte_agrupado,
+      consultar_clase_actividad
+        IMPORTING
+          VALUE(i_ti_cabecera_costo)     TYPE gtp_ti_cabecera_costo
+          VALUE(i_ti_clase_actividad)    TYPE gtp_ti_clase_actividad
+        EXPORTING
+          VALUE(e_ti_dt_clase_actividad) TYPE gtp_ti_dt_clase_actividad,
+      consultar_categoria_material
+        IMPORTING
+          VALUE(i_ti_cabecera_costo)   TYPE gtp_ti_cabecera_costo
+          VALUE(i_ti_tipo_material)    TYPE gtp_ti_tipo_material
+        EXPORTING
+          VALUE(e_ti_detalle_material) TYPE gtp_ti_categoria_material,
+      consultar_caracteristica
+        IMPORTING
+          VALUE(i_ti_materiales) TYPE gtp_ti_material
+        EXPORTING
+          VALUE(e_ti_materiales) TYPE gtp_ti_material.
+
+    "Eventos ALV
+    METHODS:
+      evento_hotspot FOR EVENT hotspot_click OF cl_gui_alv_grid
+        IMPORTING
+          e_row_id
+          e_column_id,
+      evento_user_comand FOR EVENT user_command  OF cl_gui_alv_grid
+        IMPORTING
+          e_ucomm,
+      evento_tool_bar FOR EVENT toolbar  OF cl_gui_alv_grid
+        IMPORTING
+          e_interactive
+          e_object
+          sender.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS:
+      consolidar_datos
+        IMPORTING
+          VALUE(i_agrupado)                  TYPE flag
+        CHANGING
+          VALUE(c_ti_cabecera)               TYPE gtp_ti_control_elementos_cab
+          VALUE(c_ti_cl_actividad_mano_obra) TYPE gtp_ti_dt_clase_actividad
+          VALUE(c_ti_cl_actividad_gif)       TYPE gtp_ti_dt_clase_actividad
+          VALUE(c_ti_dt_semielaborado)       TYPE gtp_ti_categoria_material
+          VALUE(c_ti_dt_empaque)             TYPE gtp_ti_categoria_material
+          VALUE(c_ti_dt_materia_prima)       TYPE gtp_ti_categoria_material
+          VALUE(c_ti_dt_producto_quimico)    TYPE gtp_ti_categoria_material
+          VALUE(c_ti_procesos_adicionales)   TYPE gtp_ti_procesos_adicionales
+          c_ti_control_elementos             TYPE zclfir1113_control_elementos=>gtp_ti_control_elementos,
+      agregar_detalle
+        IMPORTING
+          i_es_control_elementos TYPE gtp_es_control_elementos_cab
+          i_sufijo               TYPE string
+          i_agrupado             TYPE flag
+        CHANGING
+          c_valor_total          TYPE gtp_es_categoria_material-valor_total
+          c_cantidad_total       TYPE gtp_es_categoria_material-cantidad
+          c_ti_control_elementos TYPE zclfir1113_control_elementos=>gtp_ti_control_elementos
+          c_ti_detalle           TYPE zclfir1113_control_elementos=>gtp_ti_categoria_material,
+      agregar_clase_actividad
+        IMPORTING
+          i_es_control_elementos    TYPE gtp_es_control_elementos_cab
+          i_sufijo                  TYPE string
+          i_agrupado                TYPE flag
+        CHANGING
+          c_valor_total             TYPE gtp_es_categoria_material-valor_total
+          c_ti_control_elementos    TYPE zclfir1113_control_elementos=>gtp_ti_control_elementos
+          c_ti_detalle_cl_actividad TYPE gtp_ti_dt_clase_actividad,
+      modificar_catalogo
+        IMPORTING
+          i_agrupado    TYPE flag
+        CHANGING
+          c_ti_catalogo TYPE lvc_t_fcat,
+      aplicar_convercion_de_medidas
+        CHANGING
+          c_es_control_elementos TYPE gtp_es_control_elementos,
+      agregar_procesos_adicionales
+        IMPORTING
+          i_es_control_elementos           TYPE zclfir1113_control_elementos=>gtp_es_control_elementos_cab
+          VALUE(i_ti_procesos_adicionales) TYPE zclfir1113_control_elementos=>gtp_ti_procesos_adicionales
+        CHANGING
+          c_ti_control_elementos           TYPE zclfir1113_control_elementos=>gtp_ti_control_elementos,
+      agrupar_datos
+        CHANGING
+          c_ti_control_elementos TYPE gtp_ti_control_elementos,
+      lineas_x_material
+        IMPORTING
+          VALUE(i_ti_detalle)    TYPE ANY TABLE
+          i_material             TYPE keko-matnr
+        RETURNING
+          VALUE(r_numero_lineas) TYPE i.
+ENDCLASS.
+
+CLASS zclfir1113_control_elementos IMPLEMENTATION.
+
+  METHOD cargar_parametros.
+
+    go_parametros = NEW zclcxr1000_parametros(
+      i_modulo = gc_modulo
+      i_ricefw = gc_ricefw ).
+
+    gr_r_material_grupo1 = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idcomo = 'GP1'
+                                                                                           AND idparam = 'TPMAT_CONV')
+                                     ( CORRESPONDING #( es_parametro MAPPING option = opti ) ) ).
+
+    gr_r_material_grupo2 = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idcomo = 'GP2'
+                                                                                           AND idparam = 'TPMAT_CONV')
+                                     ( CORRESPONDING #( es_parametro MAPPING option = opti ) ) ).
+
+    gr_tp_material_telas = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'TPMAT_TELA')
+                                     ( CORRESPONDING #( es_parametro MAPPING option = opti ) ) ).
+
+    gr_equivalencia_caracteristica = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CARCT_EQUI')
+                                     ( CORRESPONDING #( es_parametro MAPPING option = opti ) ) ).
+
+  ENDMETHOD.
+
+  METHOD constructor.
+    cargar_parametros( ).
+
+    gr_excluir_columnas_agrupado = VALUE #( sign = 'I' option = 'EQ'
+                                            ( low = 'MATERIAL_SEMIELABORADO' )
+                                            ( low = 'DESCRIPCION_SEMIELABORADO' )
+                                            ( low = 'MATERIAL_PRIMA' )
+                                            ( low = 'DESCRIPCION_PRIMA' )
+                                            ( low = 'MATERIAL_EMPAQUE' )
+                                            ( low = 'DESCRIPCION_EMPAQUE' )
+                                            ( low = 'MATERIAL_QUIMICO' )
+                                            ( low = 'DESCRIPCION_QUIMICO' )
+                                            ( low = 'SUFIJO_GIF' )
+                                            ( low = 'SUFIJO_MANO_OBRA' ) ).
+
+    gr_excluir_columnas_detallado = VALUE #( sign = 'I' option = 'EQ'
+                                            ( low = 'SELECCIONADO' )
+                                            ( low = 'SUFIJO_GIF' )
+                                            ( low = 'SUFIJO_MANO_OBRA' ) ).
+
+  ENDMETHOD.
+
+
+  METHOD agrupar_datos.
+
+    DATA: ti_campos_reporte_agrupado  TYPE zclcxr1002_util=>gtp_ti_estructura_tabla,
+          ti_campos_clase_actividad   TYPE zclcxr1002_util=>gtp_ti_estructura_tabla,
+          ti_clase_actividad          TYPE gtp_ti_dt_clase_actividad,
+          r_es_control_elementos_agrp TYPE REF TO data,
+          costo_total                 TYPE ckis-wertn.
+
+    FIELD-SYMBOLS: <fs_ti_control_elementos_agrp> TYPE ANY TABLE,
+                   <fs_es_control_elementos_agrp> TYPE any.
+
+    TRY.
+
+        ti_campos_clase_actividad = zclcxr1002_util=>get_componentes( i_objeto = ti_clase_actividad ).
+
+        LOOP AT c_ti_control_elementos REFERENCE INTO DATA(r_es_control_elementos_gr)
+                                       GROUP BY r_es_control_elementos_gr->sufijo_gif.
+
+          CHECK r_es_control_elementos_gr->sufijo_gif IS NOT INITIAL.
+
+          LOOP AT ti_campos_clase_actividad INTO DATA(es_campo_clase_actividad)
+                                            WHERE nombre NE 'KALNR'
+                                            AND nombre NE 'KADKY'
+                                            AND nombre NE 'SUFIJO'
+                                            AND nombre NE gc_nombre_campo_material_padre.
+            APPEND INITIAL LINE TO ti_campos_reporte_agrupado
+            ASSIGNING FIELD-SYMBOL(<fs_es_campo_reporte_agrupado>).
+
+            <fs_es_campo_reporte_agrupado> = CORRESPONDING #( es_campo_clase_actividad ).
+            <fs_es_campo_reporte_agrupado>-nombre = |{ <fs_es_campo_reporte_agrupado>-nombre }_{ r_es_control_elementos_gr->sufijo_gif }|.
+
+          ENDLOOP.
+
+        ENDLOOP.
+
+        INSERT LINES OF zclcxr1002_util=>get_componentes( i_objeto = c_ti_control_elementos )
+        INTO ti_campos_reporte_agrupado INDEX 1.
+
+        DELETE ti_campos_reporte_agrupado WHERE nombre CS gc_gif.
+
+        gti_control_elementos =
+          zclcxr1002_util=>crear_ti_dinamica(
+          EXPORTING
+            i_tipo_clave               = cl_abap_tabledescr=>keydefkind_empty
+            i_omitir_conversion_tipo_p = abap_true
+          CHANGING
+            c_ti_campos                = ti_campos_reporte_agrupado ).
+
+        ASSIGN gti_control_elementos->* TO <fs_ti_control_elementos_agrp>.
+
+        LOOP AT c_ti_control_elementos REFERENCE INTO r_es_control_elementos_gr
+                                       GROUP BY ( kalnr = r_es_control_elementos_gr->kalnr
+                                                  kadky = r_es_control_elementos_gr->kadky
+                                                  material = r_es_control_elementos_gr->material ).
+
+          CREATE DATA r_es_control_elementos_agrp LIKE LINE OF <fs_ti_control_elementos_agrp>.
+          ASSIGN r_es_control_elementos_agrp->* TO <fs_es_control_elementos_agrp>.
+
+          "Agregar clase de avisos
+          LOOP AT GROUP r_es_control_elementos_gr ASSIGNING FIELD-SYMBOL(<fs_es_control_elementos>)
+                                               WHERE sufijo_mano_obra IS NOT INITIAL
+                                               OR sufijo_gif IS NOT INITIAL.
+
+            "Ajustar version
+*            <fs_es_control_elementos>-version_fabricacion =
+*            replace( val = <fs_es_control_elementos>-version_fabricacion sub = '_' with = space ).
+
+            LOOP AT ti_campos_clase_actividad INTO es_campo_clase_actividad
+                                            WHERE nombre NE 'KALNR'
+                                            AND nombre NE 'KADKY'
+                                            AND nombre NE 'SUFIJO'.
+
+              ASSIGN COMPONENT |{ es_campo_clase_actividad-nombre }_{ gc_gif }|
+              OF STRUCTURE <fs_es_control_elementos>
+              TO FIELD-SYMBOL(<fs_valor_componente_origen>).
+
+              CHECK sy-subrc IS INITIAL.
+
+              es_campo_clase_actividad-nombre = |{ es_campo_clase_actividad-nombre }_{ <fs_es_control_elementos>-sufijo_gif }|.
+
+              ASSIGN COMPONENT es_campo_clase_actividad-nombre OF STRUCTURE <fs_es_control_elementos_agrp>
+              TO FIELD-SYMBOL(<fs_valor_componente_destino>).
+
+              CHECK sy-subrc IS INITIAL.
+
+              <fs_valor_componente_destino> = <fs_valor_componente_origen>.
+
+              IF es_campo_clase_actividad-nombre CS 'VALOR'.
+                costo_total = costo_total + <fs_valor_componente_destino>.
+              ENDIF.
+
+            ENDLOOP.
+
+          ENDLOOP.
+
+          r_es_control_elementos_gr->costo_total = costo_total + r_es_control_elementos_gr->valor_mano_obra + r_es_control_elementos_gr->valor_total_pa
+          + r_es_control_elementos_gr->valor_total_empaque + r_es_control_elementos_gr->valor_total_prima + r_es_control_elementos_gr->valor_total_quimico + r_es_control_elementos_gr->valor_total_semielaborado.
+
+          <fs_es_control_elementos_agrp> = CORRESPONDING #( BASE ( <fs_es_control_elementos_agrp> ) r_es_control_elementos_gr->* ).
+
+          INSERT <fs_es_control_elementos_agrp> INTO TABLE <fs_ti_control_elementos_agrp>.
+
+        ENDLOOP.
+
+      CATCH cx_sy_struct_creation INTO DATA(o_cx).
+      CATCH cx_dynamic_check INTO DATA(o_cx_dy).
+        DATA(msg) = o_cx_dy->get_text( ).
+        msg = o_cx_dy->get_longtext( ).
+      CATCH cx_static_check.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD consolidar_datos.
+
+    DATA: BEGIN OF es_lineas_detalle,
+            tabla  TYPE string,
+            lineas TYPE i,
+          END OF es_lineas_detalle,
+
+          ti_lineas_detalle LIKE STANDARD TABLE OF es_lineas_detalle.
+
+    DATA: cantidad_total_semielaborado TYPE gtp_es_categoria_material-cantidad,
+          cantidad_total_empaque       TYPE gtp_es_categoria_material-cantidad,
+          cantidad_total_materia_prima TYPE gtp_es_categoria_material-cantidad,
+          cantidad_total_prod_quimico  TYPE gtp_es_categoria_material-cantidad,
+          total_semielaborado          TYPE gtp_es_categoria_material-valor_total,
+          total_empaque                TYPE gtp_es_categoria_material-valor_total,
+          total_materia_prima          TYPE gtp_es_categoria_material-valor_total,
+          total_producto_quimico       TYPE gtp_es_categoria_material-valor_total,
+          total_mano_obra              TYPE gtp_es_categoria_material-valor_total,
+          total_gif                    TYPE gtp_es_categoria_material-valor_total,
+          total_proceso_adicionales    TYPE gtp_es_categoria_material-valor_total.
+
+*    SORT c_ti_cabecera BY material talla color.                                            ".comentario 17.12.2024 Jose Miguel Valencia
+    SORT c_ti_cabecera BY material talla color ASCENDING version_fabricacion DESCENDING.    ".adicion 17.12.2024 Jose Miguel Valencia
+
+    LOOP AT c_ti_cabecera ASSIGNING FIELD-SYMBOL(<fs_es_cabecera_gr>)
+                            GROUP BY <fs_es_cabecera_gr>-material.
+
+      "Generar lineas de reporte
+      IF i_agrupado = abap_false.
+
+        CLEAR ti_lineas_detalle.
+
+        APPEND VALUE #( tabla = gc_semielaborado lineas = lineas_x_material( i_ti_detalle = c_ti_dt_semielaborado i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+        APPEND VALUE #( tabla = gc_empaque lineas = lineas_x_material( i_ti_detalle = c_ti_dt_empaque i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+        APPEND VALUE #( tabla = gc_materia_prima lineas = lineas_x_material( i_ti_detalle = c_ti_dt_materia_prima i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+        APPEND VALUE #( tabla = gc_producto_quimico lineas = lineas_x_material( i_ti_detalle = c_ti_dt_producto_quimico i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+      ENDIF.
+
+      "Lineas clase actividad
+      APPEND VALUE #( tabla = gc_mano_obra lineas = lineas_x_material( i_ti_detalle = c_ti_cl_actividad_mano_obra i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+      APPEND VALUE #( tabla = gc_gif lineas = lineas_x_material( i_ti_detalle = c_ti_cl_actividad_gif i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+
+      SORT ti_lineas_detalle BY lineas DESCENDING.
+
+      DATA(mayor_numero_lineas) = VALUE #( ti_lineas_detalle[ 1 ]-lineas OPTIONAL ).
+
+      IF mayor_numero_lineas IS INITIAL.
+        mayor_numero_lineas = 1.
+      ENDIF.
+
+      DO mayor_numero_lineas TIMES.
+        IF sy-index = 1."Agregar encabezado completo solo para primera linea
+          APPEND INITIAL LINE TO c_ti_control_elementos ASSIGNING FIELD-SYMBOL(<fs_es_control_elementos>).
+          <fs_es_control_elementos> = CORRESPONDING #( <fs_es_cabecera_gr> ).
+        ELSE.
+          APPEND VALUE #( material = <fs_es_cabecera_gr>-material
+                          descripcion_referencia_venta = <fs_es_cabecera_gr>-descripcion_referencia_venta
+                          currency = <fs_es_cabecera_gr>-currency
+                          kalnr = <fs_es_cabecera_gr>-kalnr
+                          kadky = <fs_es_cabecera_gr>-kadky )
+          TO c_ti_control_elementos.
+        ENDIF.
+      ENDDO.
+
+      CHECK c_ti_control_elementos IS NOT INITIAL.
+
+      "Agregar lineas detalle
+      agregar_detalle( EXPORTING i_es_control_elementos = <fs_es_cabecera_gr>
+                                 i_sufijo               = gc_semielaborado
+                                 i_agrupado             = i_agrupado
+                       CHANGING  c_ti_control_elementos = c_ti_control_elementos
+                                 c_valor_total          = total_semielaborado
+                                 c_cantidad_total       = cantidad_total_semielaborado
+                                 c_ti_detalle           = c_ti_dt_semielaborado ).
+
+      agregar_detalle( EXPORTING i_es_control_elementos = <fs_es_cabecera_gr>
+                                 i_sufijo               = gc_empaque
+                                 i_agrupado             = i_agrupado
+                       CHANGING  c_ti_control_elementos = c_ti_control_elementos
+                                 c_valor_total          = total_empaque
+                                 c_cantidad_total       = cantidad_total_empaque
+                                 c_ti_detalle           = c_ti_dt_empaque ).
+
+      agregar_detalle( EXPORTING i_es_control_elementos = <fs_es_cabecera_gr>
+                                 i_sufijo               = gc_materia_prima
+                                 i_agrupado             = i_agrupado
+                       CHANGING  c_ti_control_elementos = c_ti_control_elementos
+                                 c_valor_total          = total_materia_prima
+                                 c_cantidad_total       = cantidad_total_materia_prima
+                                 c_ti_detalle           = c_ti_dt_materia_prima ).
+
+      agregar_detalle( EXPORTING i_es_control_elementos = <fs_es_cabecera_gr>
+                                 i_sufijo               = gc_producto_quimico
+                                 i_agrupado             = i_agrupado
+                       CHANGING  c_ti_control_elementos = c_ti_control_elementos
+                                 c_valor_total          = total_producto_quimico
+                                 c_cantidad_total       = cantidad_total_prod_quimico
+                                 c_ti_detalle           = c_ti_dt_producto_quimico ).
+
+      "agregar clase de actividades
+      agregar_clase_actividad(
+        EXPORTING
+          i_es_control_elementos    = <fs_es_cabecera_gr>
+          i_sufijo                  = gc_mano_obra
+          i_agrupado                = i_agrupado
+        CHANGING
+          c_valor_total             = total_mano_obra
+          c_ti_control_elementos    = c_ti_control_elementos
+          c_ti_detalle_cl_actividad = c_ti_cl_actividad_mano_obra ).
+
+      agregar_clase_actividad(
+        EXPORTING
+          i_es_control_elementos    = <fs_es_cabecera_gr>
+          i_sufijo                  = gc_gif
+          i_agrupado                = i_agrupado
+        CHANGING
+          c_valor_total             = total_gif
+          c_ti_control_elementos    = c_ti_control_elementos
+          c_ti_detalle_cl_actividad = c_ti_cl_actividad_gif ).
+
+      agregar_procesos_adicionales( EXPORTING i_es_control_elementos    = <fs_es_cabecera_gr>
+                                              i_ti_procesos_adicionales = c_ti_procesos_adicionales
+                                    CHANGING  c_ti_control_elementos    = c_ti_control_elementos ).
+
+      """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+      "*****CALCULOS
+      """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+      "El costo del "Valor total del Semielaborado" se debe sumar con el costo Directo.
+      <fs_es_control_elementos>-costo_directo = total_empaque + total_materia_prima + total_producto_quimico +
+                                                total_mano_obra + total_semielaborado.
+
+      <fs_es_control_elementos>-costo_fabrica = <fs_es_control_elementos>-costo_directo + total_proceso_adicionales + total_gif.
+***      <fs_es_control_elementos>-costo_total_referencia = <fs_es_control_elementos>-costo_fabrica + total_semielaborado.
+
+      aplicar_convercion_de_medidas( CHANGING c_es_control_elementos = <fs_es_control_elementos> ).
+
+      "Descartar registros
+      IF i_agrupado = abap_true
+      AND line_exists( c_ti_cl_actividad_gif[ kalnr = <fs_es_cabecera_gr>-kalnr kadky = <fs_es_cabecera_gr>-kadky ] ).
+        DELETE c_ti_control_elementos WHERE material = <fs_es_cabecera_gr>-material
+                                        AND sufijo_gif = space
+                                        AND sufijo_mano_obra = space.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD agregar_clase_actividad.
+
+    DATA: o_ttdescribe   TYPE REF TO cl_abap_tabledescr,
+          o_stdescribe   TYPE REF TO cl_abap_structdescr,
+          ti_component_d TYPE abap_component_tab,
+          indice         TYPE i,
+          condicion      TYPE string,
+          ti_component   TYPE abap_component_tab,
+          es_component   LIKE LINE OF ti_component.
+
+    FIELD-SYMBOLS: <fs_es_control_elementos> LIKE LINE OF c_ti_control_elementos.
+
+    CHECK c_ti_control_elementos IS NOT INITIAL.
+
+    o_ttdescribe ?= cl_abap_structdescr=>describe_by_data( c_ti_detalle_cl_actividad ).
+    o_stdescribe ?= o_ttdescribe->get_table_line_type( ).
+
+    ti_component = o_stdescribe->get_components( ).
+    "busca estructuras anidadas
+    LOOP AT ti_component INTO es_component WHERE name = space OR as_include EQ abap_true.
+      o_stdescribe ?=  es_component-type.
+      APPEND LINES OF o_stdescribe->get_components( ) TO ti_component_d.
+    ENDLOOP.
+
+    DELETE ti_component WHERE name = space.
+    "agrega componenes anidados
+    APPEND LINES OF ti_component_d TO ti_component.
+
+    indice = line_index( c_ti_control_elementos[ kalnr = i_es_control_elementos-kalnr
+                                                 kadky   = i_es_control_elementos-kadky ] ).
+
+    CLEAR: c_valor_total.
+
+    SORT c_ti_detalle_cl_actividad BY kalnr kadky sufijo.
+
+    "Recorrer detalle para agregarlo al conjunto de datos correspondiente
+    LOOP AT c_ti_detalle_cl_actividad ASSIGNING FIELD-SYMBOL(<fs_es_detalle>)
+                         WHERE kalnr = i_es_control_elementos-kalnr
+                         AND kadky   = i_es_control_elementos-kadky.
+
+      UNASSIGN <fs_es_control_elementos>.
+
+      IF i_agrupado = abap_true.
+        condicion = | KALNR = '{ i_es_control_elementos-kalnr }' | &&
+                    | AND KADKY = '{ i_es_control_elementos-kadky }' | &&
+                    | AND MATERIAL = '{ i_es_control_elementos-material }' AND SUFIJO_{ i_sufijo } = '{ <fs_es_detalle>-sufijo }'|.
+        LOOP AT c_ti_control_elementos ASSIGNING <fs_es_control_elementos>
+                                       WHERE (condicion).
+        ENDLOOP.
+      ENDIF.
+
+      IF <fs_es_control_elementos> IS NOT ASSIGNED.
+        ASSIGN c_ti_control_elementos[ indice ] TO <fs_es_control_elementos>.
+
+        ADD 1 TO indice.
+
+      ENDIF.
+
+      LOOP AT ti_component ASSIGNING FIELD-SYMBOL(<fs_es_componente>).
+        ASSIGN COMPONENT |{ <fs_es_componente>-name }_{ i_sufijo }| OF STRUCTURE <fs_es_control_elementos>
+        TO FIELD-SYMBOL(<fs_valor_componente_destino>).
+
+        CHECK sy-subrc IS INITIAL.
+
+        ASSIGN COMPONENT |{ <fs_es_componente>-name }| OF STRUCTURE <fs_es_detalle>
+        TO FIELD-SYMBOL(<fs_valor_componente_origen>).
+
+        CHECK sy-subrc IS INITIAL.
+
+        IF i_agrupado = abap_true.
+
+          CASE <fs_es_componente>-name.
+            WHEN 'CLASE_ACTIVIDAD'.
+
+              IF <fs_valor_componente_destino> NS <fs_valor_componente_origen>.
+                <fs_valor_componente_destino> = |{ <fs_valor_componente_destino> } + { <fs_valor_componente_origen> }|.
+              ENDIF.
+
+              IF <fs_valor_componente_destino>(2) = ' +'.
+                <fs_valor_componente_destino> = replace( val = <fs_valor_componente_destino> sub = '+' with = space ).
+              ENDIF.
+
+            WHEN 'CANTIDAD' OR 'VALOR'.
+              <fs_valor_componente_destino> = <fs_valor_componente_destino> + <fs_valor_componente_origen>.
+            WHEN OTHERS.
+              <fs_valor_componente_destino> = <fs_valor_componente_origen>.
+          ENDCASE.
+
+        ELSE.
+          <fs_valor_componente_destino> = <fs_valor_componente_origen>.
+        ENDIF.
+
+      ENDLOOP.
+
+      c_valor_total = c_valor_total + <fs_es_detalle>-valor.
+
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD agregar_detalle.
+
+    DATA: o_ttdescribe   TYPE REF TO cl_abap_tabledescr,
+          o_stdescribe   TYPE REF TO cl_abap_structdescr,
+          ti_component_d TYPE abap_component_tab,
+          indice         TYPE i,
+          ti_component   TYPE abap_component_tab,
+          es_component   LIKE LINE OF ti_component.
+
+    o_ttdescribe ?= cl_abap_structdescr=>describe_by_data( c_ti_detalle ).
+    o_stdescribe ?= o_ttdescribe->get_table_line_type( ).
+
+    ti_component = o_stdescribe->get_components( ).
+    "busca estructuras anidadas
+    LOOP AT ti_component INTO es_component WHERE name = space OR as_include EQ abap_true.
+      o_stdescribe ?=  es_component-type.
+      APPEND LINES OF o_stdescribe->get_components( ) TO ti_component_d.
+    ENDLOOP.
+
+    DELETE ti_component WHERE name = space.
+    "agrega componenes anidados
+    APPEND LINES OF ti_component_d TO ti_component.
+
+    indice = line_index( c_ti_control_elementos[ kalnr = i_es_control_elementos-kalnr
+                                                 kadky   = i_es_control_elementos-kadky ] ).
+    CLEAR: c_valor_total, c_cantidad_total.
+
+    "Recorrer detalle para agregarlo al conjunto de datos correspondiente
+    LOOP AT c_ti_detalle ASSIGNING FIELD-SYMBOL(<fs_es_detalle>)
+                         WHERE kalnr = i_es_control_elementos-kalnr
+                         AND kadky   = i_es_control_elementos-kadky.
+
+      ASSIGN c_ti_control_elementos[ indice ] TO FIELD-SYMBOL(<fs_es_control_elementos>).
+
+      IF i_agrupado = abap_false.
+        ADD 1 TO indice.
+      ENDIF.
+
+      CHECK <fs_es_control_elementos> IS ASSIGNED.
+
+      LOOP AT ti_component ASSIGNING FIELD-SYMBOL(<fs_es_componente>).
+        ASSIGN COMPONENT |{ <fs_es_componente>-name }_{ i_sufijo }| OF STRUCTURE <fs_es_control_elementos>
+        TO FIELD-SYMBOL(<fs_valor_componente_destino>).
+
+        CHECK sy-subrc IS INITIAL.
+
+        ASSIGN COMPONENT |{ <fs_es_componente>-name }| OF STRUCTURE <fs_es_detalle>
+        TO FIELD-SYMBOL(<fs_valor_componente_origen>).
+
+        CHECK sy-subrc IS INITIAL.
+
+        IF i_agrupado = abap_true.
+
+          CASE <fs_es_componente>-name.
+            WHEN 'MATERIAL' OR 'DESCRIPCION'.
+
+            WHEN 'VALOR_TOTAL' OR 'CANTIDAD'.
+              <fs_valor_componente_destino> = <fs_valor_componente_destino> + <fs_valor_componente_origen>.
+            WHEN 'TIPO_MATERIAL'.
+              IF <fs_valor_componente_destino> NS <fs_valor_componente_origen>.
+                <fs_valor_componente_destino> = |{ <fs_valor_componente_destino> } + { <fs_valor_componente_origen> }|.
+              ENDIF.
+
+              IF <fs_valor_componente_destino>(2) = ' +'.
+                <fs_valor_componente_destino> = replace( val = <fs_valor_componente_destino> sub = '+' with = space ).
+              ENDIF.
+          ENDCASE.
+        ELSE.
+          <fs_valor_componente_destino> = <fs_valor_componente_origen>.
+        ENDIF.
+
+      ENDLOOP.
+
+      c_valor_total = c_valor_total + <fs_es_detalle>-valor_total.
+      c_cantidad_total = c_cantidad_total + <fs_es_detalle>-cantidad.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD lineas_x_material.
+
+    DATA(condicion_eliminacion) = |{ gc_nombre_campo_material_padre } NE I_MATERIAL|.
+    DELETE i_ti_detalle WHERE (condicion_eliminacion).
+
+    r_numero_lineas = lines( i_ti_detalle ).
+
+  ENDMETHOD.
+
+  METHOD iniciar_proceso_datos .
+
+    TRY.
+        DATA(filtro_cabecera) = cl_shdb_seltab=>combine_seltabs(
+          it_named_seltabs = VALUE #( ( name = 'MATNR' dref = REF #( i_r_matnr ) )
+                                      ( name = 'WERKS' dref = REF #( i_r_werks ) )
+                                      ( name = 'KADAT' dref = REF #( i_r_kadat ) )
+                                      ( name = 'KLVAR' dref = REF #( i_r_klvar ) )
+                                     )
+        ).
+
+        consultar_reporte_detallado( EXPORTING i_filtros_cabecera          = filtro_cabecera
+                                               i_fecha_cc_desde            = VALUE #( i_r_kadat[ 1 ]-low OPTIONAL )
+                                               i_agrupado                  = i_agrupado
+                                     IMPORTING e_ti_cabecera               = DATA(ti_cabecera)
+                                               e_ti_cl_actividad_mano_obra = DATA(ti_cl_actividad_mano_obra)
+                                               e_ti_cl_actividad_gif       = DATA(ti_cl_actividad_gif)
+                                               e_ti_dt_semielaborado       = DATA(ti_dt_semielaborado)
+                                               e_ti_dt_empaque             = DATA(ti_dt_empaque)
+                                               e_ti_dt_materia_prima       = DATA(ti_dt_materia_prima)
+                                               e_ti_dt_producto_quimico    = DATA(ti_dt_producto_quimico)
+                                               e_ti_procesos_adicionales   = DATA(ti_procesos_adicionales)
+                                              ).
+
+        consolidar_datos( EXPORTING i_agrupado                  = i_agrupado
+                          CHANGING  c_ti_cabecera               = ti_cabecera
+                                    c_ti_cl_actividad_mano_obra = ti_cl_actividad_mano_obra
+                                    c_ti_cl_actividad_gif       = ti_cl_actividad_gif
+                                    c_ti_dt_semielaborado       = ti_dt_semielaborado
+                                    c_ti_dt_empaque             = ti_dt_empaque
+                                    c_ti_dt_materia_prima       = ti_dt_materia_prima
+                                    c_ti_dt_producto_quimico    = ti_dt_producto_quimico
+                                    c_ti_procesos_adicionales   = ti_procesos_adicionales
+                                    c_ti_control_elementos      = gti_control_elemento_detallado ).
+
+        IF i_agrupado = abap_true.
+          agrupar_datos( CHANGING c_ti_control_elementos = gti_control_elemento_detallado ).
+        ELSE.
+          gti_control_elementos = REF #( gti_control_elemento_detallado ).
+        ENDIF.
+
+      CATCH cx_shdb_exception.
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD agregar_procesos_adicionales.
+
+    DATA: indice TYPE i.
+
+    FIELD-SYMBOLS: <fs_es_control_elementos> LIKE LINE OF c_ti_control_elementos.
+
+    indice = line_index( c_ti_control_elementos[ kalnr = i_es_control_elementos-kalnr
+                                                 kadky   = i_es_control_elementos-kadky ] ).
+
+    LOOP AT i_ti_procesos_adicionales ASSIGNING FIELD-SYMBOL(<fs_es_proceso_adicional>)
+                                      WHERE kalnr = i_es_control_elementos-kalnr
+                                      AND kadky = i_es_control_elementos-kadky.
+
+      ASSIGN c_ti_control_elementos[ indice ] TO <fs_es_control_elementos>.
+
+      CHECK sy-subrc IS INITIAL.
+
+      <fs_es_control_elementos> = CORRESPONDING #( BASE ( <fs_es_control_elementos> ) <fs_es_proceso_adicional>
+                                                   EXCEPT kadky kalnr material ).
+      ADD 1 TO indice.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD aplicar_convercion_de_medidas.
+
+    DATA: um_pap LIKE c_es_control_elementos-unidades_x_paquete.
+
+    "Si no existe PAP considerar PAP =1
+    um_pap = COND #( WHEN c_es_control_elementos-unidades_x_paquete IS INITIAL THEN
+                      1
+                     ELSE
+                      c_es_control_elementos-unidades_x_paquete ).
+
+    "Tomar el costo total de la referencia dividirlo por 1000, dividirlo por las unidades por paquete PAP(UMREN)
+    "y multiplicarlo por 12 para calcular el valor por docena.
+    IF c_es_control_elementos-tipo_material IN gr_r_material_grupo1
+    AND c_es_control_elementos-categoria_valoracion = '7920'.
+      c_es_control_elementos-x_conversion = ( ( c_es_control_elementos-costo_fabrica / 1000 ) / um_pap ) * 12.
+    ENDIF.
+
+    "Tomar el costo total de la referencia dividirlo por 1000 y multiplicarlo por 24 para calcular el valor por docena
+    IF c_es_control_elementos-tipo_material IN gr_r_material_grupo2
+    AND c_es_control_elementos-categoria_valoracion = '7900'.
+      c_es_control_elementos-x_conversion = ( ( c_es_control_elementos-costo_fabrica / 1000 ) / um_pap ) * 24.
+    ENDIF.
+
+    "Unidades a Kilos
+    SELECT SINGLE FROM marm
+    FIELDS meinh, umrez, umren
+    WHERE matnr = @c_es_control_elementos-material
+    AND meinh = 'KG'
+    INTO @DATA(es_um).
+
+    IF c_es_control_elementos-tipo_material IN gr_tp_material_telas
+    AND c_es_control_elementos-categoria_valoracion = '7904'.
+
+      c_es_control_elementos-x_conversion = ( ( c_es_control_elementos-costo_fabrica * ( es_um-umrez / es_um-umren ) ) / 1000 ).
+
+    ENDIF.
+    "Con la Column "Costo de Fabrica" se deben realizar los cálculos para la conversion de metros a kilos Columna.
+*    c_es_control_elementos-costo_fabrica = ( ( c_es_control_elementos-costo_fabrica * ( es_um-umrez / es_um-umren ) ) / 1000 ).
+
+  ENDMETHOD.
+
+  METHOD visualizar_reporte.
+    DATA: ti_catalogo_alv TYPE lvc_t_fcat,
+          ti_clasificar   TYPE lvc_t_sort,
+          perc            TYPE i,
+          extension       TYPE i VALUE 100.
+
+    ASSIGN gti_control_elementos->* TO FIELD-SYMBOL(<fs_ti_control_elementos>).
+
+    IF go_dock_container IS NOT BOUND AND cl_gui_alv_grid=>offline( ) IS INITIAL.
+
+      CREATE OBJECT go_dock_container
+        EXPORTING
+          side                        = cl_gui_docking_container=>dock_at_bottom
+        EXCEPTIONS
+          cntl_error                  = 1
+          cntl_system_error           = 2
+          create_error                = 3
+          lifetime_error              = 4
+          lifetime_dynpro_dynpro_link = 5
+          OTHERS                      = 6.
+
+      go_dock_container->get_ratio( IMPORTING ratio = perc ).
+      extension = ( 500 * extension / perc ).
+
+      go_dock_container->set_extension( extension ).
+
+    ENDIF.
+
+    IF go_alv IS NOT BOUND.
+
+      go_alv = NEW cl_gui_alv_grid( i_parent = go_dock_container ).
+
+      TRY.
+          ti_catalogo_alv = zclcxr1002_util=>construir_catalogo( i_ti = <fs_ti_control_elementos> i_conservar_indice_es_anidada = abap_true ).
+          modificar_catalogo( EXPORTING i_agrupado = i_agrupado CHANGING c_ti_catalogo = ti_catalogo_alv ).
+
+          IF i_agrupado = abap_false.
+            ti_clasificar = VALUE #( ( spos = 1 comp = abap_true fieldname = 'MATERIAL' subtot = abap_true ) ).
+          ENDIF.
+
+        CATCH cx_dynamic_check cx_static_check.
+          "handle exception
+      ENDTRY.
+
+      go_alv->register_edit_event(
+        EXPORTING
+          i_event_id = cl_gui_alv_grid=>mc_evt_modified
+        EXCEPTIONS
+          error      = 1
+          OTHERS     = 2 ).
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+      SET HANDLER: evento_hotspot     FOR go_alv,
+                   evento_user_comand FOR go_alv,
+                   evento_tool_bar    FOR go_alv.
+
+      go_alv->set_table_for_first_display(
+        EXPORTING
+          i_save                        = 'A'
+          is_variant                    = VALUE #( variant = i_layout report = i_reporte username = sy-uname )
+        CHANGING
+          it_outtab                     = <fs_ti_control_elementos> " Output Table
+          it_fieldcatalog               = ti_catalogo_alv " Field Catalog
+          it_sort                       = ti_clasificar
+        EXCEPTIONS
+          invalid_parameter_combination = 1
+          program_error                 = 2
+          too_many_lines                = 3
+          OTHERS                        = 4 ).
+
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+    ELSE.
+
+      go_alv->refresh_table_display( ).
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD modificar_catalogo.
+
+    DATA: r_columnas_cl_actividad TYPE RANGE OF string.
+
+    r_columnas_cl_actividad = VALUE #( sign = 'I' option = 'CP'
+                                      ( low = 'CANTIDAD_*' )
+                                      ( low = 'UM*' )
+                                      ( low = 'CLASE_ACTIVIDAD*' )
+                                      ( low = 'VALOR*' )
+                                      ).
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+      <fs_es_catalogo>-col_opt = abap_true.
+
+      DATA(nombre_columna) = <fs_es_catalogo>-fieldname.
+
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'SELECCIONADO'.
+          <fs_es_catalogo>-checkbox = abap_true.
+          <fs_es_catalogo>-edit = abap_true.
+          <fs_es_catalogo>-outputlen = 8.
+          <fs_es_catalogo>-coltext = TEXT-pro.
+        WHEN 'KALNR' OR 'KADKY'.
+          <fs_es_catalogo>-no_out = abap_true.
+        WHEN 'UMB'.
+          <fs_es_catalogo>-col_opt = abap_false.
+          <fs_es_catalogo>-tooltip = <fs_es_catalogo>-coltext = <fs_es_catalogo>-reptext.
+        WHEN 'VERSION_FABRICACION'.
+          <fs_es_catalogo>-col_opt = abap_false.
+          <fs_es_catalogo>-outputlen = 10.
+        WHEN 'UNIDADES_X_PAQUETE'.
+          <fs_es_catalogo>-col_opt = abap_false.
+          <fs_es_catalogo>-outputlen = 13.
+        WHEN 'TONO' OR 'TALLA' OR 'EXTENSION_MARCA' OR 'GENERO'
+        OR 'DESCRIPCION_SEMIELABORADO' OR 'TIPO_MATERIAL_SEMIELABORADO' OR 'CANTIDAD_SEMIELABORADO'
+        OR 'UM_SEMIELABORADO' OR 'VALOR_TOTAL_SEMIELABORADO' OR 'DESCRIPCION_PRIMA' OR 'TIPO_MATERIAL_PRIMA'
+        OR 'CANTIDAD_PRIMA' OR 'UM_PRIMA'
+        OR 'VALOR_TOTAL_PRIMA' OR 'DESCRIPCION_EMPAQUE' OR 'TIPO_MATERIAL_EMPAQUE'
+        OR 'CANTIDAD_EMPAQUE' OR 'UM_EMPAQUE' OR 'VALOR_TOTAL_EMPAQUE'
+        OR 'DESCRIPCION_QUIMICO' OR 'TIPO_MATERIAL_QUIMICO' OR 'CANTIDAD_QUIMICO'
+        OR 'UM_QUIMICO'
+        OR 'COSTO_DIRECTO' OR 'SUFIJO_GIF'
+        OR 'CLASE_ACTIVIDAD_GIF' OR 'CANTIDAD_GIF'
+        OR 'UM_GIF' OR 'VALOR_GIF'
+        OR 'COSTO_FABRICA' OR 'COSTO_TOTAL'.
+
+          <fs_es_catalogo>-tooltip =
+          <fs_es_catalogo>-coltext = zclcxr1002_util=>convertir_a_texto_columna( i_texto = CONV #( nombre_columna ) ).
+            if <fs_es_catalogo>-fieldname EQ 'VALOR_TOTAL_SEMIELABORADO' OR
+               <fs_es_catalogo>-fieldname EQ 'VALOR_TOTAL_PRIMA' OR
+               <fs_es_catalogo>-fieldname EQ 'VALOR_TOTAL_EMPAQUE' OR
+               <fs_es_catalogo>-fieldname EQ 'VALOR_GIF' OR
+               <fs_es_catalogo>-fieldname EQ 'COSTO_FABRICA' OR
+               <fs_es_catalogo>-fieldname EQ 'COSTO_TOTAL' OR
+               <fs_es_catalogo>-fieldname EQ 'COSTO_DIRECTO'.
+                <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+            endif.
+        WHEN 'VALOR_TOTAL_PA'.
+          <fs_es_catalogo>-tooltip =
+          <fs_es_catalogo>-coltext = TEXT-vpa.
+        WHEN 'REGISTRO_INFO' OR 'PRECIO_NETO_PROCESO_ADICIONAL' OR 'CANTIDAD_PROCESO_ADICIONAL'.
+          <fs_es_catalogo>-tooltip =
+          <fs_es_catalogo>-coltext = |{ <fs_es_catalogo>-reptext } PA |.
+
+        WHEN 'VALOR_TOTAL_QUIMICO' OR 'VALOR_MANO_OBRA' OR 'X_CONVERSION' OR 'COSTO_TOTAL_REFERENCIA' OR 'VALOR_AP' OR
+             'VALOR_DM' OR 'VALOR_MA' OR 'VALOR_MI' OR 'VALOR_MT'.
+             <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+      ENDCASE.
+
+      IF <fs_es_catalogo>-fieldname IN r_columnas_cl_actividad.
+        <fs_es_catalogo>-coltext =
+        <fs_es_catalogo>-coltext = zclcxr1002_util=>convertir_a_texto_columna( i_texto = CONV #( <fs_es_catalogo>-fieldname ) ).
+
+        <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = 'mano obra' with = 'MOD' ).
+        <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = 'proceso adicional' with = 'PA' ).
+        <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = ' pa ' with = ' PA ' ).
+        <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = 'gif' with = 'GIF' ).
+      ENDIF.
+
+      IF to_upper( <fs_es_catalogo>-fieldname(9) ) CS 'MATERIAL_'.
+*        <fs_es_catalogo>-col_opt = abap_false.
+        <fs_es_catalogo>-tooltip = <fs_es_catalogo>-coltext = <fs_es_catalogo>-reptext.
+      ENDIF.
+
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_materia_prima ) with = 'MP' ).
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_producto_quimico ) with = 'PQ' ).
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_materia_prima ) with = 'MP' ).
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_empaque ) with = 'ME' ).
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_semielaborado ) with = 'SE' ).
+
+      IF i_agrupado = abap_false
+      AND ( <fs_es_catalogo>-datatype = 'QUAN'
+      OR <fs_es_catalogo>-datatype = 'DEC'
+      OR <fs_es_catalogo>-datatype = 'CURR' ).
+        <fs_es_catalogo>-do_sum = abap_true.
+      ENDIF.
+
+    ENDLOOP.
+
+    IF i_agrupado = abap_true.
+      DELETE c_ti_catalogo WHERE fieldname IN gr_excluir_columnas_agrupado.
+    ELSE.
+      DELETE c_ti_catalogo WHERE fieldname IN gr_excluir_columnas_detallado .
+    ENDIF.
+
+    DELETE c_ti_catalogo WHERE fieldname = 'COSTO_TOTAL' OR fieldname = 'COSTO_TOTAL_REFERENCIA'.
+
+  ENDMETHOD.
+
+  METHOD preparar_datos_para_legado.
+
+    DATA: es_datos_proxy              TYPE zpxcostos_material_enviar,
+          costo_total_formato         TYPE char25,
+          es_control_elementos_cab    TYPE gtp_es_control_elementos,
+          ti_equivalencia             TYPE STANDARD TABLE OF string,
+          ti_control_elementos_legado LIKE es_datos_proxy-costos_material_enviar-row.
+
+    FIELD-SYMBOLS: <fs_ti_control_elementos> TYPE ANY TABLE.
+
+    go_alv->check_changed_data( ).
+    BREAK seblondo.
+
+    ASSIGN gti_control_elementos->* TO <fs_ti_control_elementos>.
+
+    LOOP AT <fs_ti_control_elementos> ASSIGNING FIELD-SYMBOL(<fs_es_control_elementos>)
+                                    WHERE (' SELECCIONADO = ABAP_TRUE AND TIPO_MATERIAL IN gr_tp_material_telas ').
+
+      CLEAR: ti_equivalencia.
+
+      es_control_elementos_cab = CORRESPONDING #( <fs_es_control_elementos> ).
+
+      TRY.
+
+          WRITE es_control_elementos_cab-x_conversion TO costo_total_formato CURRENCY es_control_elementos_cab-currency.
+
+          DATA(caracteristica) = es_control_elementos_cab-material_generico+8(1).
+
+          LOOP AT gr_equivalencia_caracteristica INTO DATA(es_equivalencia) WHERE low = caracteristica.
+            APPEND es_equivalencia-high TO ti_equivalencia.
+          ENDLOOP.
+
+        CATCH cx_root.
+
+      ENDTRY.
+
+      IF ti_equivalencia IS INITIAL.
+        APPEND space TO ti_equivalencia.
+      ENDIF.
+
+      "Una linea por equivalencia encontrada, o como minimo una linea por delta desagregado.
+      LOOP AT ti_equivalencia INTO DATA(es_valor_equivalencia).
+
+        ti_control_elementos_legado = VALUE #( BASE ti_control_elementos_legado
+                                          ( material_generico  = es_control_elementos_cab-numero_antiguo_material
+                                            material_variante   = es_control_elementos_cab-material
+                                            co_color   = es_control_elementos_cab-color
+                                            diametro_talla = es_control_elementos_cab-talla
+                                            co_caracteristica = es_valor_equivalencia
+                                            co_version   = es_control_elementos_cab-version_fabricacion
+                                            anno_mes = replace( val = es_control_elementos_cab-kadky sub = '-' with = space occ = 0 )
+                                            costo   = shift_left( val = replace( val = costo_total_formato sub = '.' with = space occ = 0 ) )
+                                            usuario = sy-uname ) ).
+      ENDLOOP.
+
+    ENDLOOP.
+
+    IF ti_control_elementos_legado IS NOT INITIAL.
+
+      es_datos_proxy-costos_material_enviar-row = ti_control_elementos_legado.
+
+      "Consultar la información técnica del proxy
+      SELECT SINGLE *
+        FROM sproxhdr
+       WHERE object =   'CLAS'
+         AND obj_name = 'ZPXCO_COSTOS_MATERIAL_ENVIAR_O'
+         AND inactive = @space
+        INTO @DATA(es_info_proxy).
+
+      TRY.
+          "Inscribe en el monitor la información para el llamado del proxy
+          DATA(o_monitor) = NEW zclcxr1001_monitor_integracion(
+            i_ricefw          = gc_ricefw_integracion
+            i_es_info_mensaje = VALUE ztcxr1001_1(
+                                        pid       = 'SENDER'
+                                        fecha_ini = sy-datum
+                                        hora_ini  = sy-uzeit
+                                        hora_fin  = sy-uzeit
+                                        ob_system = 'SAP'
+                                        ob_ns     = es_info_proxy-ifr_nspce
+                                        ob_name   = es_info_proxy-ifr_name
+                                        ib_system = 'KPO'
+                                        tcode     = sy-tcode )
+            i_datos_proxy     = es_datos_proxy
+            i_no_commit       = abap_true ).
+
+          o_monitor->main( i_datos_proxy = REF #( es_datos_proxy ) ).
+
+          MESSAGE i097(zcx01).
+        CATCH zcxr1001_excepciones_monitor.
+
+      ENDTRY.
+    ELSE.
+      MESSAGE i413(zmm01).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD consultar_reporte_detallado BY DATABASE PROCEDURE
+                                FOR HDB LANGUAGE SQLSCRIPT
+                                OPTIONS READ-ONLY
+                                USING keko ckis eina eine mara makt mbew marm ztcxr1000_2
+                                zclfir1113_control_elementos=>consultar_caracteristica
+                                zclfir1113_control_elementos=>consultar_clase_actividad
+                                zclfir1113_control_elementos=>consultar_categoria_material.
+
+    DECLARE mandante varchar(3) := session_context ('CLIENT');
+    DECLARE lenguaje_sistema varchar(2) := session_context ('LOCALE_SAP');
+    DECLARE ricefw VARCHAR(5) := 'R1113';
+
+    ti_cc_producto =
+    SELECT
+    _material.mandt, _costos_cab.kalnr, kadky, tvers, _material.matnr, werks, kadat, klvar,
+    _descripcion_material.maktx, _material.mtart, _material.size1, _material.color, _valoracion.bklas,
+    brand_id, verid, _material.meins, _unidad_medida.umren, fwaer_kpf, satnr material_generico,
+    bismt numero_antiguo_material, cmf_nr, kalst
+    FROM keko as _costos_cab
+    INNER JOIN mara as _material ON
+    _material.mandt = _costos_cab.mandt
+    AND _material.matnr = _costos_cab.matnr
+    INNER JOIN makt as _descripcion_material ON
+    _descripcion_material.mandt = _material.mandt
+    AND _descripcion_material.matnr = _material.matnr
+    AND _descripcion_material.spras = :lenguaje_sistema
+    LEFT JOIN mbew as _valoracion ON
+    _valoracion.mandt = _costos_cab.mandt
+    AND _valoracion.matnr = _costos_cab.matnr
+    AND _valoracion.bwkey = _costos_cab.werks
+    LEFT JOIN marm as _unidad_medida ON
+    _unidad_medida.mandt = _material.mandt
+    AND _unidad_medida.matnr = _material.matnr
+    AND _unidad_medida.meinh = 'PAP'
+    WHERE _costos_cab.mandt = :mandante
+    AND _costos_cab.kadat = :i_fecha_cc_desde;
+
+    ti_cc_producto = apply_filter ( :ti_cc_producto, :i_filtros_cabecera );
+
+    ti_materiales =
+    SELECT DISTINCT
+    mandt, matnr as material, color, size1 as talla, '' as caracteristica, '' as valor_caracteristica
+    FROM :ti_cc_producto;
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CARACTERISTICA"(
+             i_ti_materiales => :ti_materiales,
+             e_ti_materiales => :ti_caracteristicas );
+
+    ti_cabecera_costo =
+    SELECT
+    mandt, kalnr, kadky, tvers,  verid, matnr as material,
+    CASE
+    WHEN matnr LIKE '%TA%' OR matnr LIKE '%EA%' THEN
+        matnr
+    ELSE
+        ''
+    END AS material_ta
+    FROM :ti_cc_producto;
+
+    -- Materiales TA/CA para conformar Version{
+    ti_materiales_ta_ca =
+    SELECT
+    _cabecera.mandt, _cabecera.kalnr, _cabecera.kadky, _cabecera.tvers, _cabecera.material, _cabecera.material_ta,
+    ckis.matnr as material_ca, _cabecera.verid as verid_ta, keko.verid as verid_ca,
+    CONCAT( CONCAT( _cabecera.verid, '' ) , keko.verid ) AS verid
+    FROM :ti_cabecera_costo AS _cabecera
+    INNER JOIN ckis ON
+    ckis.mandt = _cabecera.mandt
+    AND ckis.kalnr = _cabecera.kalnr
+    AND ckis.kadky = _cabecera.kadky
+    AND ckis.tvers = _cabecera.tvers
+    AND ( ckis.matnr like '%CA%' OR ckis.matnr like '%TA%' )
+    INNER JOIN keko ON
+    keko.mandt = ckis.mandt
+*    AND keko.kalnr = ckis.kalnr
+    AND keko.kadky = ckis.kadky
+    AND keko.tvers = ckis.tvers
+    AND keko.matnr = ckis.matnr
+    WHERE material_ta <> '';
+
+    IF :i_agrupado = '' THEN
+        ti_materiales_ta_ca =
+        SELECT *
+        FROM :ti_materiales_ta_ca
+        WHERE mandt = '';
+    END IF ;
+    --}
+
+    ti_parametros =
+    SELECT *
+    FROM ztcxr1000_2
+    WHERE ricefw = :ricefw
+    AND idparam IN ( 'MAT_SEMIEL', 'MAT_PRIMA', 'MAT_EMPINS', 'MAT_QUIMIC', 'CLACT_MNOB', 'CLACT_GIF');
+
+    ti_tp_material_semielaorado =
+    SELECT low AS mtart FROM :ti_parametros WHERE idparam = 'MAT_SEMIEL';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CATEGORIA_MATERIAL"(
+             i_ti_cabecera_costo   => :ti_cabecera_costo,
+             i_ti_tipo_material    => :ti_tp_material_semielaorado,
+             e_ti_detalle_material => :e_ti_dt_semielaborado );
+
+    ti_tp_material_materia_prima =
+    SELECT low AS mtart FROM :ti_parametros WHERE idparam = 'MAT_PRIMA';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CATEGORIA_MATERIAL"(
+             i_ti_cabecera_costo   => :ti_cabecera_costo,
+             i_ti_tipo_material    => :ti_tp_material_materia_prima,
+             e_ti_detalle_material => :e_ti_dt_materia_prima );
+
+    ti_tp_material_empaque =
+    SELECT low AS mtart FROM :ti_parametros WHERE idparam = 'MAT_EMPINS';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CATEGORIA_MATERIAL"(
+             i_ti_cabecera_costo   => :ti_cabecera_costo,
+             i_ti_tipo_material    => :ti_tp_material_empaque,
+             e_ti_detalle_material => :e_ti_dt_empaque );
+
+    ti_tp_material_quimico =
+    SELECT low AS mtart FROM :ti_parametros WHERE idparam = 'MAT_QUIMIC';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CATEGORIA_MATERIAL"(
+             i_ti_cabecera_costo   => :ti_cabecera_costo,
+             i_ti_tipo_material    => :ti_tp_material_quimico,
+             e_ti_detalle_material => :e_ti_dt_producto_quimico );
+
+    --clase de actividades
+    ti_clase_actividad =
+    SELECT low setname FROM :ti_parametros WHERE idparam = 'CLACT_MNOB';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CLASE_ACTIVIDAD"(
+             i_ti_cabecera_costo     => :ti_cabecera_costo,
+             i_ti_clase_actividad    => :ti_clase_actividad,
+             e_ti_dt_clase_actividad => :e_ti_cl_actividad_mano_obra  );
+
+    ti_clase_actividad_gif =
+    SELECT low setname FROM :ti_parametros WHERE idparam = 'CLACT_GIF';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CLASE_ACTIVIDAD"(
+             i_ti_cabecera_costo     => :ti_cabecera_costo,
+             i_ti_clase_actividad    => :ti_clase_actividad_gif,
+             e_ti_dt_clase_actividad => :e_ti_cl_actividad_gif  );
+
+    --registro info/Procesos adicionales
+    e_ti_procesos_adicionales =
+    SELECT
+    _cabecera.kalnr,
+    _cabecera.kadky,
+    _cabecera.matnr as material,
+    eina.infnr registro_info,
+    eine.norbm cantidad_proceso_adicional,
+    ( eine.netpr * 100 ) valor_total_pa
+    from :ti_cc_producto as _cabecera
+    inner join eina on
+    eina.mandt = _cabecera.mandt
+    and eina.matnr = _cabecera.matnr
+    inner join eine on
+    eine.mandt = eina.mandt
+    and eine.infnr = eina.infnr;
+
+      e_ti_cabecera =
+     SELECT
+     _cabecera.kalnr,
+     _cabecera.kadky,
+     _cabecera.matnr AS material,
+     _cabecera.maktx descripcion_referencia_venta,
+     _cabecera.size1 talla,
+     _cabecera.color,
+     _tono.valor_caracteristica tono,
+     _cabecera.mtart tipo_material,
+     _cabecera.bklas categoria_valoracion,
+     _cabecera.brand_id marca,
+     _genero.valor_caracteristica genero,
+     _extencion_mara.valor_caracteristica extension_marca,
+     CASE
+     WHEN _version.verid IS NULL OR _version.verid = '' THEN
+        _cabecera.verid
+     ELSE
+        _version.verid
+     END AS version_fabricacion,
+     _cabecera.meins umb,
+     _cabecera.umren unidades_x_paquete,
+     material_generico,
+     numero_antiguo_material,
+     _cabecera.fwaer_kpf currency,
+     kalst
+     FROM :ti_cc_producto AS _cabecera
+     LEFT JOIN :ti_materiales_ta_ca _version ON
+     _version.mandt = _cabecera.mandt
+     AND _version.kalnr = _cabecera.kalnr
+     AND _version.kadky = _cabecera.kadky
+     AND _version.tvers = _cabecera.tvers
+     LEFT JOIN :ti_caracteristicas AS _genero ON
+     _genero.material = _cabecera.matnr
+     AND _genero.caracteristica = '0000000829' --MM_MAT_GENERO
+     LEFT JOIN :ti_caracteristicas AS _extencion_mara ON
+     _extencion_mara.material = _cabecera.matnr
+     AND _genero.caracteristica = '0000000833' --MM_MAT_EXTENSION_MARCA
+     LEFT JOIN :ti_caracteristicas AS _tono ON
+     _tono.color = _cabecera.color
+     AND _tono.caracteristica = '0000001021' --MM_MAT_TONO_COLOR
+     ;
+
+  ENDMETHOD.
+
+  METHOD consultar_reporte_agrupado.
+
+  ENDMETHOD.
+
+  METHOD consultar_caracteristica BY DATABASE PROCEDURE
+                               FOR HDB LANGUAGE SQLSCRIPT
+                               OPTIONS READ-ONLY
+                               USING wrf_charvalt ztmmi1029_1 inob ausp.
+
+    ti_colores =
+    SELECT DISTINCT mandt, color
+    FROM :i_ti_materiales;
+
+    --Consultar tono
+    ti_tono =
+    SELECT
+    _color.mandt, _color.color, _caracteristicas.atinn as caracteristica, _caracteristicas.atwtb as valor_caracteristica
+    FROM :ti_colores AS _color
+    INNER JOIN ztmmi1029_1 as _colores_flex ON
+    _colores_flex.mandt = _color.mandt
+    AND _colores_flex.atwrt = _color.color
+    INNER JOIN wrf_charvalt as _caracteristicas ON
+    _caracteristicas.mandt = _colores_flex.mandt
+    AND _caracteristicas.atwrt = _colores_flex.intensity
+    WHERE _caracteristicas.atinn = '0000001021'; --MM_MAT_TONO_COLOR
+
+    --Genero / Extension Marca
+    ti_caracteristicas =
+    SELECT
+    _material.mandt, _material.material, _caracteristica.atinn as caracteristica, _caracteristica.atwtb as valor_caracteristica
+    FROM :i_ti_materiales as _material
+    LEFT JOIN inob AS _numero_interno ON
+    _numero_interno.mandt = _material.mandt
+    AND _numero_interno.objek = _material.material
+    LEFT JOIN ausp as _valor_caracteristica ON
+    _valor_caracteristica.mandt = _numero_interno.mandt
+    AND _valor_caracteristica.objek = _numero_interno.cuobj
+    LEFT JOIN wrf_charvalt as _caracteristica ON
+    _caracteristica.mandt = _valor_caracteristica.mandt
+    AND _caracteristica.atinn = _valor_caracteristica.atinn
+    AND _caracteristica.atwrt = _valor_caracteristica.atwrt
+    WHERE _caracteristica.atinn = '0000000829' --MM_MAT_GENERO
+    OR _caracteristica.atinn = '0000000833'; --MM_MAT_EXTENSION_MARCA
+
+    e_ti_materiales =
+    SELECT
+    _material.mandt, _material.material, _material.color, '' as talla,
+    _caracteristica.caracteristica, _caracteristica.valor_caracteristica
+    FROM :i_ti_materiales as _material
+    LEFT JOIN :ti_caracteristicas as _caracteristica ON
+    _caracteristica.material = _material.material
+    UNION
+    SELECT
+    _material.mandt, _material.material, _material.color, '' as talla,
+    _tono.caracteristica, _tono.valor_caracteristica
+    FROM :i_ti_materiales as _material
+    LEFT JOIN :ti_tono as _tono ON
+    _tono.color = _material.color;
+
+  ENDMETHOD.
+
+  METHOD consultar_categoria_material BY DATABASE PROCEDURE
+                                       FOR HDB LANGUAGE SQLSCRIPT
+                                       OPTIONS READ-ONLY
+                                       USING ckis mara makt.
+
+    DECLARE lenguaje_sistema varchar(2) := session_context ('LOCALE_SAP');
+
+    ti_posicion_costo =
+    SELECT
+    _cabecera_costos.kalnr, _cabecera_costos.kadky, _cabecera_costos.material material_padre,
+    _posicion_costo.matnr as material,
+    _descripcion_material.maktx as descripcion,
+    _material.mtart as tipo_material ,
+    _posicion_costo.menge as cantidad,
+    _material.meins as um,
+    _posicion_costo.wertn as valor_total
+    FROM :i_ti_cabecera_costo as _cabecera_costos
+    INNER JOIN ckis as _posicion_costo ON
+    _posicion_costo.mandt = _cabecera_costos.mandt
+    AND _posicion_costo.kalnr = _cabecera_costos.kalnr
+    AND _posicion_costo.kadky = _cabecera_costos.kadky
+    AND _posicion_costo.tvers = _cabecera_costos.tvers
+    INNER JOIN mara as _material ON
+    _material.mandt = _posicion_costo.mandt
+    AND _material.matnr = _posicion_costo.matnr
+    INNER JOIN makt as _descripcion_material ON
+    _descripcion_material.mandt = _material.mandt
+    AND _descripcion_material.matnr = _material.matnr
+    AND _descripcion_material.spras = :lenguaje_sistema
+    WHERE _material.mtart IN ( SELECT mtart FROM :i_ti_tipo_material );
+
+    e_ti_detalle_material =
+    SELECT
+    kalnr, kadky, material_padre, material, descripcion, tipo_material, cantidad, um, valor_total
+    FROM :ti_posicion_costo;
+
+  ENDMETHOD.
+
+  METHOD consultar_clase_actividad BY DATABASE PROCEDURE
+                                   FOR HDB LANGUAGE SQLSCRIPT
+                                   OPTIONS READ-ONLY
+                                   USING ckis setleaf.
+
+    e_ti_dt_clase_actividad =
+    SELECT
+    _cabecera_costos.kalnr,
+    _cabecera_costos.kadky,
+    _cabecera_costos.material as material_padre,
+    lstar clase_actividad,
+    menge cantidad,
+    meeht um,
+    wertn valor,
+    SUBSTRING( lstar, ( LENGTH( lstar ) - 1 ), 2  ) sufijo
+    FROM :i_ti_cabecera_costo AS _cabecera_costos
+    INNER JOIN ckis AS _posicion_costo
+    ON _posicion_costo.mandt = _cabecera_costos.mandt
+    AND _posicion_costo.kalnr = _cabecera_costos.kalnr
+    AND _posicion_costo.kadky = _cabecera_costos.kadky
+    AND _posicion_costo.tvers = _cabecera_costos.tvers
+    INNER JOIN setleaf AS _clase_actividad ON
+    _clase_actividad.valfrom = _posicion_costo.lstar
+    WHERE setname IN ( SELECT * FROM :i_ti_clase_actividad )
+    ORDER BY kalnr, kadky, sufijo;
+
+  ENDMETHOD.
+
+  METHOD evento_hotspot.
+
+  ENDMETHOD.
+
+  METHOD evento_user_comand.
+
+    FIELD-SYMBOLS: <fs_ti_control_elementos> TYPE ANY TABLE.
+
+    go_alv->check_changed_data( ).
+
+    ASSIGN gti_control_elementos->* TO <fs_ti_control_elementos>.
+
+    LOOP AT <fs_ti_control_elementos> ASSIGNING FIELD-SYMBOL(<fs_es_control_elementos>)
+                                      WHERE (' TIPO_MATERIAL IN gr_tp_material_telas ').
+
+      ASSIGN COMPONENT 'SELECCIONADO' OF STRUCTURE <fs_es_control_elementos>
+      TO FIELD-SYMBOL(<fs_selecionado>).
+
+      CHECK sy-subrc IS INITIAL.
+      <fs_selecionado> = COND #( WHEN e_ucomm = '&MARCAR' THEN
+                                  abap_true
+                                 WHEN e_ucomm = '&DESMARCAR' THEN
+                                  abap_false ).
+    ENDLOOP.
+
+    go_alv->refresh_table_display(
+      EXPORTING
+        is_stable      = VALUE #( row = abap_true
+                                  col = abap_true )
+        i_soft_refresh = abap_true
+      EXCEPTIONS
+        finished       = 1
+        OTHERS         = 2 ).
+
+  ENDMETHOD.
+
+  METHOD evento_tool_bar.
+
+    INSERT VALUE #( function = '&MARCAR' icon  = icon_select_all )
+    INTO e_object->mt_toolbar INDEX 3.
+
+    INSERT VALUE #( function = '&DESMARCAR' icon  = icon_deselect_all )
+    INTO e_object->mt_toolbar INDEX 4.
+
+    DELETE e_object->mt_toolbar WHERE function = '&LOCAL&CUT'
+                                   OR function = '&LOCAL&COPY'
+                                   OR function = '&REFRESH'
+                                   OR function = '&CHECK'
+                                   OR function = '&LOCAL&PASTE'
+                                   OR function = '&LOCAL&UNDO'
+                                   OR function = '&&SEP00'
+                                   OR function = '&&SEP02'
+                                   OR function = '&LOCAL&APPEND'
+                                   OR function = '&LOCAL&INSERT_ROW'
+                                   OR function = '&LOCAL&DELETE_ROW'
+                                   OR function = '&LOCAL&COPY_ROW'
+                                   OR function = '&INFO'.
+  ENDMETHOD.
+
+  METHOD enviar_a_sistema_legado.
+
+    DATA: o_proxy           TYPE REF TO zpxco_costos_material_enviar_o,
+          o_async_messaging TYPE REF TO if_wsprotocol_async_messaging.
+
+    ASSIGN i_datos_proxy->* TO FIELD-SYMBOL(<fs_datos_proxy>).
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    TRY.
+        o_proxy = NEW zpxco_costos_material_enviar_o(  ).
+
+        o_async_messaging ?= o_proxy->get_protocol( if_wsprotocol=>async_messaging ).
+        o_async_messaging->set_serialization_context( |{ gc_ricefw_integracion }_EOIO| ).
+
+        o_proxy->costos_material_enviar_async( output = <fs_datos_proxy> ).
+
+        COMMIT WORK AND WAIT.
+
+        "Retornar mensaje de envio correcto
+        go_log->set_es_log( i_es = VALUE #( type = 'S' id = 'ZCX01' number = '037'  ) ).
+
+      CATCH cx_ai_system_fault INTO DATA(o_cx).
+        go_log->set_o_cx_log( o_cx ).
+    ENDTRY.
+
+    APPEND LINES OF CORRESPONDING bapiret2_t( go_log->get_log( ) )  TO e_ti_return.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfir1113_control_elementos DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES: if_amdp_marker_hdb.
+
+    CONSTANTS: gc_ricefw                      TYPE zzedricefw VALUE 'R1113',
+               gc_ricefw_integracion          TYPE zzedricefw VALUE 'I1217',
+               gc_modulo                      TYPE zzedmodulo VALUE 'FI',
+               gc_clase_mensajes              TYPE symsgid VALUE 'ZFI01',
+               gc_semielaborado               TYPE string VALUE 'SEMIELABORADO',
+               gc_empaque                     TYPE string VALUE 'EMPAQUE',
+               gc_materia_prima               TYPE string VALUE 'PRIMA',
+               gc_producto_quimico            TYPE string VALUE 'QUIMICO',
+               gc_mano_obra                   TYPE string VALUE 'MANO_OBRA',
+               gc_nombre_campo_material_padre TYPE string VALUE 'MATERIAL_PADRE',
+               gc_gif                         TYPE string VALUE 'GIF'.
+
+    TYPES: BEGIN OF gtp_es_categoria_material,
+             kalnr          TYPE keko-kalnr,
+             kadky          TYPE keko-kadky,
+             material_padre TYPE keko-matnr,
+             material       TYPE ckis-matnr,
+             descripcion    TYPE makt-maktx,
+             tipo_material  TYPE zed_tipo_material_concatenado,
+             cantidad       TYPE ckis-menge,
+             um             TYPE mara-meins,
+             valor_total    TYPE ckis-wertn,
+           END OF gtp_es_categoria_material,
+
+           BEGIN OF gtp_es_cabecera_costo,
+             mandt    TYPE mara-mandt,
+             kalnr    TYPE keko-kalnr,
+             kadky    TYPE keko-kadky,
+             tvers    TYPE keko-tvers,
+             material TYPE keko-matnr,
+           END OF gtp_es_cabecera_costo,
+
+           BEGIN OF gtp_es_tipo_material,
+             mtart TYPE mara-mtart,
+           END OF gtp_es_tipo_material,
+
+           BEGIN OF gtp_es_clase_actividad,
+             setname TYPE setleaf-setname,
+           END OF gtp_es_clase_actividad,
+
+           BEGIN OF gtp_es_material,
+             mandt                TYPE mara-mandt,
+             material             TYPE mara-matnr,
+             color                TYPE mara-color,
+             talla                TYPE mara-size1,
+             caracteristica       TYPE wrf_charvalt-atinn,
+             valor_caracteristica TYPE wrf_charvalt-atwtb,
+           END OF gtp_es_material,
+
+           BEGIN OF gtp_es_dt_clase_actividad,
+             kalnr           TYPE keko-kalnr,
+             kadky           TYPE keko-kadky,
+             material_padre  TYPE keko-matnr,
+             clase_actividad TYPE zed_clase_actividad,
+             cantidad        TYPE ckis-menge,
+             um              TYPE ckis-meeht,
+             valor           TYPE ckis-wertn,
+             sufijo          TYPE string,
+           END OF gtp_es_dt_clase_actividad,
+
+           BEGIN OF gtp_es_control_elementos_cab,
+             kalnr                        TYPE keko-kalnr,
+             kadky                        TYPE keko-kadky,
+             material                     TYPE keko-matnr,
+             descripcion_referencia_venta TYPE makt-maktx,
+             talla                        TYPE mara-size1,
+             color                        TYPE mara-color,
+             tono                         TYPE wrf_charvalt-atwtb,
+             tipo_material                TYPE mara-mtart,
+             categoria_valoracion         TYPE mbew-bklas,
+             marca                        TYPE mara-brand_id,
+             genero                       TYPE wrf_charvalt-atwtb,
+             extension_marca              TYPE wrf_charvalt-atwtb,
+             version_fabricacion          TYPE zed_version_fab_concatenada,
+             umb                          TYPE mara-meins,
+             unidades_x_paquete           TYPE zed_um_alternativa,
+             material_generico            TYPE zed_materialgen,
+             numero_antiguo_material      TYPE mara-bismt,
+             currency                     TYPE keko-fwaer_kpf,
+             kalst                        TYPE keko-kalst,
+           END OF gtp_es_control_elementos_cab,
+
+           BEGIN OF gtp_es_procesos_adicionales,
+             kalnr                      TYPE keko-kalnr,
+             kadky                      TYPE keko-kadky,
+             material                   TYPE keko-matnr,
+             registro_info              TYPE eina-infnr,
+             cantidad_proceso_adicional TYPE eine-norbm,
+             valor_total_pa             TYPE eine-netpr,
+           END OF gtp_es_procesos_adicionales,
+
+           BEGIN OF gtp_es_control_elementos,
+             seleccionado                  TYPE zed_procesar_registro.
+             INCLUDE TYPE gtp_es_control_elementos_cab.
+    TYPES:
+      "Material (Semielaborado)
+        material_semielaborado        TYPE zed_material_semielaborado,
+             descripcion_semielaborado     TYPE makt-maktx,
+             tipo_material_semielaborado   TYPE zed_tipo_material_concatenado,
+             cantidad_semielaborado        TYPE ckis-menge,
+             um_semielaborado              TYPE mara-meins,
+             valor_total_semielaborado     TYPE ckis-wertn,
+             "Materia Prima
+             material_prima                TYPE zed_material_materia_prima,
+             descripcion_prima             TYPE makt-maktx,
+             tipo_material_prima           TYPE zed_tipo_material_concatenado,
+             cantidad_prima                TYPE ckis-menge,
+             um_prima                      TYPE mara-meins,
+             valor_total_prima             TYPE ckis-wertn,
+             "Material Empaque
+             material_empaque              TYPE zed_material_empaque,
+             descripcion_empaque           TYPE makt-maktx,
+             tipo_material_empaque         TYPE zed_tipo_material_concatenado,
+             cantidad_empaque              TYPE ckis-menge,
+             um_empaque                    TYPE mara-meins,
+             valor_total_empaque           TYPE ckis-wertn,
+             "Material Quimico
+             material_quimico              TYPE zed_material_quimico,
+             descripcion_quimico           TYPE makt-maktx,
+             tipo_material_quimico         TYPE zed_tipo_material_concatenado,
+             cantidad_quimico              TYPE ckis-menge,
+             um_quimico                    TYPE mara-meins,
+             valor_total_quimico           TYPE ckis-wertn,
+             "Mano de Obra Directa
+             sufijo_mano_obra              TYPE ckis-lstar,
+             clase_actividad_mano_obra     TYPE zed_clase_actividad,
+             cantidad_mano_obra            TYPE ckis-menge,
+             um_mano_obra                  TYPE ckis-meeht,
+             valor_mano_obra               TYPE ckis-wertn,
+             "procesos adicionales
+             registro_info                 TYPE eina-infnr,
+             precio_neto_proceso_adicional TYPE eine-netpr,
+             cantidad_proceso_adicional    TYPE ckis-menge,
+             valor_total_pa                TYPE ckis-wertn,
+             "Costo directo
+             costo_directo                 TYPE ckis-wertn,
+             "GIF / Gastos indirectos de Fabricación
+             sufijo_gif                    TYPE ckis-lstar,
+             clase_actividad_gif           TYPE zed_clase_actividad,
+             cantidad_gif                  TYPE ckis-menge,
+             um_gif                        TYPE ckis-meeht,
+             valor_gif                     TYPE ckis-wertn,
+             "Costo fabricacion
+             costo_fabrica                 TYPE ckis-wertn,
+             costo_total_referencia        TYPE ckis-wertn,
+             costo_total                   TYPE ckis-wertn,
+             "Conversión de metros a kilos o viceversa según las siguientes reglas de conversión (para telas).
+             x_conversion                  TYPE zed_ct_elementos_conversion,
+           END OF gtp_es_control_elementos.
+
+
+    TYPES: gtp_ti_control_elementos     TYPE STANDARD TABLE OF gtp_es_control_elementos WITH EMPTY KEY,
+           gtp_ti_control_elementos_cab TYPE STANDARD TABLE OF gtp_es_control_elementos_cab WITH EMPTY KEY,
+           gtp_ti_categoria_material    TYPE STANDARD TABLE OF gtp_es_categoria_material WITH EMPTY KEY,
+           gtp_ti_cabecera_costo        TYPE STANDARD TABLE OF gtp_es_cabecera_costo WITH EMPTY KEY,
+           gtp_ti_dt_clase_actividad    TYPE STANDARD TABLE OF gtp_es_dt_clase_actividad WITH EMPTY KEY,
+           gtp_ti_tipo_material         TYPE STANDARD TABLE OF gtp_es_tipo_material WITH EMPTY KEY,
+           gtp_ti_clase_actividad       TYPE STANDARD TABLE OF gtp_es_clase_actividad WITH EMPTY KEY,
+           gtp_ti_procesos_adicionales  TYPE STANDARD TABLE OF gtp_es_procesos_adicionales WITH EMPTY KEY,
+           gtp_ti_material              TYPE STANDARD TABLE OF gtp_es_material WITH EMPTY KEY.
+
+    TYPES: gtp_r_fecha TYPE RANGE OF keko-kadat.
+
+    DATA: go_alv                         TYPE REF TO cl_gui_alv_grid,
+          go_dock_container              TYPE REF TO cl_gui_docking_container,
+          go_parametros                  TYPE REF TO zclcxr1000_parametros,
+          go_log                         TYPE REF TO zclcxr1002_log_aplicacion,
+          gti_control_elemento_detallado TYPE gtp_ti_control_elementos,
+          gti_control_elementos          TYPE REF TO data,
+          gr_excluir_columnas_agrupado   TYPE RANGE OF string,
+          gr_excluir_columnas_detallado  TYPE RANGE OF string,
+          gr_r_material_grupo1           TYPE RANGE OF mara-mtart,
+          gr_r_material_grupo2           TYPE RANGE OF mara-mtart,
+          gr_tp_material_telas           TYPE RANGE OF mara-mtart,
+          gr_equivalencia_caracteristica TYPE RANGE OF string.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      cargar_parametros,
+      iniciar_proceso_datos
+        IMPORTING
+          VALUE(i_r_matnr)   TYPE data
+          VALUE(i_r_werks)   TYPE data
+          VALUE(i_r_kadat)   TYPE gtp_r_fecha
+          VALUE(i_r_klvar)   TYPE data
+          VALUE(i_detallado) TYPE flag
+          VALUE(i_agrupado)  TYPE flag,
+      visualizar_reporte
+        IMPORTING
+          i_reporte  TYPE syrepid
+          i_layout   TYPE disvariant-variant
+          i_agrupado TYPE flag,
+      preparar_datos_para_legado,
+      enviar_a_sistema_legado
+        EXPORTING
+          e_ti_return   TYPE bapiret2_t
+        CHANGING
+          i_datos_proxy TYPE REF TO data.
+
+    CLASS-METHODS:
+      consultar_reporte_detallado
+        IMPORTING
+          VALUE(i_filtros_cabecera)          TYPE string
+          VALUE(i_fecha_cc_desde)            TYPE d
+          VALUE(i_agrupado)                  TYPE flag
+        EXPORTING
+          VALUE(e_ti_cabecera)               TYPE gtp_ti_control_elementos_cab
+          VALUE(e_ti_dt_semielaborado)       TYPE gtp_ti_categoria_material
+          VALUE(e_ti_dt_materia_prima)       TYPE gtp_ti_categoria_material
+          VALUE(e_ti_dt_empaque)             TYPE gtp_ti_categoria_material
+          VALUE(e_ti_dt_producto_quimico)    TYPE gtp_ti_categoria_material
+          VALUE(e_ti_cl_actividad_mano_obra) TYPE gtp_ti_dt_clase_actividad
+          VALUE(e_ti_cl_actividad_gif)       TYPE gtp_ti_dt_clase_actividad
+          VALUE(e_ti_procesos_adicionales)   TYPE gtp_ti_procesos_adicionales
+        ,
+      consultar_reporte_agrupado,
+      consultar_clase_actividad
+        IMPORTING
+          VALUE(i_ti_cabecera_costo)     TYPE gtp_ti_cabecera_costo
+          VALUE(i_ti_clase_actividad)    TYPE gtp_ti_clase_actividad
+        EXPORTING
+          VALUE(e_ti_dt_clase_actividad) TYPE gtp_ti_dt_clase_actividad,
+      consultar_categoria_material
+        IMPORTING
+          VALUE(i_ti_cabecera_costo)   TYPE gtp_ti_cabecera_costo
+          VALUE(i_ti_tipo_material)    TYPE gtp_ti_tipo_material
+        EXPORTING
+          VALUE(e_ti_detalle_material) TYPE gtp_ti_categoria_material,
+      consultar_caracteristica
+        IMPORTING
+          VALUE(i_ti_materiales) TYPE gtp_ti_material
+        EXPORTING
+          VALUE(e_ti_materiales) TYPE gtp_ti_material.
+
+    "Eventos ALV
+    METHODS:
+      evento_hotspot FOR EVENT hotspot_click OF cl_gui_alv_grid
+        IMPORTING
+          e_row_id
+          e_column_id,
+      evento_user_comand FOR EVENT user_command  OF cl_gui_alv_grid
+        IMPORTING
+          e_ucomm,
+      evento_tool_bar FOR EVENT toolbar  OF cl_gui_alv_grid
+        IMPORTING
+          e_interactive
+          e_object
+          sender.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS:
+      consolidar_datos
+        IMPORTING
+          VALUE(i_agrupado)                  TYPE flag
+        CHANGING
+          VALUE(c_ti_cabecera)               TYPE gtp_ti_control_elementos_cab
+          VALUE(c_ti_cl_actividad_mano_obra) TYPE gtp_ti_dt_clase_actividad
+          VALUE(c_ti_cl_actividad_gif)       TYPE gtp_ti_dt_clase_actividad
+          VALUE(c_ti_dt_semielaborado)       TYPE gtp_ti_categoria_material
+          VALUE(c_ti_dt_empaque)             TYPE gtp_ti_categoria_material
+          VALUE(c_ti_dt_materia_prima)       TYPE gtp_ti_categoria_material
+          VALUE(c_ti_dt_producto_quimico)    TYPE gtp_ti_categoria_material
+          VALUE(c_ti_procesos_adicionales)   TYPE gtp_ti_procesos_adicionales
+          c_ti_control_elementos             TYPE zclfir1113_control_elementos=>gtp_ti_control_elementos,
+      agregar_detalle
+        IMPORTING
+          i_es_control_elementos TYPE gtp_es_control_elementos_cab
+          i_sufijo               TYPE string
+          i_agrupado             TYPE flag
+        CHANGING
+          c_valor_total          TYPE gtp_es_categoria_material-valor_total
+          c_cantidad_total       TYPE gtp_es_categoria_material-cantidad
+          c_ti_control_elementos TYPE zclfir1113_control_elementos=>gtp_ti_control_elementos
+          c_ti_detalle           TYPE zclfir1113_control_elementos=>gtp_ti_categoria_material,
+      agregar_clase_actividad
+        IMPORTING
+          i_es_control_elementos    TYPE gtp_es_control_elementos_cab
+          i_sufijo                  TYPE string
+          i_agrupado                TYPE flag
+        CHANGING
+          c_valor_total             TYPE gtp_es_categoria_material-valor_total
+          c_ti_control_elementos    TYPE zclfir1113_control_elementos=>gtp_ti_control_elementos
+          c_ti_detalle_cl_actividad TYPE gtp_ti_dt_clase_actividad,
+      modificar_catalogo
+        IMPORTING
+          i_agrupado    TYPE flag
+        CHANGING
+          c_ti_catalogo TYPE lvc_t_fcat,
+      aplicar_convercion_de_medidas
+        CHANGING
+          c_es_control_elementos TYPE gtp_es_control_elementos,
+      agregar_procesos_adicionales
+        IMPORTING
+          i_es_control_elementos           TYPE zclfir1113_control_elementos=>gtp_es_control_elementos_cab
+          VALUE(i_ti_procesos_adicionales) TYPE zclfir1113_control_elementos=>gtp_ti_procesos_adicionales
+        CHANGING
+          c_ti_control_elementos           TYPE zclfir1113_control_elementos=>gtp_ti_control_elementos,
+      agrupar_datos
+        CHANGING
+          c_ti_control_elementos TYPE gtp_ti_control_elementos,
+      lineas_x_material
+        IMPORTING
+          VALUE(i_ti_detalle)    TYPE ANY TABLE
+          i_material             TYPE keko-matnr
+        RETURNING
+          VALUE(r_numero_lineas) TYPE i.
+ENDCLASS.
+
+CLASS zclfir1113_control_elementos IMPLEMENTATION.
+
+  METHOD cargar_parametros.
+
+    go_parametros = NEW zclcxr1000_parametros(
+      i_modulo = gc_modulo
+      i_ricefw = gc_ricefw ).
+
+    gr_r_material_grupo1 = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idcomo = 'GP1'
+                                                                                           AND idparam = 'TPMAT_CONV')
+                                     ( CORRESPONDING #( es_parametro MAPPING option = opti ) ) ).
+
+    gr_r_material_grupo2 = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idcomo = 'GP2'
+                                                                                           AND idparam = 'TPMAT_CONV')
+                                     ( CORRESPONDING #( es_parametro MAPPING option = opti ) ) ).
+
+    gr_tp_material_telas = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'TPMAT_TELA')
+                                     ( CORRESPONDING #( es_parametro MAPPING option = opti ) ) ).
+
+    gr_equivalencia_caracteristica = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CARCT_EQUI')
+                                     ( CORRESPONDING #( es_parametro MAPPING option = opti ) ) ).
+
+  ENDMETHOD.
+
+  METHOD constructor.
+    cargar_parametros( ).
+
+    gr_excluir_columnas_agrupado = VALUE #( sign = 'I' option = 'EQ'
+                                            ( low = 'MATERIAL_SEMIELABORADO' )
+                                            ( low = 'DESCRIPCION_SEMIELABORADO' )
+                                            ( low = 'MATERIAL_PRIMA' )
+                                            ( low = 'DESCRIPCION_PRIMA' )
+                                            ( low = 'MATERIAL_EMPAQUE' )
+                                            ( low = 'DESCRIPCION_EMPAQUE' )
+                                            ( low = 'MATERIAL_QUIMICO' )
+                                            ( low = 'DESCRIPCION_QUIMICO' )
+                                            ( low = 'SUFIJO_GIF' )
+                                            ( low = 'SUFIJO_MANO_OBRA' ) ).
+
+    gr_excluir_columnas_detallado = VALUE #( sign = 'I' option = 'EQ'
+                                            ( low = 'SELECCIONADO' )
+                                            ( low = 'SUFIJO_GIF' )
+                                            ( low = 'SUFIJO_MANO_OBRA' ) ).
+
+  ENDMETHOD.
+
+
+  METHOD agrupar_datos.
+
+    DATA: ti_campos_reporte_agrupado  TYPE zclcxr1002_util=>gtp_ti_estructura_tabla,
+          ti_campos_clase_actividad   TYPE zclcxr1002_util=>gtp_ti_estructura_tabla,
+          ti_clase_actividad          TYPE gtp_ti_dt_clase_actividad,
+          r_es_control_elementos_agrp TYPE REF TO data,
+          costo_total                 TYPE ckis-wertn.
+
+    FIELD-SYMBOLS: <fs_ti_control_elementos_agrp> TYPE ANY TABLE,
+                   <fs_es_control_elementos_agrp> TYPE any.
+
+    TRY.
+
+        ti_campos_clase_actividad = zclcxr1002_util=>get_componentes( i_objeto = ti_clase_actividad ).
+
+        LOOP AT c_ti_control_elementos REFERENCE INTO DATA(r_es_control_elementos_gr)
+                                       GROUP BY r_es_control_elementos_gr->sufijo_gif.
+
+          CHECK r_es_control_elementos_gr->sufijo_gif IS NOT INITIAL.
+
+          LOOP AT ti_campos_clase_actividad INTO DATA(es_campo_clase_actividad)
+                                            WHERE nombre NE 'KALNR'
+                                            AND nombre NE 'KADKY'
+                                            AND nombre NE 'SUFIJO'
+                                            AND nombre NE gc_nombre_campo_material_padre.
+            APPEND INITIAL LINE TO ti_campos_reporte_agrupado
+            ASSIGNING FIELD-SYMBOL(<fs_es_campo_reporte_agrupado>).
+
+            <fs_es_campo_reporte_agrupado> = CORRESPONDING #( es_campo_clase_actividad ).
+            <fs_es_campo_reporte_agrupado>-nombre = |{ <fs_es_campo_reporte_agrupado>-nombre }_{ r_es_control_elementos_gr->sufijo_gif }|.
+
+          ENDLOOP.
+
+        ENDLOOP.
+
+        INSERT LINES OF zclcxr1002_util=>get_componentes( i_objeto = c_ti_control_elementos )
+        INTO ti_campos_reporte_agrupado INDEX 1.
+
+        DELETE ti_campos_reporte_agrupado WHERE nombre CS gc_gif.
+
+        gti_control_elementos =
+          zclcxr1002_util=>crear_ti_dinamica(
+          EXPORTING
+            i_tipo_clave               = cl_abap_tabledescr=>keydefkind_empty
+            i_omitir_conversion_tipo_p = abap_true
+          CHANGING
+            c_ti_campos                = ti_campos_reporte_agrupado ).
+
+        ASSIGN gti_control_elementos->* TO <fs_ti_control_elementos_agrp>.
+
+        LOOP AT c_ti_control_elementos REFERENCE INTO r_es_control_elementos_gr
+                                       GROUP BY ( kalnr = r_es_control_elementos_gr->kalnr
+                                                  kadky = r_es_control_elementos_gr->kadky
+                                                  material = r_es_control_elementos_gr->material ).
+
+          CREATE DATA r_es_control_elementos_agrp LIKE LINE OF <fs_ti_control_elementos_agrp>.
+          ASSIGN r_es_control_elementos_agrp->* TO <fs_es_control_elementos_agrp>.
+
+          "Agregar clase de avisos
+          LOOP AT GROUP r_es_control_elementos_gr ASSIGNING FIELD-SYMBOL(<fs_es_control_elementos>)
+                                               WHERE sufijo_mano_obra IS NOT INITIAL
+                                               OR sufijo_gif IS NOT INITIAL.
+
+            "Ajustar version
+*            <fs_es_control_elementos>-version_fabricacion =
+*            replace( val = <fs_es_control_elementos>-version_fabricacion sub = '_' with = space ).
+
+            LOOP AT ti_campos_clase_actividad INTO es_campo_clase_actividad
+                                            WHERE nombre NE 'KALNR'
+                                            AND nombre NE 'KADKY'
+                                            AND nombre NE 'SUFIJO'.
+
+              ASSIGN COMPONENT |{ es_campo_clase_actividad-nombre }_{ gc_gif }|
+              OF STRUCTURE <fs_es_control_elementos>
+              TO FIELD-SYMBOL(<fs_valor_componente_origen>).
+
+              CHECK sy-subrc IS INITIAL.
+
+              es_campo_clase_actividad-nombre = |{ es_campo_clase_actividad-nombre }_{ <fs_es_control_elementos>-sufijo_gif }|.
+
+              ASSIGN COMPONENT es_campo_clase_actividad-nombre OF STRUCTURE <fs_es_control_elementos_agrp>
+              TO FIELD-SYMBOL(<fs_valor_componente_destino>).
+
+              CHECK sy-subrc IS INITIAL.
+
+              <fs_valor_componente_destino> = <fs_valor_componente_origen>.
+
+              IF es_campo_clase_actividad-nombre CS 'VALOR'.
+                costo_total = costo_total + <fs_valor_componente_destino>.
+              ENDIF.
+
+            ENDLOOP.
+
+          ENDLOOP.
+
+          r_es_control_elementos_gr->costo_total = costo_total + r_es_control_elementos_gr->valor_mano_obra + r_es_control_elementos_gr->valor_total_pa
+          + r_es_control_elementos_gr->valor_total_empaque + r_es_control_elementos_gr->valor_total_prima + r_es_control_elementos_gr->valor_total_quimico + r_es_control_elementos_gr->valor_total_semielaborado.
+
+          <fs_es_control_elementos_agrp> = CORRESPONDING #( BASE ( <fs_es_control_elementos_agrp> ) r_es_control_elementos_gr->* ).
+
+          INSERT <fs_es_control_elementos_agrp> INTO TABLE <fs_ti_control_elementos_agrp>.
+
+        ENDLOOP.
+
+      CATCH cx_sy_struct_creation INTO DATA(o_cx).
+      CATCH cx_dynamic_check INTO DATA(o_cx_dy).
+        DATA(msg) = o_cx_dy->get_text( ).
+        msg = o_cx_dy->get_longtext( ).
+      CATCH cx_static_check.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD consolidar_datos.
+
+    DATA: BEGIN OF es_lineas_detalle,
+            tabla  TYPE string,
+            lineas TYPE i,
+          END OF es_lineas_detalle,
+
+          ti_lineas_detalle LIKE STANDARD TABLE OF es_lineas_detalle.
+
+    DATA: cantidad_total_semielaborado TYPE gtp_es_categoria_material-cantidad,
+          cantidad_total_empaque       TYPE gtp_es_categoria_material-cantidad,
+          cantidad_total_materia_prima TYPE gtp_es_categoria_material-cantidad,
+          cantidad_total_prod_quimico  TYPE gtp_es_categoria_material-cantidad,
+          total_semielaborado          TYPE gtp_es_categoria_material-valor_total,
+          total_empaque                TYPE gtp_es_categoria_material-valor_total,
+          total_materia_prima          TYPE gtp_es_categoria_material-valor_total,
+          total_producto_quimico       TYPE gtp_es_categoria_material-valor_total,
+          total_mano_obra              TYPE gtp_es_categoria_material-valor_total,
+          total_gif                    TYPE gtp_es_categoria_material-valor_total,
+          total_proceso_adicionales    TYPE gtp_es_categoria_material-valor_total.
+
+*    SORT c_ti_cabecera BY material talla color.                                            ".comentario 17.12.2024 Jose Miguel Valencia
+    SORT c_ti_cabecera BY material talla color ASCENDING version_fabricacion DESCENDING.    ".adicion 17.12.2024 Jose Miguel Valencia
+
+    LOOP AT c_ti_cabecera ASSIGNING FIELD-SYMBOL(<fs_es_cabecera_gr>)
+                            GROUP BY <fs_es_cabecera_gr>-material.
+
+      "Generar lineas de reporte
+      IF i_agrupado = abap_false.
+
+        CLEAR ti_lineas_detalle.
+
+        APPEND VALUE #( tabla = gc_semielaborado lineas = lineas_x_material( i_ti_detalle = c_ti_dt_semielaborado i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+        APPEND VALUE #( tabla = gc_empaque lineas = lineas_x_material( i_ti_detalle = c_ti_dt_empaque i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+        APPEND VALUE #( tabla = gc_materia_prima lineas = lineas_x_material( i_ti_detalle = c_ti_dt_materia_prima i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+        APPEND VALUE #( tabla = gc_producto_quimico lineas = lineas_x_material( i_ti_detalle = c_ti_dt_producto_quimico i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+      ENDIF.
+
+      "Lineas clase actividad
+      APPEND VALUE #( tabla = gc_mano_obra lineas = lineas_x_material( i_ti_detalle = c_ti_cl_actividad_mano_obra i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+      APPEND VALUE #( tabla = gc_gif lineas = lineas_x_material( i_ti_detalle = c_ti_cl_actividad_gif i_material = <fs_es_cabecera_gr>-material ) ) TO ti_lineas_detalle.
+
+      SORT ti_lineas_detalle BY lineas DESCENDING.
+
+      DATA(mayor_numero_lineas) = VALUE #( ti_lineas_detalle[ 1 ]-lineas OPTIONAL ).
+
+      IF mayor_numero_lineas IS INITIAL.
+        mayor_numero_lineas = 1.
+      ENDIF.
+
+      DO mayor_numero_lineas TIMES.
+        IF sy-index = 1."Agregar encabezado completo solo para primera linea
+          APPEND INITIAL LINE TO c_ti_control_elementos ASSIGNING FIELD-SYMBOL(<fs_es_control_elementos>).
+          <fs_es_control_elementos> = CORRESPONDING #( <fs_es_cabecera_gr> ).
+        ELSE.
+          APPEND VALUE #( material = <fs_es_cabecera_gr>-material
+                          descripcion_referencia_venta = <fs_es_cabecera_gr>-descripcion_referencia_venta
+                          currency = <fs_es_cabecera_gr>-currency
+                          kalnr = <fs_es_cabecera_gr>-kalnr
+                          kadky = <fs_es_cabecera_gr>-kadky )
+          TO c_ti_control_elementos.
+        ENDIF.
+      ENDDO.
+
+      CHECK c_ti_control_elementos IS NOT INITIAL.
+
+      "Agregar lineas detalle
+      agregar_detalle( EXPORTING i_es_control_elementos = <fs_es_cabecera_gr>
+                                 i_sufijo               = gc_semielaborado
+                                 i_agrupado             = i_agrupado
+                       CHANGING  c_ti_control_elementos = c_ti_control_elementos
+                                 c_valor_total          = total_semielaborado
+                                 c_cantidad_total       = cantidad_total_semielaborado
+                                 c_ti_detalle           = c_ti_dt_semielaborado ).
+
+      agregar_detalle( EXPORTING i_es_control_elementos = <fs_es_cabecera_gr>
+                                 i_sufijo               = gc_empaque
+                                 i_agrupado             = i_agrupado
+                       CHANGING  c_ti_control_elementos = c_ti_control_elementos
+                                 c_valor_total          = total_empaque
+                                 c_cantidad_total       = cantidad_total_empaque
+                                 c_ti_detalle           = c_ti_dt_empaque ).
+
+      agregar_detalle( EXPORTING i_es_control_elementos = <fs_es_cabecera_gr>
+                                 i_sufijo               = gc_materia_prima
+                                 i_agrupado             = i_agrupado
+                       CHANGING  c_ti_control_elementos = c_ti_control_elementos
+                                 c_valor_total          = total_materia_prima
+                                 c_cantidad_total       = cantidad_total_materia_prima
+                                 c_ti_detalle           = c_ti_dt_materia_prima ).
+
+      agregar_detalle( EXPORTING i_es_control_elementos = <fs_es_cabecera_gr>
+                                 i_sufijo               = gc_producto_quimico
+                                 i_agrupado             = i_agrupado
+                       CHANGING  c_ti_control_elementos = c_ti_control_elementos
+                                 c_valor_total          = total_producto_quimico
+                                 c_cantidad_total       = cantidad_total_prod_quimico
+                                 c_ti_detalle           = c_ti_dt_producto_quimico ).
+
+      "agregar clase de actividades
+      agregar_clase_actividad(
+        EXPORTING
+          i_es_control_elementos    = <fs_es_cabecera_gr>
+          i_sufijo                  = gc_mano_obra
+          i_agrupado                = i_agrupado
+        CHANGING
+          c_valor_total             = total_mano_obra
+          c_ti_control_elementos    = c_ti_control_elementos
+          c_ti_detalle_cl_actividad = c_ti_cl_actividad_mano_obra ).
+
+      agregar_clase_actividad(
+        EXPORTING
+          i_es_control_elementos    = <fs_es_cabecera_gr>
+          i_sufijo                  = gc_gif
+          i_agrupado                = i_agrupado
+        CHANGING
+          c_valor_total             = total_gif
+          c_ti_control_elementos    = c_ti_control_elementos
+          c_ti_detalle_cl_actividad = c_ti_cl_actividad_gif ).
+
+      agregar_procesos_adicionales( EXPORTING i_es_control_elementos    = <fs_es_cabecera_gr>
+                                              i_ti_procesos_adicionales = c_ti_procesos_adicionales
+                                    CHANGING  c_ti_control_elementos    = c_ti_control_elementos ).
+
+      """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+      "*****CALCULOS
+      """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+      "El costo del "Valor total del Semielaborado" se debe sumar con el costo Directo.
+      <fs_es_control_elementos>-costo_directo = total_empaque + total_materia_prima + total_producto_quimico +
+                                                total_mano_obra + total_semielaborado.
+
+      <fs_es_control_elementos>-costo_fabrica = <fs_es_control_elementos>-costo_directo + total_proceso_adicionales + total_gif.
+***      <fs_es_control_elementos>-costo_total_referencia = <fs_es_control_elementos>-costo_fabrica + total_semielaborado.
+
+      aplicar_convercion_de_medidas( CHANGING c_es_control_elementos = <fs_es_control_elementos> ).
+
+      "Descartar registros
+      IF i_agrupado = abap_true
+      AND line_exists( c_ti_cl_actividad_gif[ kalnr = <fs_es_cabecera_gr>-kalnr kadky = <fs_es_cabecera_gr>-kadky ] ).
+        DELETE c_ti_control_elementos WHERE material = <fs_es_cabecera_gr>-material
+                                        AND sufijo_gif = space
+                                        AND sufijo_mano_obra = space.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD agregar_clase_actividad.
+
+    DATA: o_ttdescribe   TYPE REF TO cl_abap_tabledescr,
+          o_stdescribe   TYPE REF TO cl_abap_structdescr,
+          ti_component_d TYPE abap_component_tab,
+          indice         TYPE i,
+          condicion      TYPE string,
+          ti_component   TYPE abap_component_tab,
+          es_component   LIKE LINE OF ti_component.
+
+    FIELD-SYMBOLS: <fs_es_control_elementos> LIKE LINE OF c_ti_control_elementos.
+
+    CHECK c_ti_control_elementos IS NOT INITIAL.
+
+    o_ttdescribe ?= cl_abap_structdescr=>describe_by_data( c_ti_detalle_cl_actividad ).
+    o_stdescribe ?= o_ttdescribe->get_table_line_type( ).
+
+    ti_component = o_stdescribe->get_components( ).
+    "busca estructuras anidadas
+    LOOP AT ti_component INTO es_component WHERE name = space OR as_include EQ abap_true.
+      o_stdescribe ?=  es_component-type.
+      APPEND LINES OF o_stdescribe->get_components( ) TO ti_component_d.
+    ENDLOOP.
+
+    DELETE ti_component WHERE name = space.
+    "agrega componenes anidados
+    APPEND LINES OF ti_component_d TO ti_component.
+
+    indice = line_index( c_ti_control_elementos[ kalnr = i_es_control_elementos-kalnr
+                                                 kadky   = i_es_control_elementos-kadky ] ).
+
+    CLEAR: c_valor_total.
+
+    SORT c_ti_detalle_cl_actividad BY kalnr kadky sufijo.
+
+    "Recorrer detalle para agregarlo al conjunto de datos correspondiente
+    LOOP AT c_ti_detalle_cl_actividad ASSIGNING FIELD-SYMBOL(<fs_es_detalle>)
+                         WHERE kalnr = i_es_control_elementos-kalnr
+                         AND kadky   = i_es_control_elementos-kadky.
+
+      UNASSIGN <fs_es_control_elementos>.
+
+      IF i_agrupado = abap_true.
+        condicion = | KALNR = '{ i_es_control_elementos-kalnr }' | &&
+                    | AND KADKY = '{ i_es_control_elementos-kadky }' | &&
+                    | AND MATERIAL = '{ i_es_control_elementos-material }' AND SUFIJO_{ i_sufijo } = '{ <fs_es_detalle>-sufijo }'|.
+        LOOP AT c_ti_control_elementos ASSIGNING <fs_es_control_elementos>
+                                       WHERE (condicion).
+        ENDLOOP.
+      ENDIF.
+
+      IF <fs_es_control_elementos> IS NOT ASSIGNED.
+        ASSIGN c_ti_control_elementos[ indice ] TO <fs_es_control_elementos>.
+
+        ADD 1 TO indice.
+
+      ENDIF.
+
+      LOOP AT ti_component ASSIGNING FIELD-SYMBOL(<fs_es_componente>).
+        ASSIGN COMPONENT |{ <fs_es_componente>-name }_{ i_sufijo }| OF STRUCTURE <fs_es_control_elementos>
+        TO FIELD-SYMBOL(<fs_valor_componente_destino>).
+
+        CHECK sy-subrc IS INITIAL.
+
+        ASSIGN COMPONENT |{ <fs_es_componente>-name }| OF STRUCTURE <fs_es_detalle>
+        TO FIELD-SYMBOL(<fs_valor_componente_origen>).
+
+        CHECK sy-subrc IS INITIAL.
+
+        IF i_agrupado = abap_true.
+
+          CASE <fs_es_componente>-name.
+            WHEN 'CLASE_ACTIVIDAD'.
+
+              IF <fs_valor_componente_destino> NS <fs_valor_componente_origen>.
+                <fs_valor_componente_destino> = |{ <fs_valor_componente_destino> } + { <fs_valor_componente_origen> }|.
+              ENDIF.
+
+              IF <fs_valor_componente_destino>(2) = ' +'.
+                <fs_valor_componente_destino> = replace( val = <fs_valor_componente_destino> sub = '+' with = space ).
+              ENDIF.
+
+            WHEN 'CANTIDAD' OR 'VALOR'.
+              <fs_valor_componente_destino> = <fs_valor_componente_destino> + <fs_valor_componente_origen>.
+            WHEN OTHERS.
+              <fs_valor_componente_destino> = <fs_valor_componente_origen>.
+          ENDCASE.
+
+        ELSE.
+          <fs_valor_componente_destino> = <fs_valor_componente_origen>.
+        ENDIF.
+
+      ENDLOOP.
+
+      c_valor_total = c_valor_total + <fs_es_detalle>-valor.
+
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD agregar_detalle.
+
+    DATA: o_ttdescribe   TYPE REF TO cl_abap_tabledescr,
+          o_stdescribe   TYPE REF TO cl_abap_structdescr,
+          ti_component_d TYPE abap_component_tab,
+          indice         TYPE i,
+          ti_component   TYPE abap_component_tab,
+          es_component   LIKE LINE OF ti_component.
+
+    o_ttdescribe ?= cl_abap_structdescr=>describe_by_data( c_ti_detalle ).
+    o_stdescribe ?= o_ttdescribe->get_table_line_type( ).
+
+    ti_component = o_stdescribe->get_components( ).
+    "busca estructuras anidadas
+    LOOP AT ti_component INTO es_component WHERE name = space OR as_include EQ abap_true.
+      o_stdescribe ?=  es_component-type.
+      APPEND LINES OF o_stdescribe->get_components( ) TO ti_component_d.
+    ENDLOOP.
+
+    DELETE ti_component WHERE name = space.
+    "agrega componenes anidados
+    APPEND LINES OF ti_component_d TO ti_component.
+
+    indice = line_index( c_ti_control_elementos[ kalnr = i_es_control_elementos-kalnr
+                                                 kadky   = i_es_control_elementos-kadky ] ).
+    CLEAR: c_valor_total, c_cantidad_total.
+
+    "Recorrer detalle para agregarlo al conjunto de datos correspondiente
+    LOOP AT c_ti_detalle ASSIGNING FIELD-SYMBOL(<fs_es_detalle>)
+                         WHERE kalnr = i_es_control_elementos-kalnr
+                         AND kadky   = i_es_control_elementos-kadky.
+
+      ASSIGN c_ti_control_elementos[ indice ] TO FIELD-SYMBOL(<fs_es_control_elementos>).
+
+      IF i_agrupado = abap_false.
+        ADD 1 TO indice.
+      ENDIF.
+
+      CHECK <fs_es_control_elementos> IS ASSIGNED.
+
+      LOOP AT ti_component ASSIGNING FIELD-SYMBOL(<fs_es_componente>).
+        ASSIGN COMPONENT |{ <fs_es_componente>-name }_{ i_sufijo }| OF STRUCTURE <fs_es_control_elementos>
+        TO FIELD-SYMBOL(<fs_valor_componente_destino>).
+
+        CHECK sy-subrc IS INITIAL.
+
+        ASSIGN COMPONENT |{ <fs_es_componente>-name }| OF STRUCTURE <fs_es_detalle>
+        TO FIELD-SYMBOL(<fs_valor_componente_origen>).
+
+        CHECK sy-subrc IS INITIAL.
+
+        IF i_agrupado = abap_true.
+
+          CASE <fs_es_componente>-name.
+            WHEN 'MATERIAL' OR 'DESCRIPCION'.
+
+            WHEN 'VALOR_TOTAL' OR 'CANTIDAD'.
+              <fs_valor_componente_destino> = <fs_valor_componente_destino> + <fs_valor_componente_origen>.
+            WHEN 'TIPO_MATERIAL'.
+              IF <fs_valor_componente_destino> NS <fs_valor_componente_origen>.
+                <fs_valor_componente_destino> = |{ <fs_valor_componente_destino> } + { <fs_valor_componente_origen> }|.
+              ENDIF.
+
+              IF <fs_valor_componente_destino>(2) = ' +'.
+                <fs_valor_componente_destino> = replace( val = <fs_valor_componente_destino> sub = '+' with = space ).
+              ENDIF.
+          ENDCASE.
+        ELSE.
+          <fs_valor_componente_destino> = <fs_valor_componente_origen>.
+        ENDIF.
+
+      ENDLOOP.
+
+      c_valor_total = c_valor_total + <fs_es_detalle>-valor_total.
+      c_cantidad_total = c_cantidad_total + <fs_es_detalle>-cantidad.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD lineas_x_material.
+
+    DATA(condicion_eliminacion) = |{ gc_nombre_campo_material_padre } NE I_MATERIAL|.
+    DELETE i_ti_detalle WHERE (condicion_eliminacion).
+
+    r_numero_lineas = lines( i_ti_detalle ).
+
+  ENDMETHOD.
+
+  METHOD iniciar_proceso_datos .
+
+    TRY.
+        DATA(filtro_cabecera) = cl_shdb_seltab=>combine_seltabs(
+          it_named_seltabs = VALUE #( ( name = 'MATNR' dref = REF #( i_r_matnr ) )
+                                      ( name = 'WERKS' dref = REF #( i_r_werks ) )
+                                      ( name = 'KADAT' dref = REF #( i_r_kadat ) )
+                                      ( name = 'KLVAR' dref = REF #( i_r_klvar ) )
+                                     )
+        ).
+
+        consultar_reporte_detallado( EXPORTING i_filtros_cabecera          = filtro_cabecera
+                                               i_fecha_cc_desde            = VALUE #( i_r_kadat[ 1 ]-low OPTIONAL )
+                                               i_agrupado                  = i_agrupado
+                                     IMPORTING e_ti_cabecera               = DATA(ti_cabecera)
+                                               e_ti_cl_actividad_mano_obra = DATA(ti_cl_actividad_mano_obra)
+                                               e_ti_cl_actividad_gif       = DATA(ti_cl_actividad_gif)
+                                               e_ti_dt_semielaborado       = DATA(ti_dt_semielaborado)
+                                               e_ti_dt_empaque             = DATA(ti_dt_empaque)
+                                               e_ti_dt_materia_prima       = DATA(ti_dt_materia_prima)
+                                               e_ti_dt_producto_quimico    = DATA(ti_dt_producto_quimico)
+                                               e_ti_procesos_adicionales   = DATA(ti_procesos_adicionales)
+                                              ).
+
+        consolidar_datos( EXPORTING i_agrupado                  = i_agrupado
+                          CHANGING  c_ti_cabecera               = ti_cabecera
+                                    c_ti_cl_actividad_mano_obra = ti_cl_actividad_mano_obra
+                                    c_ti_cl_actividad_gif       = ti_cl_actividad_gif
+                                    c_ti_dt_semielaborado       = ti_dt_semielaborado
+                                    c_ti_dt_empaque             = ti_dt_empaque
+                                    c_ti_dt_materia_prima       = ti_dt_materia_prima
+                                    c_ti_dt_producto_quimico    = ti_dt_producto_quimico
+                                    c_ti_procesos_adicionales   = ti_procesos_adicionales
+                                    c_ti_control_elementos      = gti_control_elemento_detallado ).
+
+        IF i_agrupado = abap_true.
+          agrupar_datos( CHANGING c_ti_control_elementos = gti_control_elemento_detallado ).
+        ELSE.
+          gti_control_elementos = REF #( gti_control_elemento_detallado ).
+        ENDIF.
+
+      CATCH cx_shdb_exception.
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD agregar_procesos_adicionales.
+
+    DATA: indice TYPE i.
+
+    FIELD-SYMBOLS: <fs_es_control_elementos> LIKE LINE OF c_ti_control_elementos.
+
+    indice = line_index( c_ti_control_elementos[ kalnr = i_es_control_elementos-kalnr
+                                                 kadky   = i_es_control_elementos-kadky ] ).
+
+    LOOP AT i_ti_procesos_adicionales ASSIGNING FIELD-SYMBOL(<fs_es_proceso_adicional>)
+                                      WHERE kalnr = i_es_control_elementos-kalnr
+                                      AND kadky = i_es_control_elementos-kadky.
+
+      ASSIGN c_ti_control_elementos[ indice ] TO <fs_es_control_elementos>.
+
+      CHECK sy-subrc IS INITIAL.
+
+      <fs_es_control_elementos> = CORRESPONDING #( BASE ( <fs_es_control_elementos> ) <fs_es_proceso_adicional>
+                                                   EXCEPT kadky kalnr material ).
+      ADD 1 TO indice.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD aplicar_convercion_de_medidas.
+
+    DATA: um_pap LIKE c_es_control_elementos-unidades_x_paquete.
+
+    "Si no existe PAP considerar PAP =1
+    um_pap = COND #( WHEN c_es_control_elementos-unidades_x_paquete IS INITIAL THEN
+                      1
+                     ELSE
+                      c_es_control_elementos-unidades_x_paquete ).
+
+    "Tomar el costo total de la referencia dividirlo por 1000, dividirlo por las unidades por paquete PAP(UMREN)
+    "y multiplicarlo por 12 para calcular el valor por docena.
+    IF c_es_control_elementos-tipo_material IN gr_r_material_grupo1
+    AND c_es_control_elementos-categoria_valoracion = '7920'.
+      c_es_control_elementos-x_conversion = ( ( c_es_control_elementos-costo_fabrica / 1000 ) / um_pap ) * 12.
+    ENDIF.
+
+    "Tomar el costo total de la referencia dividirlo por 1000 y multiplicarlo por 24 para calcular el valor por docena
+    IF c_es_control_elementos-tipo_material IN gr_r_material_grupo2
+    AND c_es_control_elementos-categoria_valoracion = '7900'.
+      c_es_control_elementos-x_conversion = ( ( c_es_control_elementos-costo_fabrica / 1000 ) / um_pap ) * 24.
+    ENDIF.
+
+    "Unidades a Kilos
+    SELECT SINGLE FROM marm
+    FIELDS meinh, umrez, umren
+    WHERE matnr = @c_es_control_elementos-material
+    AND meinh = 'KG'
+    INTO @DATA(es_um).
+
+    IF c_es_control_elementos-tipo_material IN gr_tp_material_telas
+    AND c_es_control_elementos-categoria_valoracion = '7904'.
+
+      c_es_control_elementos-x_conversion = ( ( c_es_control_elementos-costo_fabrica * ( es_um-umrez / es_um-umren ) ) / 1000 ).
+
+    ENDIF.
+    "Con la Column "Costo de Fabrica" se deben realizar los cálculos para la conversion de metros a kilos Columna.
+*    c_es_control_elementos-costo_fabrica = ( ( c_es_control_elementos-costo_fabrica * ( es_um-umrez / es_um-umren ) ) / 1000 ).
+
+  ENDMETHOD.
+
+  METHOD visualizar_reporte.
+    DATA: ti_catalogo_alv TYPE lvc_t_fcat,
+          ti_clasificar   TYPE lvc_t_sort,
+          perc            TYPE i,
+          extension       TYPE i VALUE 100.
+
+    ASSIGN gti_control_elementos->* TO FIELD-SYMBOL(<fs_ti_control_elementos>).
+
+    IF go_dock_container IS NOT BOUND AND cl_gui_alv_grid=>offline( ) IS INITIAL.
+
+      CREATE OBJECT go_dock_container
+        EXPORTING
+          side                        = cl_gui_docking_container=>dock_at_bottom
+        EXCEPTIONS
+          cntl_error                  = 1
+          cntl_system_error           = 2
+          create_error                = 3
+          lifetime_error              = 4
+          lifetime_dynpro_dynpro_link = 5
+          OTHERS                      = 6.
+
+      go_dock_container->get_ratio( IMPORTING ratio = perc ).
+      extension = ( 500 * extension / perc ).
+
+      go_dock_container->set_extension( extension ).
+
+    ENDIF.
+
+    IF go_alv IS NOT BOUND.
+
+      go_alv = NEW cl_gui_alv_grid( i_parent = go_dock_container ).
+
+      TRY.
+          ti_catalogo_alv = zclcxr1002_util=>construir_catalogo( i_ti = <fs_ti_control_elementos> i_conservar_indice_es_anidada = abap_true ).
+          modificar_catalogo( EXPORTING i_agrupado = i_agrupado CHANGING c_ti_catalogo = ti_catalogo_alv ).
+
+          IF i_agrupado = abap_false.
+            ti_clasificar = VALUE #( ( spos = 1 comp = abap_true fieldname = 'MATERIAL' subtot = abap_true ) ).
+          ENDIF.
+
+        CATCH cx_dynamic_check cx_static_check.
+          "handle exception
+      ENDTRY.
+
+      go_alv->register_edit_event(
+        EXPORTING
+          i_event_id = cl_gui_alv_grid=>mc_evt_modified
+        EXCEPTIONS
+          error      = 1
+          OTHERS     = 2 ).
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+      SET HANDLER: evento_hotspot     FOR go_alv,
+                   evento_user_comand FOR go_alv,
+                   evento_tool_bar    FOR go_alv.
+
+      go_alv->set_table_for_first_display(
+        EXPORTING
+          i_save                        = 'A'
+          is_variant                    = VALUE #( variant = i_layout report = i_reporte username = sy-uname )
+        CHANGING
+          it_outtab                     = <fs_ti_control_elementos> " Output Table
+          it_fieldcatalog               = ti_catalogo_alv " Field Catalog
+          it_sort                       = ti_clasificar
+        EXCEPTIONS
+          invalid_parameter_combination = 1
+          program_error                 = 2
+          too_many_lines                = 3
+          OTHERS                        = 4 ).
+
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+    ELSE.
+
+      go_alv->refresh_table_display( ).
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD modificar_catalogo.
+
+    DATA: r_columnas_cl_actividad TYPE RANGE OF string.
+
+    r_columnas_cl_actividad = VALUE #( sign = 'I' option = 'CP'
+                                      ( low = 'CANTIDAD_*' )
+                                      ( low = 'UM*' )
+                                      ( low = 'CLASE_ACTIVIDAD*' )
+                                      ( low = 'VALOR*' )
+                                      ).
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+      <fs_es_catalogo>-col_opt = abap_true.
+
+      DATA(nombre_columna) = <fs_es_catalogo>-fieldname.
+
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'SELECCIONADO'.
+          <fs_es_catalogo>-checkbox = abap_true.
+          <fs_es_catalogo>-edit = abap_true.
+          <fs_es_catalogo>-outputlen = 8.
+          <fs_es_catalogo>-coltext = TEXT-pro.
+        WHEN 'KALNR' OR 'KADKY'.
+          <fs_es_catalogo>-no_out = abap_true.
+        WHEN 'UMB'.
+          <fs_es_catalogo>-col_opt = abap_false.
+          <fs_es_catalogo>-tooltip = <fs_es_catalogo>-coltext = <fs_es_catalogo>-reptext.
+        WHEN 'VERSION_FABRICACION'.
+          <fs_es_catalogo>-col_opt = abap_false.
+          <fs_es_catalogo>-outputlen = 10.
+        WHEN 'UNIDADES_X_PAQUETE'.
+          <fs_es_catalogo>-col_opt = abap_false.
+          <fs_es_catalogo>-outputlen = 13.
+        WHEN 'TONO' OR 'TALLA' OR 'EXTENSION_MARCA' OR 'GENERO'
+        OR 'DESCRIPCION_SEMIELABORADO' OR 'TIPO_MATERIAL_SEMIELABORADO' OR 'CANTIDAD_SEMIELABORADO'
+        OR 'UM_SEMIELABORADO' OR 'VALOR_TOTAL_SEMIELABORADO' OR 'DESCRIPCION_PRIMA' OR 'TIPO_MATERIAL_PRIMA'
+        OR 'CANTIDAD_PRIMA' OR 'UM_PRIMA'
+        OR 'VALOR_TOTAL_PRIMA' OR 'DESCRIPCION_EMPAQUE' OR 'TIPO_MATERIAL_EMPAQUE'
+        OR 'CANTIDAD_EMPAQUE' OR 'UM_EMPAQUE' OR 'VALOR_TOTAL_EMPAQUE'
+        OR 'DESCRIPCION_QUIMICO' OR 'TIPO_MATERIAL_QUIMICO' OR 'CANTIDAD_QUIMICO'
+        OR 'UM_QUIMICO'
+        OR 'COSTO_DIRECTO' OR 'SUFIJO_GIF'
+        OR 'CLASE_ACTIVIDAD_GIF' OR 'CANTIDAD_GIF'
+        OR 'UM_GIF' OR 'VALOR_GIF'
+        OR 'COSTO_FABRICA' OR 'COSTO_TOTAL'.
+
+          <fs_es_catalogo>-tooltip =
+          <fs_es_catalogo>-coltext = zclcxr1002_util=>convertir_a_texto_columna( i_texto = CONV #( nombre_columna ) ).
+            if <fs_es_catalogo>-fieldname EQ 'VALOR_TOTAL_SEMIELABORADO' OR
+               <fs_es_catalogo>-fieldname EQ 'VALOR_TOTAL_PRIMA' OR
+               <fs_es_catalogo>-fieldname EQ 'VALOR_TOTAL_EMPAQUE' OR
+               <fs_es_catalogo>-fieldname EQ 'VALOR_GIF' OR
+               <fs_es_catalogo>-fieldname EQ 'COSTO_FABRICA' OR
+               <fs_es_catalogo>-fieldname EQ 'COSTO_TOTAL' OR
+               <fs_es_catalogo>-fieldname EQ 'COSTO_DIRECTO'.
+                <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+            endif.
+        WHEN 'VALOR_TOTAL_PA'.
+          <fs_es_catalogo>-tooltip =
+          <fs_es_catalogo>-coltext = TEXT-vpa.
+        WHEN 'REGISTRO_INFO' OR 'PRECIO_NETO_PROCESO_ADICIONAL' OR 'CANTIDAD_PROCESO_ADICIONAL'.
+          <fs_es_catalogo>-tooltip =
+          <fs_es_catalogo>-coltext = |{ <fs_es_catalogo>-reptext } PA |.
+
+        WHEN 'VALOR_TOTAL_QUIMICO' OR 'VALOR_MANO_OBRA' OR 'X_CONVERSION' OR 'COSTO_TOTAL_REFERENCIA' OR 'VALOR_AP' OR
+             'VALOR_DM' OR 'VALOR_MA' OR 'VALOR_MI' OR 'VALOR_MT'.
+             <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+      ENDCASE.
+
+      IF <fs_es_catalogo>-fieldname IN r_columnas_cl_actividad.
+        <fs_es_catalogo>-coltext =
+        <fs_es_catalogo>-coltext = zclcxr1002_util=>convertir_a_texto_columna( i_texto = CONV #( <fs_es_catalogo>-fieldname ) ).
+
+        <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = 'mano obra' with = 'MOD' ).
+        <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = 'proceso adicional' with = 'PA' ).
+        <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = ' pa ' with = ' PA ' ).
+        <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = 'gif' with = 'GIF' ).
+      ENDIF.
+
+      IF to_upper( <fs_es_catalogo>-fieldname(9) ) CS 'MATERIAL_'.
+*        <fs_es_catalogo>-col_opt = abap_false.
+        <fs_es_catalogo>-tooltip = <fs_es_catalogo>-coltext = <fs_es_catalogo>-reptext.
+      ENDIF.
+
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_materia_prima ) with = 'MP' ).
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_producto_quimico ) with = 'PQ' ).
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_materia_prima ) with = 'MP' ).
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_empaque ) with = 'ME' ).
+      <fs_es_catalogo>-coltext = replace( val = <fs_es_catalogo>-coltext sub = to_lower( gc_semielaborado ) with = 'SE' ).
+
+      IF i_agrupado = abap_false
+      AND ( <fs_es_catalogo>-datatype = 'QUAN'
+      OR <fs_es_catalogo>-datatype = 'DEC'
+      OR <fs_es_catalogo>-datatype = 'CURR' ).
+        <fs_es_catalogo>-do_sum = abap_true.
+      ENDIF.
+
+    ENDLOOP.
+
+    IF i_agrupado = abap_true.
+      DELETE c_ti_catalogo WHERE fieldname IN gr_excluir_columnas_agrupado.
+    ELSE.
+      DELETE c_ti_catalogo WHERE fieldname IN gr_excluir_columnas_detallado .
+    ENDIF.
+
+    DELETE c_ti_catalogo WHERE fieldname = 'COSTO_TOTAL' OR fieldname = 'COSTO_TOTAL_REFERENCIA'.
+
+  ENDMETHOD.
+
+  METHOD preparar_datos_para_legado.
+
+    DATA: es_datos_proxy              TYPE zpxcostos_material_enviar,
+          costo_total_formato         TYPE char25,
+          es_control_elementos_cab    TYPE gtp_es_control_elementos,
+          ti_equivalencia             TYPE STANDARD TABLE OF string,
+          ti_control_elementos_legado LIKE es_datos_proxy-costos_material_enviar-row.
+
+    FIELD-SYMBOLS: <fs_ti_control_elementos> TYPE ANY TABLE.
+
+    go_alv->check_changed_data( ).
+    BREAK seblondo.
+
+    ASSIGN gti_control_elementos->* TO <fs_ti_control_elementos>.
+
+    LOOP AT <fs_ti_control_elementos> ASSIGNING FIELD-SYMBOL(<fs_es_control_elementos>)
+                                    WHERE (' SELECCIONADO = ABAP_TRUE AND TIPO_MATERIAL IN gr_tp_material_telas ').
+
+      CLEAR: ti_equivalencia.
+
+      es_control_elementos_cab = CORRESPONDING #( <fs_es_control_elementos> ).
+
+      TRY.
+
+          WRITE es_control_elementos_cab-x_conversion TO costo_total_formato CURRENCY es_control_elementos_cab-currency.
+
+          DATA(caracteristica) = es_control_elementos_cab-material_generico+8(1).
+
+          LOOP AT gr_equivalencia_caracteristica INTO DATA(es_equivalencia) WHERE low = caracteristica.
+            APPEND es_equivalencia-high TO ti_equivalencia.
+          ENDLOOP.
+
+        CATCH cx_root.
+
+      ENDTRY.
+
+      IF ti_equivalencia IS INITIAL.
+        APPEND space TO ti_equivalencia.
+      ENDIF.
+
+      "Una linea por equivalencia encontrada, o como minimo una linea por delta desagregado.
+      LOOP AT ti_equivalencia INTO DATA(es_valor_equivalencia).
+
+        ti_control_elementos_legado = VALUE #( BASE ti_control_elementos_legado
+                                          ( material_generico  = es_control_elementos_cab-numero_antiguo_material
+                                            material_variante   = es_control_elementos_cab-material
+                                            co_color   = es_control_elementos_cab-color
+                                            diametro_talla = es_control_elementos_cab-talla
+                                            co_caracteristica = es_valor_equivalencia
+                                            co_version   = es_control_elementos_cab-version_fabricacion
+                                            anno_mes = replace( val = es_control_elementos_cab-kadky sub = '-' with = space occ = 0 )
+                                            costo   = shift_left( val = replace( val = costo_total_formato sub = '.' with = space occ = 0 ) )
+                                            usuario = sy-uname ) ).
+      ENDLOOP.
+
+    ENDLOOP.
+
+    IF ti_control_elementos_legado IS NOT INITIAL.
+
+      es_datos_proxy-costos_material_enviar-row = ti_control_elementos_legado.
+
+      "Consultar la información técnica del proxy
+      SELECT SINGLE *
+        FROM sproxhdr
+       WHERE object =   'CLAS'
+         AND obj_name = 'ZPXCO_COSTOS_MATERIAL_ENVIAR_O'
+         AND inactive = @space
+        INTO @DATA(es_info_proxy).
+
+      TRY.
+          "Inscribe en el monitor la información para el llamado del proxy
+          DATA(o_monitor) = NEW zclcxr1001_monitor_integracion(
+            i_ricefw          = gc_ricefw_integracion
+            i_es_info_mensaje = VALUE ztcxr1001_1(
+                                        pid       = 'SENDER'
+                                        fecha_ini = sy-datum
+                                        hora_ini  = sy-uzeit
+                                        hora_fin  = sy-uzeit
+                                        ob_system = 'SAP'
+                                        ob_ns     = es_info_proxy-ifr_nspce
+                                        ob_name   = es_info_proxy-ifr_name
+                                        ib_system = 'KPO'
+                                        tcode     = sy-tcode )
+            i_datos_proxy     = es_datos_proxy
+            i_no_commit       = abap_true ).
+
+          o_monitor->main( i_datos_proxy = REF #( es_datos_proxy ) ).
+
+          MESSAGE i097(zcx01).
+        CATCH zcxr1001_excepciones_monitor.
+
+      ENDTRY.
+    ELSE.
+      MESSAGE i413(zmm01).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD consultar_reporte_detallado BY DATABASE PROCEDURE
+                                FOR HDB LANGUAGE SQLSCRIPT
+                                OPTIONS READ-ONLY
+                                USING keko ckis eina eine mara makt mbew marm ztcxr1000_2
+                                zclfir1113_control_elementos=>consultar_caracteristica
+                                zclfir1113_control_elementos=>consultar_clase_actividad
+                                zclfir1113_control_elementos=>consultar_categoria_material.
+
+    DECLARE mandante varchar(3) := session_context ('CLIENT');
+    DECLARE lenguaje_sistema varchar(2) := session_context ('LOCALE_SAP');
+    DECLARE ricefw VARCHAR(5) := 'R1113';
+
+    ti_cc_producto =
+    SELECT
+    _material.mandt, _costos_cab.kalnr, kadky, tvers, _material.matnr, werks, kadat, klvar,
+    _descripcion_material.maktx, _material.mtart, _material.size1, _material.color, _valoracion.bklas,
+    brand_id, verid, _material.meins, _unidad_medida.umren, fwaer_kpf, satnr material_generico,
+    bismt numero_antiguo_material, cmf_nr, kalst
+    FROM keko as _costos_cab
+    INNER JOIN mara as _material ON
+    _material.mandt = _costos_cab.mandt
+    AND _material.matnr = _costos_cab.matnr
+    INNER JOIN makt as _descripcion_material ON
+    _descripcion_material.mandt = _material.mandt
+    AND _descripcion_material.matnr = _material.matnr
+    AND _descripcion_material.spras = :lenguaje_sistema
+    LEFT JOIN mbew as _valoracion ON
+    _valoracion.mandt = _costos_cab.mandt
+    AND _valoracion.matnr = _costos_cab.matnr
+    AND _valoracion.bwkey = _costos_cab.werks
+    LEFT JOIN marm as _unidad_medida ON
+    _unidad_medida.mandt = _material.mandt
+    AND _unidad_medida.matnr = _material.matnr
+    AND _unidad_medida.meinh = 'PAP'
+    WHERE _costos_cab.mandt = :mandante
+    AND _costos_cab.kadat = :i_fecha_cc_desde;
+
+    ti_cc_producto = apply_filter ( :ti_cc_producto, :i_filtros_cabecera );
+
+    ti_materiales =
+    SELECT DISTINCT
+    mandt, matnr as material, color, size1 as talla, '' as caracteristica, '' as valor_caracteristica
+    FROM :ti_cc_producto;
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CARACTERISTICA"(
+             i_ti_materiales => :ti_materiales,
+             e_ti_materiales => :ti_caracteristicas );
+
+    ti_cabecera_costo =
+    SELECT
+    mandt, kalnr, kadky, tvers,  verid, matnr as material,
+    CASE
+    WHEN matnr LIKE '%TA%' OR matnr LIKE '%EA%' THEN
+        matnr
+    ELSE
+        ''
+    END AS material_ta
+    FROM :ti_cc_producto;
+
+    -- Materiales TA/CA para conformar Version{
+    ti_materiales_ta_ca =
+    SELECT
+    _cabecera.mandt, _cabecera.kalnr, _cabecera.kadky, _cabecera.tvers, _cabecera.material, _cabecera.material_ta,
+    ckis.matnr as material_ca, _cabecera.verid as verid_ta, keko.verid as verid_ca,
+    CONCAT( CONCAT( _cabecera.verid, '' ) , keko.verid ) AS verid
+    FROM :ti_cabecera_costo AS _cabecera
+    INNER JOIN ckis ON
+    ckis.mandt = _cabecera.mandt
+    AND ckis.kalnr = _cabecera.kalnr
+    AND ckis.kadky = _cabecera.kadky
+    AND ckis.tvers = _cabecera.tvers
+    AND ( ckis.matnr like '%CA%' OR ckis.matnr like '%TA%' )
+    INNER JOIN keko ON
+    keko.mandt = ckis.mandt
+*    AND keko.kalnr = ckis.kalnr
+    AND keko.kadky = ckis.kadky
+    AND keko.tvers = ckis.tvers
+    AND keko.matnr = ckis.matnr
+    WHERE material_ta <> '';
+
+    IF :i_agrupado = '' THEN
+        ti_materiales_ta_ca =
+        SELECT *
+        FROM :ti_materiales_ta_ca
+        WHERE mandt = '';
+    END IF ;
+    --}
+
+    ti_parametros =
+    SELECT *
+    FROM ztcxr1000_2
+    WHERE ricefw = :ricefw
+    AND idparam IN ( 'MAT_SEMIEL', 'MAT_PRIMA', 'MAT_EMPINS', 'MAT_QUIMIC', 'CLACT_MNOB', 'CLACT_GIF');
+
+    ti_tp_material_semielaorado =
+    SELECT low AS mtart FROM :ti_parametros WHERE idparam = 'MAT_SEMIEL';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CATEGORIA_MATERIAL"(
+             i_ti_cabecera_costo   => :ti_cabecera_costo,
+             i_ti_tipo_material    => :ti_tp_material_semielaorado,
+             e_ti_detalle_material => :e_ti_dt_semielaborado );
+
+    ti_tp_material_materia_prima =
+    SELECT low AS mtart FROM :ti_parametros WHERE idparam = 'MAT_PRIMA';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CATEGORIA_MATERIAL"(
+             i_ti_cabecera_costo   => :ti_cabecera_costo,
+             i_ti_tipo_material    => :ti_tp_material_materia_prima,
+             e_ti_detalle_material => :e_ti_dt_materia_prima );
+
+    ti_tp_material_empaque =
+    SELECT low AS mtart FROM :ti_parametros WHERE idparam = 'MAT_EMPINS';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CATEGORIA_MATERIAL"(
+             i_ti_cabecera_costo   => :ti_cabecera_costo,
+             i_ti_tipo_material    => :ti_tp_material_empaque,
+             e_ti_detalle_material => :e_ti_dt_empaque );
+
+    ti_tp_material_quimico =
+    SELECT low AS mtart FROM :ti_parametros WHERE idparam = 'MAT_QUIMIC';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CATEGORIA_MATERIAL"(
+             i_ti_cabecera_costo   => :ti_cabecera_costo,
+             i_ti_tipo_material    => :ti_tp_material_quimico,
+             e_ti_detalle_material => :e_ti_dt_producto_quimico );
+
+    --clase de actividades
+    ti_clase_actividad =
+    SELECT low setname FROM :ti_parametros WHERE idparam = 'CLACT_MNOB';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CLASE_ACTIVIDAD"(
+             i_ti_cabecera_costo     => :ti_cabecera_costo,
+             i_ti_clase_actividad    => :ti_clase_actividad,
+             e_ti_dt_clase_actividad => :e_ti_cl_actividad_mano_obra  );
+
+    ti_clase_actividad_gif =
+    SELECT low setname FROM :ti_parametros WHERE idparam = 'CLACT_GIF';
+
+    CALL "ZCLFIR1113_CONTROL_ELEMENTOS=>CONSULTAR_CLASE_ACTIVIDAD"(
+             i_ti_cabecera_costo     => :ti_cabecera_costo,
+             i_ti_clase_actividad    => :ti_clase_actividad_gif,
+             e_ti_dt_clase_actividad => :e_ti_cl_actividad_gif  );
+
+    --registro info/Procesos adicionales
+    e_ti_procesos_adicionales =
+    SELECT
+    _cabecera.kalnr,
+    _cabecera.kadky,
+    _cabecera.matnr as material,
+    eina.infnr registro_info,
+    eine.norbm cantidad_proceso_adicional,
+    ( eine.netpr * 100 ) valor_total_pa
+    from :ti_cc_producto as _cabecera
+    inner join eina on
+    eina.mandt = _cabecera.mandt
+    and eina.matnr = _cabecera.matnr
+    inner join eine on
+    eine.mandt = eina.mandt
+    and eine.infnr = eina.infnr;
+
+      e_ti_cabecera =
+     SELECT
+     _cabecera.kalnr,
+     _cabecera.kadky,
+     _cabecera.matnr AS material,
+     _cabecera.maktx descripcion_referencia_venta,
+     _cabecera.size1 talla,
+     _cabecera.color,
+     _tono.valor_caracteristica tono,
+     _cabecera.mtart tipo_material,
+     _cabecera.bklas categoria_valoracion,
+     _cabecera.brand_id marca,
+     _genero.valor_caracteristica genero,
+     _extencion_mara.valor_caracteristica extension_marca,
+     CASE
+     WHEN _version.verid IS NULL OR _version.verid = '' THEN
+        _cabecera.verid
+     ELSE
+        _version.verid
+     END AS version_fabricacion,
+     _cabecera.meins umb,
+     _cabecera.umren unidades_x_paquete,
+     material_generico,
+     numero_antiguo_material,
+     _cabecera.fwaer_kpf currency,
+     kalst
+     FROM :ti_cc_producto AS _cabecera
+     LEFT JOIN :ti_materiales_ta_ca _version ON
+     _version.mandt = _cabecera.mandt
+     AND _version.kalnr = _cabecera.kalnr
+     AND _version.kadky = _cabecera.kadky
+     AND _version.tvers = _cabecera.tvers
+     LEFT JOIN :ti_caracteristicas AS _genero ON
+     _genero.material = _cabecera.matnr
+     AND _genero.caracteristica = '0000000829' --MM_MAT_GENERO
+     LEFT JOIN :ti_caracteristicas AS _extencion_mara ON
+     _extencion_mara.material = _cabecera.matnr
+     AND _genero.caracteristica = '0000000833' --MM_MAT_EXTENSION_MARCA
+     LEFT JOIN :ti_caracteristicas AS _tono ON
+     _tono.color = _cabecera.color
+     AND _tono.caracteristica = '0000001021' --MM_MAT_TONO_COLOR
+     ;
+
+  ENDMETHOD.
+
+  METHOD consultar_reporte_agrupado.
+
+  ENDMETHOD.
+
+  METHOD consultar_caracteristica BY DATABASE PROCEDURE
+                               FOR HDB LANGUAGE SQLSCRIPT
+                               OPTIONS READ-ONLY
+                               USING wrf_charvalt ztmmi1029_1 inob ausp.
+
+    ti_colores =
+    SELECT DISTINCT mandt, color
+    FROM :i_ti_materiales;
+
+    --Consultar tono
+    ti_tono =
+    SELECT
+    _color.mandt, _color.color, _caracteristicas.atinn as caracteristica, _caracteristicas.atwtb as valor_caracteristica
+    FROM :ti_colores AS _color
+    INNER JOIN ztmmi1029_1 as _colores_flex ON
+    _colores_flex.mandt = _color.mandt
+    AND _colores_flex.atwrt = _color.color
+    INNER JOIN wrf_charvalt as _caracteristicas ON
+    _caracteristicas.mandt = _colores_flex.mandt
+    AND _caracteristicas.atwrt = _colores_flex.intensity
+    WHERE _caracteristicas.atinn = '0000001021'; --MM_MAT_TONO_COLOR
+
+    --Genero / Extension Marca
+    ti_caracteristicas =
+    SELECT
+    _material.mandt, _material.material, _caracteristica.atinn as caracteristica, _caracteristica.atwtb as valor_caracteristica
+    FROM :i_ti_materiales as _material
+    LEFT JOIN inob AS _numero_interno ON
+    _numero_interno.mandt = _material.mandt
+    AND _numero_interno.objek = _material.material
+    LEFT JOIN ausp as _valor_caracteristica ON
+    _valor_caracteristica.mandt = _numero_interno.mandt
+    AND _valor_caracteristica.objek = _numero_interno.cuobj
+    LEFT JOIN wrf_charvalt as _caracteristica ON
+    _caracteristica.mandt = _valor_caracteristica.mandt
+    AND _caracteristica.atinn = _valor_caracteristica.atinn
+    AND _caracteristica.atwrt = _valor_caracteristica.atwrt
+    WHERE _caracteristica.atinn = '0000000829' --MM_MAT_GENERO
+    OR _caracteristica.atinn = '0000000833'; --MM_MAT_EXTENSION_MARCA
+
+    e_ti_materiales =
+    SELECT
+    _material.mandt, _material.material, _material.color, '' as talla,
+    _caracteristica.caracteristica, _caracteristica.valor_caracteristica
+    FROM :i_ti_materiales as _material
+    LEFT JOIN :ti_caracteristicas as _caracteristica ON
+    _caracteristica.material = _material.material
+    UNION
+    SELECT
+    _material.mandt, _material.material, _material.color, '' as talla,
+    _tono.caracteristica, _tono.valor_caracteristica
+    FROM :i_ti_materiales as _material
+    LEFT JOIN :ti_tono as _tono ON
+    _tono.color = _material.color;
+
+  ENDMETHOD.
+
+  METHOD consultar_categoria_material BY DATABASE PROCEDURE
+                                       FOR HDB LANGUAGE SQLSCRIPT
+                                       OPTIONS READ-ONLY
+                                       USING ckis mara makt.
+
+    DECLARE lenguaje_sistema varchar(2) := session_context ('LOCALE_SAP');
+
+    ti_posicion_costo =
+    SELECT
+    _cabecera_costos.kalnr, _cabecera_costos.kadky, _cabecera_costos.material material_padre,
+    _posicion_costo.matnr as material,
+    _descripcion_material.maktx as descripcion,
+    _material.mtart as tipo_material ,
+    _posicion_costo.menge as cantidad,
+    _material.meins as um,
+    _posicion_costo.wertn as valor_total
+    FROM :i_ti_cabecera_costo as _cabecera_costos
+    INNER JOIN ckis as _posicion_costo ON
+    _posicion_costo.mandt = _cabecera_costos.mandt
+    AND _posicion_costo.kalnr = _cabecera_costos.kalnr
+    AND _posicion_costo.kadky = _cabecera_costos.kadky
+    AND _posicion_costo.tvers = _cabecera_costos.tvers
+    INNER JOIN mara as _material ON
+    _material.mandt = _posicion_costo.mandt
+    AND _material.matnr = _posicion_costo.matnr
+    INNER JOIN makt as _descripcion_material ON
+    _descripcion_material.mandt = _material.mandt
+    AND _descripcion_material.matnr = _material.matnr
+    AND _descripcion_material.spras = :lenguaje_sistema
+    WHERE _material.mtart IN ( SELECT mtart FROM :i_ti_tipo_material );
+
+    e_ti_detalle_material =
+    SELECT
+    kalnr, kadky, material_padre, material, descripcion, tipo_material, cantidad, um, valor_total
+    FROM :ti_posicion_costo;
+
+  ENDMETHOD.
+
+  METHOD consultar_clase_actividad BY DATABASE PROCEDURE
+                                   FOR HDB LANGUAGE SQLSCRIPT
+                                   OPTIONS READ-ONLY
+                                   USING ckis setleaf.
+
+    e_ti_dt_clase_actividad =
+    SELECT
+    _cabecera_costos.kalnr,
+    _cabecera_costos.kadky,
+    _cabecera_costos.material as material_padre,
+    lstar clase_actividad,
+    menge cantidad,
+    meeht um,
+    wertn valor,
+    SUBSTRING( lstar, ( LENGTH( lstar ) - 1 ), 2  ) sufijo
+    FROM :i_ti_cabecera_costo AS _cabecera_costos
+    INNER JOIN ckis AS _posicion_costo
+    ON _posicion_costo.mandt = _cabecera_costos.mandt
+    AND _posicion_costo.kalnr = _cabecera_costos.kalnr
+    AND _posicion_costo.kadky = _cabecera_costos.kadky
+    AND _posicion_costo.tvers = _cabecera_costos.tvers
+    INNER JOIN setleaf AS _clase_actividad ON
+    _clase_actividad.valfrom = _posicion_costo.lstar
+    WHERE setname IN ( SELECT * FROM :i_ti_clase_actividad )
+    ORDER BY kalnr, kadky, sufijo;
+
+  ENDMETHOD.
+
+  METHOD evento_hotspot.
+
+  ENDMETHOD.
+
+  METHOD evento_user_comand.
+
+    FIELD-SYMBOLS: <fs_ti_control_elementos> TYPE ANY TABLE.
+
+    go_alv->check_changed_data( ).
+
+    ASSIGN gti_control_elementos->* TO <fs_ti_control_elementos>.
+
+    LOOP AT <fs_ti_control_elementos> ASSIGNING FIELD-SYMBOL(<fs_es_control_elementos>)
+                                      WHERE (' TIPO_MATERIAL IN gr_tp_material_telas ').
+
+      ASSIGN COMPONENT 'SELECCIONADO' OF STRUCTURE <fs_es_control_elementos>
+      TO FIELD-SYMBOL(<fs_selecionado>).
+
+      CHECK sy-subrc IS INITIAL.
+      <fs_selecionado> = COND #( WHEN e_ucomm = '&MARCAR' THEN
+                                  abap_true
+                                 WHEN e_ucomm = '&DESMARCAR' THEN
+                                  abap_false ).
+    ENDLOOP.
+
+    go_alv->refresh_table_display(
+      EXPORTING
+        is_stable      = VALUE #( row = abap_true
+                                  col = abap_true )
+        i_soft_refresh = abap_true
+      EXCEPTIONS
+        finished       = 1
+        OTHERS         = 2 ).
+
+  ENDMETHOD.
+
+  METHOD evento_tool_bar.
+
+    INSERT VALUE #( function = '&MARCAR' icon  = icon_select_all )
+    INTO e_object->mt_toolbar INDEX 3.
+
+    INSERT VALUE #( function = '&DESMARCAR' icon  = icon_deselect_all )
+    INTO e_object->mt_toolbar INDEX 4.
+
+    DELETE e_object->mt_toolbar WHERE function = '&LOCAL&CUT'
+                                   OR function = '&LOCAL&COPY'
+                                   OR function = '&REFRESH'
+                                   OR function = '&CHECK'
+                                   OR function = '&LOCAL&PASTE'
+                                   OR function = '&LOCAL&UNDO'
+                                   OR function = '&&SEP00'
+                                   OR function = '&&SEP02'
+                                   OR function = '&LOCAL&APPEND'
+                                   OR function = '&LOCAL&INSERT_ROW'
+                                   OR function = '&LOCAL&DELETE_ROW'
+                                   OR function = '&LOCAL&COPY_ROW'
+                                   OR function = '&INFO'.
+  ENDMETHOD.
+
+  METHOD enviar_a_sistema_legado.
+
+    DATA: o_proxy           TYPE REF TO zpxco_costos_material_enviar_o,
+          o_async_messaging TYPE REF TO if_wsprotocol_async_messaging.
+
+    ASSIGN i_datos_proxy->* TO FIELD-SYMBOL(<fs_datos_proxy>).
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    TRY.
+        o_proxy = NEW zpxco_costos_material_enviar_o(  ).
+
+        o_async_messaging ?= o_proxy->get_protocol( if_wsprotocol=>async_messaging ).
+        o_async_messaging->set_serialization_context( |{ gc_ricefw_integracion }_EOIO| ).
+
+        o_proxy->costos_material_enviar_async( output = <fs_datos_proxy> ).
+
+        COMMIT WORK AND WAIT.
+
+        "Retornar mensaje de envio correcto
+        go_log->set_es_log( i_es = VALUE #( type = 'S' id = 'ZCX01' number = '037'  ) ).
+
+      CATCH cx_ai_system_fault INTO DATA(o_cx).
+        go_log->set_o_cx_log( o_cx ).
+    ENDTRY.
+
+    APPEND LINES OF CORRESPONDING bapiret2_t( go_log->get_log( ) )  TO e_ti_return.
+
+  ENDMETHOD.
+
+ENDCLASS.

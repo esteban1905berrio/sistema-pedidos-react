@@ -1,0 +1,158 @@
+FUNCTION zcxr1002_envia_email
+  IMPORTING
+    i_asunto TYPE so_obj_des
+    i_nombre_adjunto TYPE char50 OPTIONAL
+    i_binario TYPE char1 OPTIONAL
+    i_commit TYPE char1 DEFAULT 'X'
+    i_doc_type_htm TYPE char1 OPTIONAL
+  EXPORTING
+    e_result TYPE i
+  TABLES
+    t_para LIKE zcxr1002_3
+    t_msg LIKE tline OPTIONAL
+    t_adjunto LIKE tline OPTIONAL
+    t_bin LIKE solisti1 OPTIONAL
+    t_msg_html LIKE solisti1 OPTIONAL.
+
+
+
+
+*----------------------------------------------------------------------*
+* Definición de estructuras
+*----------------------------------------------------------------------*
+  DATA: l_es_doc_chng LIKE sodocchgi1,
+        l_es_para     LIKE LINE OF t_para.
+
+*----------------------------------------------------------------------*
+* Definición de Tablas internas
+*----------------------------------------------------------------------*
+  DATA: l_ti_objpack TYPE STANDARD TABLE OF sopcklsti1 WITH HEADER LINE,
+        l_ti_objhead TYPE STANDARD TABLE OF solisti1   WITH HEADER LINE,
+        l_ti_objtxt  TYPE STANDARD TABLE OF solisti1   WITH HEADER LINE,
+        l_ti_objbin  TYPE STANDARD TABLE OF solisti1   WITH HEADER LINE,
+        l_ti_reclist TYPE STANDARD TABLE OF somlreci1  WITH HEADER LINE,
+        l_ti_docu    TYPE STANDARD TABLE OF tline.
+
+*----------------------------------------------------------------------*
+* Definición de Variables
+*----------------------------------------------------------------------*
+  DATA: l_i_tab_lines    LIKE sy-tabix,
+        l_c_nombre       LIKE i_nombre_adjunto,
+        l_c_extension(5) TYPE c.
+
+*----------------------------------------------------------------------*
+* Lógica de la función
+*----------------------------------------------------------------------*
+
+* Crea el documento que va a ser enviado
+  l_es_doc_chng-obj_name  = 'MSG_SAP'.
+  l_es_doc_chng-obj_descr = i_asunto.
+  l_es_doc_chng-obj_langu = sy-langu.
+  l_es_doc_chng-sensitivty = 'F'.
+
+* Convierte la tabla del mensaje
+  IF NOT t_msg[] IS INITIAL.
+    PERFORM convierte_tabla TABLES t_msg
+                                   l_ti_objtxt
+                            USING  ' '.
+  ENDIF.
+
+  "INS. gyongmor. 08/01/2013. INI.
+  IF NOT t_msg_html[] IS INITIAL.
+    l_ti_objtxt[] = t_msg_html[].
+  ENDIF.
+  "INS. gyongmor. 08/01/2013. FIN.
+
+* Obtiene el tamaño de la tabla que contiene el mensaje
+  DESCRIBE TABLE l_ti_objtxt LINES l_i_tab_lines.
+  READ TABLE l_ti_objtxt INDEX l_i_tab_lines.
+  l_es_doc_chng-doc_size = ( l_i_tab_lines - 1 ) * 255 + strlen( l_ti_objtxt ).
+
+* Crea la entrada para el documento de texto que va a ser enviado
+  l_ti_objpack-transf_bin = ' '.
+  l_ti_objpack-head_start = 1.
+  l_ti_objpack-head_num   = 0.
+  l_ti_objpack-body_start = 1.
+  l_ti_objpack-body_num   = l_i_tab_lines.
+  "INS. gyongmor. 08/01/2013. INI.
+  "Si el tipo de documento HTM viene marcado
+  IF i_doc_type_htm EQ 'X'.
+    l_ti_objpack-doc_type   = 'HTM'.
+  ELSE.
+    "INS. gyongmor. 08/01/2013. FIN.
+    l_ti_objpack-doc_type   = 'RAW'.
+  ENDIF. "INS. gyongmor. 08/01/2013.
+  APPEND l_ti_objpack.
+
+* Si trae archivo adjunto
+  IF NOT t_adjunto[] IS INITIAL OR
+     NOT t_bin[]     IS INITIAL.
+    CLEAR l_ti_objpack.
+    IF i_binario EQ 'X'.
+      IF t_bin[] IS INITIAL.
+        PERFORM convierte_tabla_binaria TABLES t_adjunto
+                                               l_ti_objbin.
+      ELSE.
+        MOVE t_bin[] TO l_ti_objbin[].
+      ENDIF.
+    ELSE.
+      PERFORM convierte_tabla TABLES t_adjunto
+                                     l_ti_objbin
+                              USING  ' '.
+    ENDIF.
+
+*   Obtine el tamaño de la tabla que contiene el documento adjunto
+    DESCRIBE TABLE l_ti_objbin LINES l_i_tab_lines.
+
+*   Obtiene el nombre del archivo y la extención
+    SPLIT i_nombre_adjunto AT '.' INTO l_c_nombre l_c_extension.
+
+*   Asigna el nombre del archivo
+    l_ti_objhead = i_nombre_adjunto.
+    APPEND l_ti_objhead.
+
+*   Crea la entrada para el documento adjunto
+    l_ti_objpack-head_start = 1.
+    l_ti_objpack-head_num   = 1.
+    l_ti_objpack-body_start = 1.
+    l_ti_objpack-body_num   = l_i_tab_lines.
+    l_ti_objpack-doc_type   = l_c_extension.
+    l_ti_objpack-obj_name   = 'ADJUNTO'.
+    l_ti_objpack-transf_bin = 'X'.
+    l_ti_objpack-obj_descr  = i_nombre_adjunto.
+    l_ti_objpack-doc_size   = l_i_tab_lines * 255.
+    APPEND l_ti_objpack.
+
+  ENDIF.
+
+* Crea la lista de usuarios SAP a los cuales se les envía mensaje
+* de los resultados a través del workplace
+  LOOP AT t_para INTO l_es_para.
+    l_ti_reclist-receiver = l_es_para-para.
+    l_ti_reclist-rec_type = l_es_para-tipo.
+    l_ti_reclist-express  = l_es_para-urgente.
+    APPEND l_ti_reclist.
+  ENDLOOP.
+
+* Envia el mensaje con los resultados adjuntos en PDF
+  CALL FUNCTION 'SO_NEW_DOCUMENT_ATT_SEND_API1'
+    EXPORTING
+      document_data              = l_es_doc_chng
+      put_in_outbox              = 'X'
+      commit_work                = i_commit
+    TABLES
+      packing_list               = l_ti_objpack
+      object_header              = l_ti_objhead
+      contents_bin               = l_ti_objbin
+      contents_txt               = l_ti_objtxt
+      receivers                  = l_ti_reclist
+    EXCEPTIONS
+      too_many_receivers         = 1
+      document_not_sent          = 2
+      operation_no_authorization = 3
+      OTHERS                     = 99.
+
+* Retorna el resultado
+  e_result = sy-subrc.
+
+ENDFUNCTION.

@@ -1,0 +1,298 @@
+class ZCL_ZMMAPI_CREATE_GOOD_DPC_EXT definition
+  public
+  inheriting from ZCL_ZMMAPI_CREATE_GOOD_DPC
+  create public .
+
+public section.
+
+  methods /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY
+    redefinition .
+protected section.
+
+  methods HEADERSET_CREATE_ENTITY
+    redefinition .
+private section.
+
+  methods CUSTOME_CREATE_DEEP_ENTITY
+    importing
+      !IV_ENTITY_NAME type STRING
+      !IV_ENTITY_SET_NAME type STRING
+      !IV_SOURCE_NAME type STRING
+      !IT_KEY_TAB type /IWBEP/T_MGW_NAME_VALUE_PAIR
+      !IT_NAVIGATION_PATH type /IWBEP/T_MGW_NAVIGATION_PATH
+      !IO_EXPAND type ref to /IWBEP/IF_MGW_ODATA_EXPAND
+      !IO_TECH_REQUEST_CONTEXT type ref to /IWBEP/IF_MGW_REQ_ENTITY_C
+      !IO_DATA_PROVIDER type ref to /IWBEP/IF_MGW_ENTRY_PROVIDER
+    exporting
+      !ER_DEEP_ENTITY type ZCL_ZMMAPI_CREATE_GOOD_MPC_EXT=>GTP_DATA .
+ENDCLASS.
+
+
+
+CLASS ZCL_ZMMAPI_CREATE_GOOD_DPC_EXT IMPLEMENTATION.
+
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_deep_entity.
+
+    DATA:
+     es_deep_items TYPE zcl_zmmapi_create_good_mpc_ext=>gtp_data.
+
+    CASE iv_entity_set_name.
+*-------------------------------------------------------------------------*
+*  When EntitySet 'HeaderSet' is been invoked via service Url
+*-------------------------------------------------------------------------*
+      WHEN 'headerSet'.
+
+        CALL METHOD me->custome_create_deep_entity
+          EXPORTING
+            iv_entity_name          = iv_entity_name
+            iv_entity_set_name      = iv_entity_set_name
+            iv_source_name          = iv_source_name
+            it_key_tab              = it_key_tab
+            it_navigation_path      = it_navigation_path
+            io_expand               = io_expand
+            io_tech_request_context = io_tech_request_context
+            io_data_provider        = io_data_provider
+          IMPORTING
+            er_deep_entity          = es_deep_items.
+
+        copy_data_to_ref(
+        EXPORTING
+         is_data = es_deep_items
+        CHANGING
+         cr_data = er_deep_entity
+        ).
+
+    ENDCASE.
+
+**TRY.
+*CALL METHOD SUPER->/IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY
+*  EXPORTING
+**    iv_entity_name          =
+**    iv_entity_set_name      =
+**    iv_source_name          =
+*    IO_DATA_PROVIDER        =
+**    it_key_tab              =
+**    it_navigation_path      =
+*    IO_EXPAND               =
+**    io_tech_request_context =
+**  IMPORTING
+**    er_deep_entity          =
+*    .
+**  CATCH /iwbep/cx_mgw_busi_exception.
+**  CATCH /iwbep/cx_mgw_tech_exception.
+**ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD custome_create_deep_entity.
+
+    DATA:
+      es_items TYPE zcl_zmmapi_create_good_mpc_ext=>gtp_data.
+
+    TRY.
+*  Transform data into the internal structure
+        io_data_provider->read_entry_data(
+         IMPORTING
+          es_data = es_items ).
+
+        er_deep_entity = es_items.
+      CATCH /iwbep/cx_mgw_tech_exception.
+    ENDTRY.
+
+*** IMPLEMENTACION PARA LA LOGICA DE LA CREACION DEL MOVIMIENTO *******
+
+
+    CASE  es_items-ricefw.
+        "Envio desde legacy a SAP para realizar traslado de inventario de un almacen MM a otro
+      WHEN 'I1057'.
+        DATA(o_traslado_I1057) = NEW zclppi1057_traslado_inventario( ).
+        o_traslado_I1057->proceso(
+           EXPORTING
+            i_es_legado =   es_items
+            IMPORTING
+           e_ti_return = DATA(ti_return) ).
+
+        "  Descargar todos los movimientos de ajustes, inventario, cambios de material y ventas desde KPO a SAP.
+      WHEN 'I1064'.
+        DATA(o_traslado_I1064) = NEW zclppi1057_traslado_inventario( ).
+        o_traslado_I1064->proceso(
+           EXPORTING
+            i_es_legado =   es_items
+            IMPORTING
+           e_ti_return = ti_return ).
+
+    ENDCASE.
+
+
+  ENDMETHOD.
+
+
+  method HEADERSET_CREATE_ENTITY.
+**TRY.
+*CALL METHOD SUPER->HEADERSET_CREATE_ENTITY
+*  EXPORTING
+*    IV_ENTITY_NAME          =
+*    IV_ENTITY_SET_NAME      =
+*    IV_SOURCE_NAME          =
+*    IT_KEY_TAB              =
+**    io_tech_request_context =
+*    IT_NAVIGATION_PATH      =
+**    io_data_provider        =
+**  IMPORTING
+**    er_entity               =
+*    .
+**  CATCH /iwbep/cx_mgw_busi_exception.
+**  CATCH /iwbep/cx_mgw_tech_exception.
+**ENDTRY.
+  endmethod.
+ENDCLASS.
+class ZCL_ZMMAPI_CREATE_GOOD_DPC_EXT definition
+  public
+  inheriting from ZCL_ZMMAPI_CREATE_GOOD_DPC
+  create public .
+
+public section.
+
+  methods /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY
+    redefinition .
+protected section.
+
+  methods HEADERSET_CREATE_ENTITY
+    redefinition .
+private section.
+
+  methods CUSTOME_CREATE_DEEP_ENTITY
+    importing
+      !IV_ENTITY_NAME type STRING
+      !IV_ENTITY_SET_NAME type STRING
+      !IV_SOURCE_NAME type STRING
+      !IT_KEY_TAB type /IWBEP/T_MGW_NAME_VALUE_PAIR
+      !IT_NAVIGATION_PATH type /IWBEP/T_MGW_NAVIGATION_PATH
+      !IO_EXPAND type ref to /IWBEP/IF_MGW_ODATA_EXPAND
+      !IO_TECH_REQUEST_CONTEXT type ref to /IWBEP/IF_MGW_REQ_ENTITY_C
+      !IO_DATA_PROVIDER type ref to /IWBEP/IF_MGW_ENTRY_PROVIDER
+    exporting
+      !ER_DEEP_ENTITY type ZCL_ZMMAPI_CREATE_GOOD_MPC_EXT=>GTP_DATA .
+ENDCLASS.
+
+
+
+CLASS ZCL_ZMMAPI_CREATE_GOOD_DPC_EXT IMPLEMENTATION.
+
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_deep_entity.
+
+    DATA:
+     es_deep_items TYPE zcl_zmmapi_create_good_mpc_ext=>gtp_data.
+
+    CASE iv_entity_set_name.
+*-------------------------------------------------------------------------*
+*  When EntitySet 'HeaderSet' is been invoked via service Url
+*-------------------------------------------------------------------------*
+      WHEN 'headerSet'.
+
+        CALL METHOD me->custome_create_deep_entity
+          EXPORTING
+            iv_entity_name          = iv_entity_name
+            iv_entity_set_name      = iv_entity_set_name
+            iv_source_name          = iv_source_name
+            it_key_tab              = it_key_tab
+            it_navigation_path      = it_navigation_path
+            io_expand               = io_expand
+            io_tech_request_context = io_tech_request_context
+            io_data_provider        = io_data_provider
+          IMPORTING
+            er_deep_entity          = es_deep_items.
+
+        copy_data_to_ref(
+        EXPORTING
+         is_data = es_deep_items
+        CHANGING
+         cr_data = er_deep_entity
+        ).
+
+    ENDCASE.
+
+**TRY.
+*CALL METHOD SUPER->/IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY
+*  EXPORTING
+**    iv_entity_name          =
+**    iv_entity_set_name      =
+**    iv_source_name          =
+*    IO_DATA_PROVIDER        =
+**    it_key_tab              =
+**    it_navigation_path      =
+*    IO_EXPAND               =
+**    io_tech_request_context =
+**  IMPORTING
+**    er_deep_entity          =
+*    .
+**  CATCH /iwbep/cx_mgw_busi_exception.
+**  CATCH /iwbep/cx_mgw_tech_exception.
+**ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD custome_create_deep_entity.
+
+    DATA:
+      es_items TYPE zcl_zmmapi_create_good_mpc_ext=>gtp_data.
+
+    TRY.
+*  Transform data into the internal structure
+        io_data_provider->read_entry_data(
+         IMPORTING
+          es_data = es_items ).
+
+        er_deep_entity = es_items.
+      CATCH /iwbep/cx_mgw_tech_exception.
+    ENDTRY.
+
+*** IMPLEMENTACION PARA LA LOGICA DE LA CREACION DEL MOVIMIENTO *******
+
+
+    CASE  es_items-ricefw.
+        "Envio desde legacy a SAP para realizar traslado de inventario de un almacen MM a otro
+      WHEN 'I1057'.
+        DATA(o_traslado_I1057) = NEW zclppi1057_traslado_inventario( ).
+        o_traslado_I1057->proceso(
+           EXPORTING
+            i_es_legado =   es_items
+            IMPORTING
+           e_ti_return = DATA(ti_return) ).
+
+        "  Descargar todos los movimientos de ajustes, inventario, cambios de material y ventas desde KPO a SAP.
+      WHEN 'I1064'.
+        DATA(o_traslado_I1064) = NEW zclppi1057_traslado_inventario( ).
+        o_traslado_I1064->proceso(
+           EXPORTING
+            i_es_legado =   es_items
+            IMPORTING
+           e_ti_return = ti_return ).
+
+    ENDCASE.
+
+
+  ENDMETHOD.
+
+
+  method HEADERSET_CREATE_ENTITY.
+**TRY.
+*CALL METHOD SUPER->HEADERSET_CREATE_ENTITY
+*  EXPORTING
+*    IV_ENTITY_NAME          =
+*    IV_ENTITY_SET_NAME      =
+*    IV_SOURCE_NAME          =
+*    IT_KEY_TAB              =
+**    io_tech_request_context =
+*    IT_NAVIGATION_PATH      =
+**    io_data_provider        =
+**  IMPORTING
+**    er_entity               =
+*    .
+**  CATCH /iwbep/cx_mgw_busi_exception.
+**  CATCH /iwbep/cx_mgw_tech_exception.
+**ENDTRY.
+  endmethod.
+ENDCLASS.

@@ -1,0 +1,41 @@
+{
+  "enhancementName" : "ZCXR1006_1",
+  "header" : {
+    "enhancementName" : "ZCXR1006_1",
+    "description" : "Gestion de tablas Z",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZR1006",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-09-07",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-10-14"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "SAPLSE16N",
+    "fullName" : "\\PR:SAPLSE16N\\FO:SAVE_CHANGES\\SE:BEGIN\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "  zclcxr1006_gestion_tablas_z=>determinar_consecutivo(\n    EXPORTING\n      i_ti_catalogo             =  gt_fieldcat_tab\n    CHANGING\n      c_ti_datos_completos      = <all_table_cell>\n      c_ti_datos_iniciales      = <all_table>\n      c_ti_registro_modificados = gt_mod[]\n      c_es_datos_control        = gd\n      c_ti_datos_eliminados     = <del_table> )."
+  }, {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "SAPLSE16N",
+    "fullName" : "\\PR:SAPLSE16N\\FO:SAVE_CHANGES\\SE:END\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "\n  zclcxr1006_gestion_tablas_z=>escribir_log_tabla(\n      EXPORTING\n        i_nombre_tabla           = CONV #( gd-tab )\n      CHANGING\n        c_ti_datos_completos      = <all_table_cell>\n        c_ti_datos_iniciales      = <all_table> ).\n\n  zclcxr1006_gestion_tablas_z=>refrescar_alv_grid( CHANGING c_o_custom_container = g_custom_container c_o_alv_grid = alv_grid ).\n"
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

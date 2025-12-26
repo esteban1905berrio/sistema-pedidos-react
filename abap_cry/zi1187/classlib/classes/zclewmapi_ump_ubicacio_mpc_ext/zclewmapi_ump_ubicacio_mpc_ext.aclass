@@ -1,0 +1,28 @@
+class ZCLEWMAPI_UMP_UBICACIO_MPC_EXT definition
+  public
+  inheriting from ZCLEWMAPI_UMP_UBICACACION_MPC
+  create public .
+
+public section.
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCLEWMAPI_UMP_UBICACIO_MPC_EXT IMPLEMENTATION.
+ENDCLASS.
+class ZCLEWMAPI_UMP_UBICACIO_MPC_EXT definition
+  public
+  inheriting from ZCLEWMAPI_UMP_UBICACACION_MPC
+  create public .
+
+public section.
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCLEWMAPI_UMP_UBICACIO_MPC_EXT IMPLEMENTATION.
+ENDCLASS.

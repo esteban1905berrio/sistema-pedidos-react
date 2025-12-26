@@ -1,0 +1,262 @@
+CLASS zclmme1004_mod_desc_material DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Modificar descripcion de la variante de material segun la siguiente regla<br/>
+      "! separado por coma(,)
+      "! <ol>
+      "! <li>Descripción de material Genérico</li>
+      "! <li>Descripción de talla</li>
+      "! <li>Código del color (eliminando los ceros a la izquierda)</li>
+      "! <li>Descripción de color</li>
+      "! </ol>
+      "! </p>
+      "! <strong>Identificador:</strong>
+                                                            "! E1004
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+      "! @parameter i_es_ref_mara | Datos Mara
+      "! @parameter i_ti_ref_makt | Datos MAKT
+      "! @parameter c_ti_makt | Cambiar descripcion de material
+      modificar_descripcion_variante
+        IMPORTING
+          i_es_ref_mara TYPE mara
+          i_ti_ref_makt TYPE mwint_sktext
+        CHANGING
+          c_ti_makt     TYPE mwint_sktext.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclmme1004_mod_desc_material IMPLEMENTATION.
+
+
+
+  METHOD modificar_descripcion_variante.
+
+    DATA: idioma_x_defecto       TYPE sylangu VALUE 'S',
+          codigo_color           TYPE string,
+          descripcion_material_p TYPE string.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_metodo = 'MODIFICAR_DESCRIPCION_VARIANTE' i_ricefw = 'E1004' ) = abap_true.
+
+    IF c_ti_makt IS NOT INITIAL AND i_es_ref_mara-satnr IS NOT INITIAL.
+
+      "descripcion del material
+      TRY.
+          descripcion_material_p = i_ti_ref_makt[ spras = idioma_x_defecto ]-maktx.
+        CATCH cx_sy_itab_line_not_found.
+
+      ENDTRY.
+
+      "Color
+      SELECT SINGLE atinn, atwrt, atwtb
+          FROM wrf_charvalt AS d
+          WHERE atinn = @i_es_ref_mara-color_atinn
+          AND atwrt = @i_es_ref_mara-color
+          AND spras = @idioma_x_defecto "siempre en espanol
+          INTO @DATA(es_color).
+
+      "Talla
+      SELECT SINGLE  atinn, atwrt, atwtb
+          FROM wrf_charvalt AS d
+          WHERE atinn = @i_es_ref_mara-size1_atinn
+          AND atwrt = @i_es_ref_mara-size1
+          AND spras = @idioma_x_defecto "siempre en espanol
+          INTO @DATA(es_talla).
+
+      CHECK es_color IS NOT INITIAL OR es_talla IS NOT INITIAL.
+
+      codigo_color = |{ es_color-atwrt ALPHA = OUT  }|.
+      CONDENSE codigo_color NO-GAPS.
+
+      IF codigo_color IS INITIAL.
+        DATA(longitud_descripcion_color) = strlen( es_color-atwtb ).
+        longitud_descripcion_color = longitud_descripcion_color - 3.
+        TRY.
+            IF longitud_descripcion_color > 0.
+              codigo_color = |{ es_color-atwtb+longitud_descripcion_color(3) },|.
+            ENDIF.
+          CATCH cx_sy_range_out_of_bounds.
+
+        ENDTRY.
+      ENDIF.
+
+      IF codigo_color IS NOT INITIAL.
+        codigo_color = |{ codigo_color },|.
+      ENDIF.
+
+      IF es_talla-atwtb IS NOT INITIAL.
+        es_talla-atwtb = |{ es_talla-atwtb },|.
+      ENDIF.
+
+      TRY.
+
+          "descripcion material                                                      "talla              "codigo color      "desc Color
+          c_ti_makt[ spras = idioma_x_defecto ]-maktx = |{ descripcion_material_p }, { es_talla-atwtb } { codigo_color  } { es_color-atwtb }|.
+          "descripcion EN
+          IF line_exists( c_ti_makt[ spras = 'E' ] ).
+            c_ti_makt[ spras = 'E' ]-maktx = c_ti_makt[ spras = idioma_x_defecto ]-maktx.
+          ELSE.
+            DATA(es_makt) = c_ti_makt[ spras = idioma_x_defecto ].
+            es_makt-spras = 'E'.
+            APPEND es_makt TO c_ti_makt.
+          ENDIF.
+
+        CATCH cx_sy_itab_line_not_found.
+
+      ENDTRY.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+ENDCLASS.
+CLASS zclmme1004_mod_desc_material DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Modificar descripcion de la variante de material segun la siguiente regla<br/>
+      "! separado por coma(,)
+      "! <ol>
+      "! <li>Descripción de material Genérico</li>
+      "! <li>Descripción de talla</li>
+      "! <li>Código del color (eliminando los ceros a la izquierda)</li>
+      "! <li>Descripción de color</li>
+      "! </ol>
+      "! </p>
+      "! <strong>Identificador:</strong>
+                                                            "! E1004
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+      "! @parameter i_es_ref_mara | Datos Mara
+      "! @parameter i_ti_ref_makt | Datos MAKT
+      "! @parameter c_ti_makt | Cambiar descripcion de material
+      modificar_descripcion_variante
+        IMPORTING
+          i_es_ref_mara TYPE mara
+          i_ti_ref_makt TYPE mwint_sktext
+        CHANGING
+          c_ti_makt     TYPE mwint_sktext.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclmme1004_mod_desc_material IMPLEMENTATION.
+
+
+
+  METHOD modificar_descripcion_variante.
+
+    DATA: idioma_x_defecto       TYPE sylangu VALUE 'S',
+          codigo_color           TYPE string,
+          descripcion_material_p TYPE string.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_metodo = 'MODIFICAR_DESCRIPCION_VARIANTE' i_ricefw = 'E1004' ) = abap_true.
+
+    IF c_ti_makt IS NOT INITIAL AND i_es_ref_mara-satnr IS NOT INITIAL.
+
+      "descripcion del material
+      TRY.
+          descripcion_material_p = i_ti_ref_makt[ spras = idioma_x_defecto ]-maktx.
+        CATCH cx_sy_itab_line_not_found.
+
+      ENDTRY.
+
+      "Color
+      SELECT SINGLE atinn, atwrt, atwtb
+          FROM wrf_charvalt AS d
+          WHERE atinn = @i_es_ref_mara-color_atinn
+          AND atwrt = @i_es_ref_mara-color
+          AND spras = @idioma_x_defecto "siempre en espanol
+          INTO @DATA(es_color).
+
+      "Talla
+      SELECT SINGLE  atinn, atwrt, atwtb
+          FROM wrf_charvalt AS d
+          WHERE atinn = @i_es_ref_mara-size1_atinn
+          AND atwrt = @i_es_ref_mara-size1
+          AND spras = @idioma_x_defecto "siempre en espanol
+          INTO @DATA(es_talla).
+
+      CHECK es_color IS NOT INITIAL OR es_talla IS NOT INITIAL.
+
+      codigo_color = |{ es_color-atwrt ALPHA = OUT  }|.
+      CONDENSE codigo_color NO-GAPS.
+
+      IF codigo_color IS INITIAL.
+        DATA(longitud_descripcion_color) = strlen( es_color-atwtb ).
+        longitud_descripcion_color = longitud_descripcion_color - 3.
+        TRY.
+            IF longitud_descripcion_color > 0.
+              codigo_color = |{ es_color-atwtb+longitud_descripcion_color(3) },|.
+            ENDIF.
+          CATCH cx_sy_range_out_of_bounds.
+
+        ENDTRY.
+      ENDIF.
+
+      IF codigo_color IS NOT INITIAL.
+        codigo_color = |{ codigo_color },|.
+      ENDIF.
+
+      IF es_talla-atwtb IS NOT INITIAL.
+        es_talla-atwtb = |{ es_talla-atwtb },|.
+      ENDIF.
+
+      TRY.
+
+          "descripcion material                                                      "talla              "codigo color      "desc Color
+          c_ti_makt[ spras = idioma_x_defecto ]-maktx = |{ descripcion_material_p }, { es_talla-atwtb } { codigo_color  } { es_color-atwtb }|.
+          "descripcion EN
+          IF line_exists( c_ti_makt[ spras = 'E' ] ).
+            c_ti_makt[ spras = 'E' ]-maktx = c_ti_makt[ spras = idioma_x_defecto ]-maktx.
+          ELSE.
+            DATA(es_makt) = c_ti_makt[ spras = idioma_x_defecto ].
+            es_makt-spras = 'E'.
+            APPEND es_makt TO c_ti_makt.
+          ENDIF.
+
+        CATCH cx_sy_itab_line_not_found.
+
+      ENDTRY.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+ENDCLASS.

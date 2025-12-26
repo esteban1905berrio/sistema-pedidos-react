@@ -1,0 +1,1160 @@
+CLASS zclsdc1020_carga_masiva_sup DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_mensaje            TYPE symsgid VALUE 'ZSD01',
+               gc_operacion_registro_error TYPE c VALUE 'E'.
+
+    TYPES: BEGIN OF gtp_es_datos_sup_add,
+             supplyprotectionuuid        TYPE sup_object_uuid,
+             supplyprotectiongroupuuid   TYPE sup_cvc_uuid,
+             supprottimebucketuuid       TYPE sup_timebucket_uuid,
+             supprotcharc01ctlgpathuuid  TYPE sup_charc_catalog_path_uuid,
+             supprotcharc01ctlgpathintid TYPE sup_charc_catalog_path_id,
+             supprotcharc01valueid       TYPE sup_charc_value,
+             supprotcharc02ctlgpathuuid  TYPE sup_charc_catalog_path_uuid,
+             supprotcharc02ctlgpathintid TYPE sup_charc_catalog_path_id,
+             supprotcharc02valueid       TYPE sup_charc_value,
+           END OF gtp_es_datos_sup_add,
+           BEGIN OF gtp_es_datos_sup,
+             estado                TYPE string,
+             material              TYPE matnr,
+             pedidoventas          TYPE flag,
+             pedidotraslado        TYPE flag,
+             centro                TYPE werks_d,
+             descripcion           TYPE string,
+             caracteristica01      TYPE string,
+             valor01               TYPE string,
+             caracteristica02      TYPE string,
+             valor02               TYPE string,
+             periodo_planificacion TYPE string,
+             fecha_inicio          TYPE string,
+             fecha_fin             TYPE string,
+             prioridad1            TYPE string,
+             cantidadreserva1      TYPE p LENGTH 8 DECIMALS 3,
+             operacion             TYPE string, "Modificar = U, Insertar = I!
+           END OF gtp_es_datos_sup,
+
+           BEGIN OF gtp_es_datos_sup_bd.
+
+             INCLUDE TYPE gtp_es_datos_sup.
+             "Datos de Control: siempre deben ir al FINAL de la estructura{
+             INCLUDE TYPE gtp_es_datos_sup_add.
+    TYPES:
+      END OF gtp_es_datos_sup_bd.
+
+    TYPES:
+      gtp_ti_datos_sup       TYPE STANDARD TABLE OF gtp_es_datos_sup_bd WITH EMPTY KEY,
+      gtp_es_caracteristicas TYPE STANDARD TABLE OF i_supprotcharacteristicvh WITH EMPTY KEY.
+
+    CLASS-DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS:
+      descargar_plantilla.
+
+    METHODS:
+      cargar_archivo
+        IMPORTING
+          i_nombre_archivo      TYPE localfile
+        RETURNING
+          VALUE(r_ti_datos_sup) TYPE gtp_ti_datos_sup
+        RAISING
+          cx_t100_msg,
+      iniciar_carga
+        IMPORTING
+          i_nombre_archivo TYPE localfile,
+      visualizar_resultado_carga
+        RAISING
+          cx_t100_msg.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    METHODS:
+      registrar_sup_en_db
+        CHANGING
+          c_ti_datos_sup TYPE zclsdc1020_carga_masiva_sup=>gtp_ti_datos_sup,
+      validar_datos_sup
+        CHANGING
+          c_ti_datos_sup TYPE zclsdc1020_carga_masiva_sup=>gtp_ti_datos_sup,
+      validar_un_venta_bol
+        CHANGING
+          c_es_dato_sup TYPE gtp_es_datos_sup_bd,
+      validar_cantidad_entera
+        CHANGING
+          c_es_dato_sup TYPE gtp_es_datos_sup_bd.
+
+    CLASS-METHODS:
+      obtener_caracteristicas
+        RETURNING
+          VALUE(r_ti) TYPE gtp_es_caracteristicas.
+
+ENDCLASS.
+
+
+
+CLASS zclsdc1020_carga_masiva_sup IMPLEMENTATION.
+
+  METHOD descargar_plantilla.
+
+    DATA: ruta      TYPE string,
+          ti_datos  TYPE STANDARD TABLE OF gtp_es_datos_sup,
+          ti_bintab TYPE solix_tab,
+          tamanio   TYPE i.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    cl_gui_frontend_services=>directory_browse(
+      CHANGING
+        selected_folder      = ruta
+      EXCEPTIONS
+        cntl_error           = 1
+        error_no_gui         = 2
+        not_supported_by_gui = 3
+        OTHERS               = 4
+    ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                          message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                          message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+    ENDIF.
+
+    CHECK ruta IS NOT INITIAL.
+    "Consultar dominios
+    SELECT prodalloccharcctlgpathintid, characteristic
+    FROM i_supprotcharacteristicvh
+    INTO TABLE @DATA(ti_caracteristicas).
+
+    DATA(ti_periodos) = zclcxr1002_util=>get_valores_dominio( i_nombre_dominio = 'SUP_PLANNING_PERIOD_TYPE' ).
+
+    ti_datos = VALUE #( FOR es_caracteristica IN ti_caracteristicas
+                        INDEX INTO index_value
+                        ( estado = '' material  = ''  pedidoventas  = '' pedidotraslado = ''
+                         centro  = '' descripcion = ''
+                         caracteristica01 = |{ es_caracteristica-prodalloccharcctlgpathintid } - { es_caracteristica-characteristic }|
+                         valor01 = '' caracteristica02 = '' valor02 = ''
+                         periodo_planificacion = COND #( WHEN line_exists( ti_periodos[ index_value ] ) THEN |{ ti_periodos[ index_value ]-domvalue_l } - { ti_periodos[ index_value ]-ddtext }| ELSE '' )
+                         fecha_inicio = '' fecha_fin = ''
+                         prioridad1 = ''
+                         cantidadreserva1 = ''
+                         operacion = COND #( WHEN index_value = 1 THEN |D = { TEXT-001 }| ) ) ).
+    ruta = |{ ruta }{ '\' }Plantilla_carga_sup.xlsx|.
+
+    DATA(xstring) = zclcxr1002_util=>ti_a_xstring( REF #( ti_datos ) ).
+
+    CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+      EXPORTING
+        buffer        = xstring
+      IMPORTING
+        output_length = tamanio
+      TABLES
+        binary_tab    = ti_bintab.
+
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING
+        bin_filesize              = tamanio
+        filename                  = ruta
+        filetype                  = 'BIN'
+      CHANGING
+        data_tab                  = ti_bintab
+      EXCEPTIONS
+        file_write_error          = 1
+        no_batch                  = 2
+        gui_refuse_filetransfer   = 3
+        invalid_type              = 4
+        no_authority              = 5
+        unknown_error             = 6
+        header_not_allowed        = 7
+        separator_not_allowed     = 8
+        filesize_not_allowed      = 9
+        header_too_long           = 10
+        dp_error_create           = 11
+        dp_error_send             = 12
+        dp_error_write            = 13
+        unknown_dp_error          = 14
+        access_denied             = 15
+        dp_out_of_memory          = 16
+        disk_full                 = 17
+        dp_timeout                = 18
+        file_not_found            = 19
+        dataprovider_exception    = 20
+        control_flush_error       = 21
+        not_supported_by_gui      = 22
+        error_no_gui              = 23
+        OTHERS                    = 24 ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+    ENDIF.
+
+    go_log->mostrar_log( i_ventana_emergente = abap_true ).
+
+  ENDMETHOD.
+
+  METHOD cargar_archivo.
+
+    DATA: cantidad_columnas TYPE i.
+
+    DATA(ti_datos_archivo) =  zclcxr1002_cargar_archivo=>cargar_excel_multiples_hojas( i_filename  = i_nombre_archivo i_n_hojas    = 1 ).
+
+    cantidad_columnas = REDUCE i( INIT x = 0
+                                  FOR es_linea IN ti_datos_archivo WHERE ( row = 1 )
+                                  NEXT x = x + 1
+                                ).
+
+    LOOP AT ti_datos_archivo REFERENCE INTO DATA(r_es_dato_archivo_grp) WHERE sheetno = 1 AND
+                                                                  row > 1
+                             GROUP BY ( row = r_es_dato_archivo_grp->row ).
+
+      APPEND INITIAL LINE TO r_ti_datos_sup ASSIGNING FIELD-SYMBOL(<fs_es_sup>).
+
+      LOOP AT GROUP r_es_dato_archivo_grp ASSIGNING FIELD-SYMBOL(<fs_es_fila>).
+
+        ASSIGN COMPONENT <fs_es_fila>-col OF STRUCTURE <fs_es_sup> TO FIELD-SYMBOL(<fs_valor_campo>).
+
+        TRY.
+            <fs_valor_campo> = <fs_es_fila>-value.
+          CATCH cx_sy_conversion_no_number INTO DATA(o_cx_conv).
+            go_log->set_o_cx_log( i_o_cx_log = o_cx_conv ).
+            <fs_es_sup>-operacion = gc_operacion_registro_error.
+        ENDTRY.
+        "Ajustar Material
+        IF <fs_es_fila>-col = 2.
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+            EXPORTING
+              input        = <fs_valor_campo>
+            IMPORTING
+              output       = <fs_valor_campo>
+            EXCEPTIONS
+              length_error = 1
+              OTHERS       = 2.
+
+          IF sy-subrc <> 0.
+            MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+          ENDIF.
+
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD iniciar_carga.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    TRY.
+
+        DATA(ti_datos_sup) = cargar_archivo( i_nombre_archivo = i_nombre_archivo ).
+
+        validar_datos_sup( CHANGING c_ti_datos_sup = ti_datos_sup ).
+
+        registrar_sup_en_db( CHANGING c_ti_datos_sup = ti_datos_sup ).
+
+      CATCH cx_t100_msg INTO DATA(o_cx).
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD registrar_sup_en_db.
+
+    DATA: fecha_inicio_planificacion_utc TYPE sup_period_start_utc,
+          fecha_fin_planificacion_utc    TYPE sup_period_end_utc,
+          es_msg_retorno                 TYPE bapiret2,
+          uuid                           TYPE sup_object_uuid,
+          sup_uuid                       TYPE sup_object_uuid.
+
+    DATA(system_uuid) = cl_uuid_factory=>create_system_uuid( ).
+
+    TRY.
+        uuid = system_uuid->create_uuid_x16( ).
+        system_uuid->convert_uuid_x16( EXPORTING
+                                         uuid = uuid
+                                       IMPORTING
+                                         uuid_c22 = DATA(uuid_c22)
+                                         uuid_c26 = DATA(uuid_c26)
+                                         uuid_c32 = DATA(uuid_c32) ).
+      CATCH cx_uuid_error.
+        "handle exception
+    ENDTRY.
+
+    BREAK seblondo.
+
+    LOOP AT c_ti_datos_sup REFERENCE INTO DATA(r_es_dato_sup) WHERE operacion NE gc_operacion_registro_error AND
+                                                                    operacion NE space.
+
+      CLEAR: es_msg_retorno.
+
+      fecha_inicio_planificacion_utc = |{ r_es_dato_sup->fecha_inicio }000000|.
+      fecha_fin_planificacion_utc = |{ r_es_dato_sup->fecha_fin }235959|.
+
+      IF r_es_dato_sup->operacion = 'I'.
+        MODIFY ENTITIES OF a_supplyprotection
+        ENTITY root
+        CREATE
+        SET FIELDS WITH VALUE  #( ( "%key-supplyprotectionuuid = uuid
+                                    %cid = 'cid_object_01'
+                                    supplyprotectionname = r_es_dato_sup->descripcion
+                                    supprotisplanningcontextslsord = r_es_dato_sup->pedidoventas
+                                    supprotisplanningcontextsto    = r_es_dato_sup->pedidotraslado
+                                    supprotplanningperiodtype = r_es_dato_sup->periodo_planificacion
+                                    supprotplanningperiodstartdate = r_es_dato_sup->fecha_inicio
+                                    supprotplanningperiodenddate = r_es_dato_sup->fecha_fin
+                                    corecharc01ctlgpathintid = r_es_dato_sup->caracteristica01
+                                    supprotcorecharc01valueid = r_es_dato_sup->valor01
+                                    corecharc02ctlgpathintid = r_es_dato_sup->caracteristica02
+                                    supprotcorecharc02valueid = r_es_dato_sup->valor02
+                                    material               = r_es_dato_sup->material
+                                    plant                  = r_es_dato_sup->centro
+                                 ) )
+        ENTITY root
+            CREATE BY \_supplyprotectiongrouptp SET FIELDS WITH
+              VALUE #( ( %cid_ref = 'cid_object_01'
+                         %target = VALUE #( ( %cid = 'cid_group_01'
+                                              %data-supprotcharc01valueid = r_es_dato_sup->valor01
+                                              %data-supprotcharc02valueid = r_es_dato_sup->valor02
+                                              %data-supprotgrouppriorityvalue = r_es_dato_sup->prioridad1
+                                           ) ) ) )
+        ENTITY a_supplyprotectiongroup
+            CREATE BY \_supplyprotectiontimebuckettp SET FIELDS WITH
+              VALUE #( ( %cid_ref = 'cid_group_01'
+                         %target = VALUE #( ( %data-supprotperiodstartutcdatetime = fecha_inicio_planificacion_utc
+                                              %data-supprotperiodendutcdatetime = fecha_fin_planificacion_utc
+                                              %data-supprotprotectedquantity = r_es_dato_sup->cantidadreserva1
+                                          ) )
+                     ) )
+        MAPPED   DATA(es_create_mapped)
+        FAILED   DATA(es_create_failed)
+        REPORTED DATA(es_create_reported).
+
+        sup_uuid = es_create_mapped-root[ 1 ]-supplyprotectionuuid.
+
+        TRY.
+            COMMIT ENTITIES
+            RESPONSE OF i_supplyprotectiontp
+            FAILED DATA(es_fail_commit)
+            REPORTED DATA(es_reported_commit).
+
+            IF sy-subrc IS INITIAL.
+
+              go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '187' type = 'S'
+                                                  message_v1 = |{ r_es_dato_sup->material ALPHA = OUT }|
+                                                  message_v2 = r_es_dato_sup->centro  ) ).
+
+              "Activar SUP
+              MODIFY ENTITY i_supplyprotectiontp
+              EXECUTE setlifecyclestatustoactive
+              FROM VALUE #( ( %key-supplyprotectionuuid = sup_uuid ) )
+              RESULT   DATA(active_status_results)
+              FAILED   DATA(active_status_failed)
+              REPORTED DATA(active_status_reported).
+
+              es_msg_retorno = VALUE #(  ).
+
+            ELSE.
+              go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                                  message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                                  message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+            ENDIF.
+
+          CATCH cx_root INTO DATA(o_cx_root).
+            go_log->set_o_cx_log( i_o_cx_log = o_cx_root ).
+        ENDTRY.
+
+      ELSEIF r_es_dato_sup->operacion = 'U'.
+
+*        MODIFY ENTITY i_supplyprotectiongrouptp
+*        UPDATE FIELDS ( supprotcharc01ctlgpathintid supprotcharc01ctlgpathuuid supprotcharc01valueid
+*                        supprotcharc02ctlgpathintid supprotcharc02ctlgpathuuid supprotcharc02valueid
+*                    )
+*        WITH VALUE #( ( supplyprotectiongroupuuid = r_es_dato_sup->supplyprotectiongroupuuid
+*                        supprotcharc01ctlgpathintid = r_es_dato_sup->supprotcharc01ctlgpathintid
+*                        supprotcharc01ctlgpathuuid = r_es_dato_sup->supprotcharc01ctlgpathuuid
+*                        supprotcharc01valueid = r_es_dato_sup->supprotcharc01valueid
+*                        supprotcharc02ctlgpathintid = r_es_dato_sup->supprotcharc02ctlgpathintid
+*                        supprotcharc02ctlgpathuuid = r_es_dato_sup->supprotcharc02ctlgpathuuid
+*                        supprotcharc02valueid = r_es_dato_sup->supprotcharc02valueid
+*
+*                        %control-supprotcharc01ctlgpathintid = if_abap_behv=>mk-on
+*                        %control-supprotcharc01ctlgpathuuid = if_abap_behv=>mk-on
+*                        %control-supprotcharc01valueid = if_abap_behv=>mk-on
+*                        %control-supprotcharc02ctlgpathintid = if_abap_behv=>mk-on
+*                        %control-supprotcharc02ctlgpathuuid = if_abap_behv=>mk-on
+*                        %control-supprotcharc02valueid = if_abap_behv=>mk-on
+*                     ) )
+*        REPORTED DATA(es_update_reported).
+
+        "Modificar cantidad
+        MODIFY ENTITY i_supplyprotectiontimebuckettp
+        UPDATE FIELDS ( supprotprotectedquantity )
+        WITH VALUE #( ( supplyprotectiongroupuuid = r_es_dato_sup->supplyprotectiongroupuuid
+                        supprottimebucketuuid = r_es_dato_sup->supprottimebucketuuid
+                        supprotprotectedquantity = r_es_dato_sup->cantidadreserva1
+
+                        %control-supprotprotectedquantity = if_abap_behv=>mk-on
+                     ) )
+        REPORTED DATA(es_update_reported_tbk).
+
+        es_msg_retorno = VALUE #( id = gc_clase_mensaje number = '189' type = 'S'
+                                  message_v1 = |{ r_es_dato_sup->material ALPHA = OUT }|
+                                  message_v2 = r_es_dato_sup->centro  ).
+
+      ELSEIF r_es_dato_sup->operacion = 'D'.
+
+        MODIFY ENTITIES OF a_supplyprotection
+        ENTITY root
+        DELETE FROM VALUE #( ( %key-supplyprotectionuuid = r_es_dato_sup->supplyprotectionuuid ) )
+        MAPPED   es_create_mapped
+        FAILED   es_create_failed
+        REPORTED es_create_reported.
+
+        es_msg_retorno = VALUE #( id = gc_clase_mensaje number = '188' type = 'S'
+                                  message_v1 = |{ r_es_dato_sup->material ALPHA = OUT }|
+                                  message_v2 = r_es_dato_sup->centro  ).
+
+      ENDIF.
+
+      TRY.
+          COMMIT ENTITIES
+          RESPONSE OF i_supplyprotectiontp
+          FAILED es_fail_commit
+          REPORTED es_reported_commit.
+
+          IF sy-subrc IS INITIAL.
+
+            IF es_msg_retorno IS NOT INITIAL.
+              go_log->set_es_log( i_es = CORRESPONDING #( es_msg_retorno ) ).
+            ENDIF.
+          ELSE.
+            go_log->set_es_log( i_es = VALUE #( fila_referencia = condense( val = |{ r_es_dato_sup->material ALPHA = OUT }| )
+                                                id = sy-msgid number = sy-msgno type = sy-msgty
+                                                message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                                message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+          ENDIF.
+        CATCH cx_root INTO o_cx_root.
+          go_log->set_o_cx_log( i_o_cx_log = o_cx_root ).
+      ENDTRY.
+
+    ENDLOOP.
+
+    go_log->mostrar_log( i_alv = abap_true i_asignar_icono = abap_true ).
+
+  ENDMETHOD.
+
+  METHOD visualizar_resultado_carga.
+
+  ENDMETHOD.
+
+
+  METHOD validar_datos_sup.
+
+    DATA(ti_clave_sup) = c_ti_datos_sup.
+
+    SORT ti_clave_sup BY material centro valor01 valor02.
+    DELETE ADJACENT DUPLICATES FROM ti_clave_sup COMPARING material centro valor01 valor02.
+
+    CHECK ti_clave_sup IS NOT INITIAL.
+
+    "Consultar dominios de caracteristicas
+    DATA(ti_caracteristicas) = obtener_caracteristicas(  ).
+
+    "Consultar protecciones de suministros previas
+    SELECT i_supplyprotectiontp~supplyprotectionuuid, i_supplyprotectiontp~material, i_supplyprotectiontp~plant, i_supplyprotectiontp~supprotcorecharc01valueid, i_supplyprotectiontp~supprotcorecharc02valueid,
+           i_supplyprotectiongrouptp~supplyprotectiongroupuuid,
+           supprottimebucketuuid,
+           i_supplyprotectiongrouptp~supprotcharc01ctlgpathuuid,
+           i_supplyprotectiongrouptp~supprotcharc01ctlgpathintid,
+           i_supplyprotectiongrouptp~supprotcharc01valueid,
+           i_supplyprotectiongrouptp~supprotcharc02ctlgpathuuid,
+           i_supplyprotectiongrouptp~supprotcharc02ctlgpathintid,
+           i_supplyprotectiongrouptp~supprotcharc02valueid
+    FROM i_supplyprotectiontp
+    INNER JOIN i_supplyprotectiongrouptp ON
+    i_supplyprotectiongrouptp~supplyprotectionuuid = i_supplyprotectiontp~supplyprotectionuuid
+    LEFT JOIN i_supplyprotectiontimebuckettp ON
+        i_supplyprotectiontimebuckettp~supplyprotectionuuid = i_supplyprotectiongrouptp~supplyprotectionuuid
+    AND i_supplyprotectiontimebuckettp~supplyprotectiongroupuuid = i_supplyprotectiongrouptp~supplyprotectiongroupuuid
+    FOR ALL ENTRIES IN @ti_clave_sup
+    WHERE material                    = @ti_clave_sup-material
+    AND   plant                       = @ti_clave_sup-centro
+    AND   i_supplyprotectiontp~supprotcorecharc01valueid   = @ti_clave_sup-valor01
+    AND   i_supplyprotectiontp~supprotcorecharc02valueid   = @ti_clave_sup-valor02
+    INTO TABLE @DATA(ti_datos_bd_sup).
+
+    LOOP AT c_ti_datos_sup ASSIGNING FIELD-SYMBOL(<fs_es_dato_sup>).
+
+      validar_cantidad_entera( CHANGING c_es_dato_sup = <fs_es_dato_sup> ).
+      validar_un_venta_bol( CHANGING c_es_dato_sup = <fs_es_dato_sup> ).
+
+      DATA(es_datos_bd_sup) = VALUE #( ti_datos_bd_sup[ material = <fs_es_dato_sup>-material plant = <fs_es_dato_sup>-centro
+                                                       supprotcorecharc01valueid = <fs_es_dato_sup>-valor01
+                                                       supprotcorecharc02valueid = <fs_es_dato_sup>-valor02 ]
+                                       OPTIONAL ).
+
+      "Se debe Insertar, actualizar o eliminar
+      IF es_datos_bd_sup IS NOT INITIAL.
+
+        IF condense( val = <fs_es_dato_sup>-operacion ) = space.
+          <fs_es_dato_sup>-operacion = 'U'.
+        ENDIF.
+
+        <fs_es_dato_sup>-supplyprotectionuuid = es_datos_bd_sup-supplyprotectionuuid.
+        <fs_es_dato_sup>-supplyprotectiongroupuuid = es_datos_bd_sup-supplyprotectiongroupuuid.
+        <fs_es_dato_sup>-supprottimebucketuuid = es_datos_bd_sup-supprottimebucketuuid.
+
+        DATA(es_caracteristica) = VALUE #( ti_caracteristicas[ prodalloccharcctlgpathintid = <fs_es_dato_sup>-caracteristica01 ] OPTIONAL ).
+
+        IF es_caracteristica IS NOT INITIAL.
+          <fs_es_dato_sup>-supprotcharc01ctlgpathintid = es_caracteristica-prodalloccharcctlgpathintid.
+          <fs_es_dato_sup>-supprotcharc01ctlgpathuuid = es_caracteristica-prodalloccharcctlgpathuuid.
+        ENDIF.
+
+        es_caracteristica = VALUE #( ti_caracteristicas[ prodalloccharcctlgpathintid = <fs_es_dato_sup>-caracteristica02 ] OPTIONAL ).
+
+        IF es_caracteristica IS NOT INITIAL.
+          <fs_es_dato_sup>-supprotcharc02ctlgpathintid = es_caracteristica-prodalloccharcctlgpathintid.
+          <fs_es_dato_sup>-supprotcharc02ctlgpathuuid = es_caracteristica-prodalloccharcctlgpathuuid.
+        ELSE.
+          "
+        ENDIF.
+
+      ELSEIF condense( val = <fs_es_dato_sup>-operacion ) = space.
+        <fs_es_dato_sup>-operacion = 'I'.
+      ENDIF.
+
+      CLEAR: es_datos_bd_sup, es_caracteristica.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_caracteristicas.
+    SELECT *
+    FROM i_supprotcharacteristicvh
+    INTO TABLE @r_ti.
+  ENDMETHOD.
+
+
+  METHOD validar_un_venta_bol.
+
+    SELECT SINGLE
+    FROM marm
+    FIELDS matnr, meinh, umrez AS contador
+    WHERE matnr = @c_es_dato_sup-material
+    AND   meinh = 'BAG' "BOL
+    INTO @DATA(es_un_material).
+
+    IF c_es_dato_sup-cantidadreserva1 MOD es_un_material-contador NE 0.
+      c_es_dato_sup-operacion = gc_operacion_registro_error.
+      go_log->set_es_log( i_es = VALUE #( id = 'ZSD01' number = '185' type = 'E'
+                                          message_v1 = |{ c_es_dato_sup-material ALPHA = OUT }|
+                                          message_v2 = condense( val = |{ c_es_dato_sup-cantidadreserva1 }| ) ) ).
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD validar_cantidad_entera.
+    IF c_es_dato_sup-cantidadreserva1 MOD 1 NE 0.
+      c_es_dato_sup-operacion = gc_operacion_registro_error.
+      go_log->set_es_log( i_es = VALUE #( id = 'ZSD01' number = '186' type = 'E'
+                                          message_v1 = |{ c_es_dato_sup-material ALPHA = OUT }|
+                                          message_v2 = condense( val = |{ c_es_dato_sup-cantidadreserva1 }| ) ) ).
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclsdc1020_carga_masiva_sup DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_mensaje            TYPE symsgid VALUE 'ZSD01',
+               gc_operacion_registro_error TYPE c VALUE 'E'.
+
+    TYPES: BEGIN OF gtp_es_datos_sup_add,
+             supplyprotectionuuid        TYPE sup_object_uuid,
+             supplyprotectiongroupuuid   TYPE sup_cvc_uuid,
+             supprottimebucketuuid       TYPE sup_timebucket_uuid,
+             supprotcharc01ctlgpathuuid  TYPE sup_charc_catalog_path_uuid,
+             supprotcharc01ctlgpathintid TYPE sup_charc_catalog_path_id,
+             supprotcharc01valueid       TYPE sup_charc_value,
+             supprotcharc02ctlgpathuuid  TYPE sup_charc_catalog_path_uuid,
+             supprotcharc02ctlgpathintid TYPE sup_charc_catalog_path_id,
+             supprotcharc02valueid       TYPE sup_charc_value,
+           END OF gtp_es_datos_sup_add,
+           BEGIN OF gtp_es_datos_sup,
+             estado                TYPE string,
+             material              TYPE matnr,
+             pedidoventas          TYPE flag,
+             pedidotraslado        TYPE flag,
+             centro                TYPE werks_d,
+             descripcion           TYPE string,
+             caracteristica01      TYPE string,
+             valor01               TYPE string,
+             caracteristica02      TYPE string,
+             valor02               TYPE string,
+             periodo_planificacion TYPE string,
+             fecha_inicio          TYPE string,
+             fecha_fin             TYPE string,
+             prioridad1            TYPE string,
+             cantidadreserva1      TYPE p LENGTH 8 DECIMALS 3,
+             operacion             TYPE string, "Modificar = U, Insertar = I!
+           END OF gtp_es_datos_sup,
+
+           BEGIN OF gtp_es_datos_sup_bd.
+
+             INCLUDE TYPE gtp_es_datos_sup.
+             "Datos de Control: siempre deben ir al FINAL de la estructura{
+             INCLUDE TYPE gtp_es_datos_sup_add.
+    TYPES:
+      END OF gtp_es_datos_sup_bd.
+
+    TYPES:
+      gtp_ti_datos_sup       TYPE STANDARD TABLE OF gtp_es_datos_sup_bd WITH EMPTY KEY,
+      gtp_es_caracteristicas TYPE STANDARD TABLE OF i_supprotcharacteristicvh WITH EMPTY KEY.
+
+    CLASS-DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS:
+      descargar_plantilla.
+
+    METHODS:
+      cargar_archivo
+        IMPORTING
+          i_nombre_archivo      TYPE localfile
+        RETURNING
+          VALUE(r_ti_datos_sup) TYPE gtp_ti_datos_sup
+        RAISING
+          cx_t100_msg,
+      iniciar_carga
+        IMPORTING
+          i_nombre_archivo TYPE localfile,
+      visualizar_resultado_carga
+        RAISING
+          cx_t100_msg.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    METHODS:
+      registrar_sup_en_db
+        CHANGING
+          c_ti_datos_sup TYPE zclsdc1020_carga_masiva_sup=>gtp_ti_datos_sup,
+      validar_datos_sup
+        CHANGING
+          c_ti_datos_sup TYPE zclsdc1020_carga_masiva_sup=>gtp_ti_datos_sup,
+      validar_un_venta_bol
+        CHANGING
+          c_es_dato_sup TYPE gtp_es_datos_sup_bd,
+      validar_cantidad_entera
+        CHANGING
+          c_es_dato_sup TYPE gtp_es_datos_sup_bd.
+
+    CLASS-METHODS:
+      obtener_caracteristicas
+        RETURNING
+          VALUE(r_ti) TYPE gtp_es_caracteristicas.
+
+ENDCLASS.
+
+
+
+CLASS zclsdc1020_carga_masiva_sup IMPLEMENTATION.
+
+  METHOD descargar_plantilla.
+
+    DATA: ruta      TYPE string,
+          ti_datos  TYPE STANDARD TABLE OF gtp_es_datos_sup,
+          ti_bintab TYPE solix_tab,
+          tamanio   TYPE i.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    cl_gui_frontend_services=>directory_browse(
+      CHANGING
+        selected_folder      = ruta
+      EXCEPTIONS
+        cntl_error           = 1
+        error_no_gui         = 2
+        not_supported_by_gui = 3
+        OTHERS               = 4
+    ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                          message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                          message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+    ENDIF.
+
+    CHECK ruta IS NOT INITIAL.
+    "Consultar dominios
+    SELECT prodalloccharcctlgpathintid, characteristic
+    FROM i_supprotcharacteristicvh
+    INTO TABLE @DATA(ti_caracteristicas).
+
+    DATA(ti_periodos) = zclcxr1002_util=>get_valores_dominio( i_nombre_dominio = 'SUP_PLANNING_PERIOD_TYPE' ).
+
+    ti_datos = VALUE #( FOR es_caracteristica IN ti_caracteristicas
+                        INDEX INTO index_value
+                        ( estado = '' material  = ''  pedidoventas  = '' pedidotraslado = ''
+                         centro  = '' descripcion = ''
+                         caracteristica01 = |{ es_caracteristica-prodalloccharcctlgpathintid } - { es_caracteristica-characteristic }|
+                         valor01 = '' caracteristica02 = '' valor02 = ''
+                         periodo_planificacion = COND #( WHEN line_exists( ti_periodos[ index_value ] ) THEN |{ ti_periodos[ index_value ]-domvalue_l } - { ti_periodos[ index_value ]-ddtext }| ELSE '' )
+                         fecha_inicio = '' fecha_fin = ''
+                         prioridad1 = ''
+                         cantidadreserva1 = ''
+                         operacion = COND #( WHEN index_value = 1 THEN |D = { TEXT-001 }| ) ) ).
+    ruta = |{ ruta }{ '\' }Plantilla_carga_sup.xlsx|.
+
+    DATA(xstring) = zclcxr1002_util=>ti_a_xstring( REF #( ti_datos ) ).
+
+    CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+      EXPORTING
+        buffer        = xstring
+      IMPORTING
+        output_length = tamanio
+      TABLES
+        binary_tab    = ti_bintab.
+
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING
+        bin_filesize              = tamanio
+        filename                  = ruta
+        filetype                  = 'BIN'
+      CHANGING
+        data_tab                  = ti_bintab
+      EXCEPTIONS
+        file_write_error          = 1
+        no_batch                  = 2
+        gui_refuse_filetransfer   = 3
+        invalid_type              = 4
+        no_authority              = 5
+        unknown_error             = 6
+        header_not_allowed        = 7
+        separator_not_allowed     = 8
+        filesize_not_allowed      = 9
+        header_too_long           = 10
+        dp_error_create           = 11
+        dp_error_send             = 12
+        dp_error_write            = 13
+        unknown_dp_error          = 14
+        access_denied             = 15
+        dp_out_of_memory          = 16
+        disk_full                 = 17
+        dp_timeout                = 18
+        file_not_found            = 19
+        dataprovider_exception    = 20
+        control_flush_error       = 21
+        not_supported_by_gui      = 22
+        error_no_gui              = 23
+        OTHERS                    = 24 ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+    ENDIF.
+
+    go_log->mostrar_log( i_ventana_emergente = abap_true ).
+
+  ENDMETHOD.
+
+  METHOD cargar_archivo.
+
+    DATA: cantidad_columnas TYPE i.
+
+    DATA(ti_datos_archivo) =  zclcxr1002_cargar_archivo=>cargar_excel_multiples_hojas( i_filename  = i_nombre_archivo i_n_hojas    = 1 ).
+
+    cantidad_columnas = REDUCE i( INIT x = 0
+                                  FOR es_linea IN ti_datos_archivo WHERE ( row = 1 )
+                                  NEXT x = x + 1
+                                ).
+
+    LOOP AT ti_datos_archivo REFERENCE INTO DATA(r_es_dato_archivo_grp) WHERE sheetno = 1 AND
+                                                                  row > 1
+                             GROUP BY ( row = r_es_dato_archivo_grp->row ).
+
+      APPEND INITIAL LINE TO r_ti_datos_sup ASSIGNING FIELD-SYMBOL(<fs_es_sup>).
+
+      LOOP AT GROUP r_es_dato_archivo_grp ASSIGNING FIELD-SYMBOL(<fs_es_fila>).
+
+        ASSIGN COMPONENT <fs_es_fila>-col OF STRUCTURE <fs_es_sup> TO FIELD-SYMBOL(<fs_valor_campo>).
+
+        TRY.
+            <fs_valor_campo> = <fs_es_fila>-value.
+          CATCH cx_sy_conversion_no_number INTO DATA(o_cx_conv).
+            go_log->set_o_cx_log( i_o_cx_log = o_cx_conv ).
+            <fs_es_sup>-operacion = gc_operacion_registro_error.
+        ENDTRY.
+        "Ajustar Material
+        IF <fs_es_fila>-col = 2.
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+            EXPORTING
+              input        = <fs_valor_campo>
+            IMPORTING
+              output       = <fs_valor_campo>
+            EXCEPTIONS
+              length_error = 1
+              OTHERS       = 2.
+
+          IF sy-subrc <> 0.
+            MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+          ENDIF.
+
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD iniciar_carga.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    TRY.
+
+        DATA(ti_datos_sup) = cargar_archivo( i_nombre_archivo = i_nombre_archivo ).
+
+        validar_datos_sup( CHANGING c_ti_datos_sup = ti_datos_sup ).
+
+        registrar_sup_en_db( CHANGING c_ti_datos_sup = ti_datos_sup ).
+
+      CATCH cx_t100_msg INTO DATA(o_cx).
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD registrar_sup_en_db.
+
+    DATA: fecha_inicio_planificacion_utc TYPE sup_period_start_utc,
+          fecha_fin_planificacion_utc    TYPE sup_period_end_utc,
+          es_msg_retorno                 TYPE bapiret2,
+          uuid                           TYPE sup_object_uuid,
+          sup_uuid                       TYPE sup_object_uuid.
+
+    DATA(system_uuid) = cl_uuid_factory=>create_system_uuid( ).
+
+    TRY.
+        uuid = system_uuid->create_uuid_x16( ).
+        system_uuid->convert_uuid_x16( EXPORTING
+                                         uuid = uuid
+                                       IMPORTING
+                                         uuid_c22 = DATA(uuid_c22)
+                                         uuid_c26 = DATA(uuid_c26)
+                                         uuid_c32 = DATA(uuid_c32) ).
+      CATCH cx_uuid_error.
+        "handle exception
+    ENDTRY.
+
+    BREAK seblondo.
+
+    LOOP AT c_ti_datos_sup REFERENCE INTO DATA(r_es_dato_sup) WHERE operacion NE gc_operacion_registro_error AND
+                                                                    operacion NE space.
+
+      CLEAR: es_msg_retorno.
+
+      fecha_inicio_planificacion_utc = |{ r_es_dato_sup->fecha_inicio }000000|.
+      fecha_fin_planificacion_utc = |{ r_es_dato_sup->fecha_fin }235959|.
+
+      IF r_es_dato_sup->operacion = 'I'.
+        MODIFY ENTITIES OF a_supplyprotection
+        ENTITY root
+        CREATE
+        SET FIELDS WITH VALUE  #( ( "%key-supplyprotectionuuid = uuid
+                                    %cid = 'cid_object_01'
+                                    supplyprotectionname = r_es_dato_sup->descripcion
+                                    supprotisplanningcontextslsord = r_es_dato_sup->pedidoventas
+                                    supprotisplanningcontextsto    = r_es_dato_sup->pedidotraslado
+                                    supprotplanningperiodtype = r_es_dato_sup->periodo_planificacion
+                                    supprotplanningperiodstartdate = r_es_dato_sup->fecha_inicio
+                                    supprotplanningperiodenddate = r_es_dato_sup->fecha_fin
+                                    corecharc01ctlgpathintid = r_es_dato_sup->caracteristica01
+                                    supprotcorecharc01valueid = r_es_dato_sup->valor01
+                                    corecharc02ctlgpathintid = r_es_dato_sup->caracteristica02
+                                    supprotcorecharc02valueid = r_es_dato_sup->valor02
+                                    material               = r_es_dato_sup->material
+                                    plant                  = r_es_dato_sup->centro
+                                 ) )
+        ENTITY root
+            CREATE BY \_supplyprotectiongrouptp SET FIELDS WITH
+              VALUE #( ( %cid_ref = 'cid_object_01'
+                         %target = VALUE #( ( %cid = 'cid_group_01'
+                                              %data-supprotcharc01valueid = r_es_dato_sup->valor01
+                                              %data-supprotcharc02valueid = r_es_dato_sup->valor02
+                                              %data-supprotgrouppriorityvalue = r_es_dato_sup->prioridad1
+                                           ) ) ) )
+        ENTITY a_supplyprotectiongroup
+            CREATE BY \_supplyprotectiontimebuckettp SET FIELDS WITH
+              VALUE #( ( %cid_ref = 'cid_group_01'
+                         %target = VALUE #( ( %data-supprotperiodstartutcdatetime = fecha_inicio_planificacion_utc
+                                              %data-supprotperiodendutcdatetime = fecha_fin_planificacion_utc
+                                              %data-supprotprotectedquantity = r_es_dato_sup->cantidadreserva1
+                                          ) )
+                     ) )
+        MAPPED   DATA(es_create_mapped)
+        FAILED   DATA(es_create_failed)
+        REPORTED DATA(es_create_reported).
+
+        sup_uuid = es_create_mapped-root[ 1 ]-supplyprotectionuuid.
+
+        TRY.
+            COMMIT ENTITIES
+            RESPONSE OF i_supplyprotectiontp
+            FAILED DATA(es_fail_commit)
+            REPORTED DATA(es_reported_commit).
+
+            IF sy-subrc IS INITIAL.
+
+              go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '187' type = 'S'
+                                                  message_v1 = |{ r_es_dato_sup->material ALPHA = OUT }|
+                                                  message_v2 = r_es_dato_sup->centro  ) ).
+
+              "Activar SUP
+              MODIFY ENTITY i_supplyprotectiontp
+              EXECUTE setlifecyclestatustoactive
+              FROM VALUE #( ( %key-supplyprotectionuuid = sup_uuid ) )
+              RESULT   DATA(active_status_results)
+              FAILED   DATA(active_status_failed)
+              REPORTED DATA(active_status_reported).
+
+              es_msg_retorno = VALUE #(  ).
+
+            ELSE.
+              go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                                  message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                                  message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+            ENDIF.
+
+          CATCH cx_root INTO DATA(o_cx_root).
+            go_log->set_o_cx_log( i_o_cx_log = o_cx_root ).
+        ENDTRY.
+
+      ELSEIF r_es_dato_sup->operacion = 'U'.
+
+*        MODIFY ENTITY i_supplyprotectiongrouptp
+*        UPDATE FIELDS ( supprotcharc01ctlgpathintid supprotcharc01ctlgpathuuid supprotcharc01valueid
+*                        supprotcharc02ctlgpathintid supprotcharc02ctlgpathuuid supprotcharc02valueid
+*                    )
+*        WITH VALUE #( ( supplyprotectiongroupuuid = r_es_dato_sup->supplyprotectiongroupuuid
+*                        supprotcharc01ctlgpathintid = r_es_dato_sup->supprotcharc01ctlgpathintid
+*                        supprotcharc01ctlgpathuuid = r_es_dato_sup->supprotcharc01ctlgpathuuid
+*                        supprotcharc01valueid = r_es_dato_sup->supprotcharc01valueid
+*                        supprotcharc02ctlgpathintid = r_es_dato_sup->supprotcharc02ctlgpathintid
+*                        supprotcharc02ctlgpathuuid = r_es_dato_sup->supprotcharc02ctlgpathuuid
+*                        supprotcharc02valueid = r_es_dato_sup->supprotcharc02valueid
+*
+*                        %control-supprotcharc01ctlgpathintid = if_abap_behv=>mk-on
+*                        %control-supprotcharc01ctlgpathuuid = if_abap_behv=>mk-on
+*                        %control-supprotcharc01valueid = if_abap_behv=>mk-on
+*                        %control-supprotcharc02ctlgpathintid = if_abap_behv=>mk-on
+*                        %control-supprotcharc02ctlgpathuuid = if_abap_behv=>mk-on
+*                        %control-supprotcharc02valueid = if_abap_behv=>mk-on
+*                     ) )
+*        REPORTED DATA(es_update_reported).
+
+        "Modificar cantidad
+        MODIFY ENTITY i_supplyprotectiontimebuckettp
+        UPDATE FIELDS ( supprotprotectedquantity )
+        WITH VALUE #( ( supplyprotectiongroupuuid = r_es_dato_sup->supplyprotectiongroupuuid
+                        supprottimebucketuuid = r_es_dato_sup->supprottimebucketuuid
+                        supprotprotectedquantity = r_es_dato_sup->cantidadreserva1
+
+                        %control-supprotprotectedquantity = if_abap_behv=>mk-on
+                     ) )
+        REPORTED DATA(es_update_reported_tbk).
+
+        es_msg_retorno = VALUE #( id = gc_clase_mensaje number = '189' type = 'S'
+                                  message_v1 = |{ r_es_dato_sup->material ALPHA = OUT }|
+                                  message_v2 = r_es_dato_sup->centro  ).
+
+      ELSEIF r_es_dato_sup->operacion = 'D'.
+
+        MODIFY ENTITIES OF a_supplyprotection
+        ENTITY root
+        DELETE FROM VALUE #( ( %key-supplyprotectionuuid = r_es_dato_sup->supplyprotectionuuid ) )
+        MAPPED   es_create_mapped
+        FAILED   es_create_failed
+        REPORTED es_create_reported.
+
+        es_msg_retorno = VALUE #( id = gc_clase_mensaje number = '188' type = 'S'
+                                  message_v1 = |{ r_es_dato_sup->material ALPHA = OUT }|
+                                  message_v2 = r_es_dato_sup->centro  ).
+
+      ENDIF.
+
+      TRY.
+          COMMIT ENTITIES
+          RESPONSE OF i_supplyprotectiontp
+          FAILED es_fail_commit
+          REPORTED es_reported_commit.
+
+          IF sy-subrc IS INITIAL.
+
+            IF es_msg_retorno IS NOT INITIAL.
+              go_log->set_es_log( i_es = CORRESPONDING #( es_msg_retorno ) ).
+            ENDIF.
+          ELSE.
+            go_log->set_es_log( i_es = VALUE #( fila_referencia = condense( val = |{ r_es_dato_sup->material ALPHA = OUT }| )
+                                                id = sy-msgid number = sy-msgno type = sy-msgty
+                                                message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                                message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+          ENDIF.
+        CATCH cx_root INTO o_cx_root.
+          go_log->set_o_cx_log( i_o_cx_log = o_cx_root ).
+      ENDTRY.
+
+    ENDLOOP.
+
+    go_log->mostrar_log( i_alv = abap_true i_asignar_icono = abap_true ).
+
+  ENDMETHOD.
+
+  METHOD visualizar_resultado_carga.
+
+  ENDMETHOD.
+
+
+  METHOD validar_datos_sup.
+
+    DATA(ti_clave_sup) = c_ti_datos_sup.
+
+    SORT ti_clave_sup BY material centro valor01 valor02.
+    DELETE ADJACENT DUPLICATES FROM ti_clave_sup COMPARING material centro valor01 valor02.
+
+    CHECK ti_clave_sup IS NOT INITIAL.
+
+    "Consultar dominios de caracteristicas
+    DATA(ti_caracteristicas) = obtener_caracteristicas(  ).
+
+    "Consultar protecciones de suministros previas
+    SELECT i_supplyprotectiontp~supplyprotectionuuid, i_supplyprotectiontp~material, i_supplyprotectiontp~plant, i_supplyprotectiontp~supprotcorecharc01valueid, i_supplyprotectiontp~supprotcorecharc02valueid,
+           i_supplyprotectiongrouptp~supplyprotectiongroupuuid,
+           supprottimebucketuuid,
+           i_supplyprotectiongrouptp~supprotcharc01ctlgpathuuid,
+           i_supplyprotectiongrouptp~supprotcharc01ctlgpathintid,
+           i_supplyprotectiongrouptp~supprotcharc01valueid,
+           i_supplyprotectiongrouptp~supprotcharc02ctlgpathuuid,
+           i_supplyprotectiongrouptp~supprotcharc02ctlgpathintid,
+           i_supplyprotectiongrouptp~supprotcharc02valueid
+    FROM i_supplyprotectiontp
+    INNER JOIN i_supplyprotectiongrouptp ON
+    i_supplyprotectiongrouptp~supplyprotectionuuid = i_supplyprotectiontp~supplyprotectionuuid
+    LEFT JOIN i_supplyprotectiontimebuckettp ON
+        i_supplyprotectiontimebuckettp~supplyprotectionuuid = i_supplyprotectiongrouptp~supplyprotectionuuid
+    AND i_supplyprotectiontimebuckettp~supplyprotectiongroupuuid = i_supplyprotectiongrouptp~supplyprotectiongroupuuid
+    FOR ALL ENTRIES IN @ti_clave_sup
+    WHERE material                    = @ti_clave_sup-material
+    AND   plant                       = @ti_clave_sup-centro
+    AND   i_supplyprotectiontp~supprotcorecharc01valueid   = @ti_clave_sup-valor01
+    AND   i_supplyprotectiontp~supprotcorecharc02valueid   = @ti_clave_sup-valor02
+    INTO TABLE @DATA(ti_datos_bd_sup).
+
+    LOOP AT c_ti_datos_sup ASSIGNING FIELD-SYMBOL(<fs_es_dato_sup>).
+
+      validar_cantidad_entera( CHANGING c_es_dato_sup = <fs_es_dato_sup> ).
+      validar_un_venta_bol( CHANGING c_es_dato_sup = <fs_es_dato_sup> ).
+
+      DATA(es_datos_bd_sup) = VALUE #( ti_datos_bd_sup[ material = <fs_es_dato_sup>-material plant = <fs_es_dato_sup>-centro
+                                                       supprotcorecharc01valueid = <fs_es_dato_sup>-valor01
+                                                       supprotcorecharc02valueid = <fs_es_dato_sup>-valor02 ]
+                                       OPTIONAL ).
+
+      "Se debe Insertar, actualizar o eliminar
+      IF es_datos_bd_sup IS NOT INITIAL.
+
+        IF condense( val = <fs_es_dato_sup>-operacion ) = space.
+          <fs_es_dato_sup>-operacion = 'U'.
+        ENDIF.
+
+        <fs_es_dato_sup>-supplyprotectionuuid = es_datos_bd_sup-supplyprotectionuuid.
+        <fs_es_dato_sup>-supplyprotectiongroupuuid = es_datos_bd_sup-supplyprotectiongroupuuid.
+        <fs_es_dato_sup>-supprottimebucketuuid = es_datos_bd_sup-supprottimebucketuuid.
+
+        DATA(es_caracteristica) = VALUE #( ti_caracteristicas[ prodalloccharcctlgpathintid = <fs_es_dato_sup>-caracteristica01 ] OPTIONAL ).
+
+        IF es_caracteristica IS NOT INITIAL.
+          <fs_es_dato_sup>-supprotcharc01ctlgpathintid = es_caracteristica-prodalloccharcctlgpathintid.
+          <fs_es_dato_sup>-supprotcharc01ctlgpathuuid = es_caracteristica-prodalloccharcctlgpathuuid.
+        ENDIF.
+
+        es_caracteristica = VALUE #( ti_caracteristicas[ prodalloccharcctlgpathintid = <fs_es_dato_sup>-caracteristica02 ] OPTIONAL ).
+
+        IF es_caracteristica IS NOT INITIAL.
+          <fs_es_dato_sup>-supprotcharc02ctlgpathintid = es_caracteristica-prodalloccharcctlgpathintid.
+          <fs_es_dato_sup>-supprotcharc02ctlgpathuuid = es_caracteristica-prodalloccharcctlgpathuuid.
+        ELSE.
+          "
+        ENDIF.
+
+      ELSEIF condense( val = <fs_es_dato_sup>-operacion ) = space.
+        <fs_es_dato_sup>-operacion = 'I'.
+      ENDIF.
+
+      CLEAR: es_datos_bd_sup, es_caracteristica.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_caracteristicas.
+    SELECT *
+    FROM i_supprotcharacteristicvh
+    INTO TABLE @r_ti.
+  ENDMETHOD.
+
+
+  METHOD validar_un_venta_bol.
+
+    SELECT SINGLE
+    FROM marm
+    FIELDS matnr, meinh, umrez AS contador
+    WHERE matnr = @c_es_dato_sup-material
+    AND   meinh = 'BAG' "BOL
+    INTO @DATA(es_un_material).
+
+    IF c_es_dato_sup-cantidadreserva1 MOD es_un_material-contador NE 0.
+      c_es_dato_sup-operacion = gc_operacion_registro_error.
+      go_log->set_es_log( i_es = VALUE #( id = 'ZSD01' number = '185' type = 'E'
+                                          message_v1 = |{ c_es_dato_sup-material ALPHA = OUT }|
+                                          message_v2 = condense( val = |{ c_es_dato_sup-cantidadreserva1 }| ) ) ).
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD validar_cantidad_entera.
+    IF c_es_dato_sup-cantidadreserva1 MOD 1 NE 0.
+      c_es_dato_sup-operacion = gc_operacion_registro_error.
+      go_log->set_es_log( i_es = VALUE #( id = 'ZSD01' number = '186' type = 'E'
+                                          message_v1 = |{ c_es_dato_sup-material ALPHA = OUT }|
+                                          message_v2 = condense( val = |{ c_es_dato_sup-cantidadreserva1 }| ) ) ).
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.

@@ -1,0 +1,40 @@
+FUNCTION zcxi1148_log_auditoria
+  IMPORTING
+    VALUE(i_es_parametros) TYPE zexci1148_parametros
+  EXPORTING
+    VALUE(e_ti_reporte) TYPE rsau_t_result.
+
+
+
+
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZCXI1148
+*& RICEFW               I1148
+*& MF                   ZCXI1148_LOG_AUDITORIA
+*& Autor                Juan Guillermo Valencia Delgado (JGVALEND)
+*& Descripción          Consulta de Log de Auditoría SAP
+*& Fecha                20.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 20.05.2022  S4DK909213  JGVALEND           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+  "__Validar fechas.
+  CHECK i_es_parametros-fecha_inicial IS NOT INITIAL AND
+        i_es_parametros-fecha_final   IS NOT INITIAL.
+
+  ".Instanciar objeto de la clase para pasar la información.
+  DATA(o_rep_auditoria) = NEW zclcxi1148_rep_auditoria( ).
+
+  ".Obtener reporte.
+  o_rep_auditoria->reporte_auditoria(
+    EXPORTING i_es_parametros = i_es_parametros
+    IMPORTING e_ti_reporte    = e_ti_reporte ).
+
+ENDFUNCTION.

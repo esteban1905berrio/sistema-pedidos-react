@@ -1,0 +1,326 @@
+class ZCLMME1089_INDIC_ENTREGA_FINAL definition
+  public
+  final
+  create public .
+
+public section.
+
+  class-methods INDICADOR_ENTREGA_FINAL
+    changing
+      !C_TI_XMCEKPO type MMDA_PUR_TTY_XMCEKPO .
+  class-methods ASIGNAR_IND_ENTREGA_FINAL
+    importing
+      value(I_CODIGO_TRANSACCION) type SYTCODE
+    changing
+      !C_TI_XMCEKPO type MMDA_PUR_TTY_XMCEKPO .
+  class-methods ASIGNAR_IND_ENTREGA_FINAL_ORIG
+    importing
+      value(I_CODIGO_TRANSACCION) type SYTCODE
+    changing
+      !C_TI_XMCEKPO type MMDA_PUR_TTY_XMCEKPO .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLMME1089_INDIC_ENTREGA_FINAL IMPLEMENTATION.
+
+
+  METHOD asignar_ind_entrega_final.
+
+    DATA: es_ind_ent_final TYPE ztmme1089_1,
+          procesado        TYPE ztmme1089_1-procesado.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1089' i_codigo_transaccion = i_codigo_transaccion ) = abap_true
+          AND c_ti_xmcekpo IS NOT INITIAL.
+
+    DATA(orden_compra) = c_ti_xmcekpo[ 1 ]-ebeln.
+
+    SELECT ebeln, ebelp, kztlf, eglkz
+      FROM ekpo
+      WHERE ebeln = @orden_compra
+      INTO TABLE @DATA(ti_ekpo).
+
+    CHECK ti_ekpo IS NOT INITIAL AND
+          line_exists( ti_ekpo[ kztlf = 'B' ] ).
+
+    IF line_exists( ti_ekpo[ eglkz = space ] ).
+      ".Existen posiciones pendientes sin indicador de entrega final
+      procesado = space.
+    ELSE.
+      ".No existen posiciones sin indicador de entrega final
+      procesado = 'N'.
+    ENDIF.
+
+    ".Insertamos el registro en la tabla de base de datos para procesar despues
+    es_ind_ent_final =  VALUE #( ebeln     = orden_compra
+                                 procesado = procesado ).
+    ".Se inserta el registro en la tabla
+    MODIFY ztmme1089_1 FROM @es_ind_ent_final.
+
+  ENDMETHOD.
+
+
+  METHOD indicador_entrega_final.
+*--------------------------------------------------------------------*
+* LEMORENO 01.11.2023:
+* Debido a que esta ampliación se había pensado para dos
+* transacciones (VL10B, VL10X) y que unicamente funciona para la VL10B
+* fue necesario crear el programa ZMME1089_1, el cual es capaz de
+* realizar el mismo proceso que hace esta ampliación, pero partiendo
+* de los datos de la tabla EKBE y EKPO. Dadas estas circustancias, la
+* ampliación ya no es necesaria.
+*--------------------------------------------------------------------*
+*    CALL FUNCTION 'ZMME1089_ASG_IND_ENTREGA_FINAL' STARTING NEW TASK 'ZMME1089_ASG_IND_ENTREGA_FINAL_NT'
+*      DESTINATION 'NONE'
+*      EXPORTING
+*        i_codigo_transaccion = sy-tcode
+*        i_ti_xmcekpo         = c_ti_xmcekpo.
+
+  ENDMETHOD.
+
+
+  METHOD ASIGNAR_IND_ENTREGA_FINAL_ORIG.
+
+    DATA: ti_posicion_pedido  TYPE STANDARD TABLE OF bapimepoitem,
+          ti_posicion_pedidox TYPE STANDARD TABLE OF bapimepoitemx,
+          es_datos_cabecera   TYPE bapimepoheader,
+          ti_msg_retorno      TYPE bapiret2_t,
+          go_log              TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CONSTANTS: c_object    TYPE balobj_d  VALUE 'ZMM_1',
+               c_subobject TYPE balsubobj VALUE 'ZE1089_1'.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1089' i_codigo_transaccion = i_codigo_transaccion ) = abap_true
+          AND c_ti_xmcekpo IS NOT INITIAL.
+
+    DATA(orden_compra) = c_ti_xmcekpo[ 1 ]-ebeln.
+
+*    SELECT ebeln, ebelp, kztlf, eglkz
+*    FROM ekpo
+*    FOR ALL ENTRIES IN @c_ti_xmcekpo
+*    WHERE ebeln = @c_ti_xmcekpo-ebeln
+*    INTO TABLE @DATA(ti_ekpo).
+
+    SELECT ebeln, ebelp, kztlf, eglkz
+      FROM ekpo
+      WHERE ebeln = @orden_compra
+      INTO TABLE @DATA(ti_ekpo).
+
+    CHECK ti_ekpo IS NOT INITIAL AND
+          line_exists( ti_ekpo[ kztlf = 'B' ] ).
+
+    LOOP AT ti_ekpo ASSIGNING FIELD-SYMBOL(<fs_es_ekpo>) WHERE eglkz = space.
+
+      ti_posicion_pedido  = VALUE #( BASE ti_posicion_pedido
+                                   ( po_item = <fs_es_ekpo>-ebelp deliv_compl = abap_true ) ).
+
+      ti_posicion_pedidox  = VALUE #( BASE ti_posicion_pedidox
+                                    ( po_item = <fs_es_ekpo>-ebelp deliv_compl = abap_true ) ).
+
+    ENDLOOP.
+
+    CHECK NOT ti_posicion_pedido IS INITIAL.
+
+    ".Instanciamos el Log
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( i_identificador   = CONV #( c_subobject )
+                                                       i_es_cabecera_log = VALUE #( extnumber  = orden_compra
+                                                                                    object     = c_object
+                                                                                    subobject  = c_subobject
+                                                                                    aldate_del = sy-datum ) ).
+
+    WAIT UP TO 2 SECONDS.
+
+    CALL FUNCTION 'BAPI_PO_CHANGE'
+      EXPORTING
+        purchaseorder = ti_ekpo[ 1 ]-ebeln
+      IMPORTING
+        expheader     = es_datos_cabecera
+      TABLES
+        return        = ti_msg_retorno
+        poitem        = ti_posicion_pedido
+        poitemx       = ti_posicion_pedidox.
+
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = abap_true.
+
+    ".Agregamos mensaje inicial para indicar la OC que se va a tratar
+    ".E1089 Ampliación VL10B Orden de Compra &1
+    go_log->set_es_log( i_es = VALUE #( type       = 'S'
+                                        id         = 'ZMM01'
+                                        number     = '403'
+                                        message_v1 = orden_compra ) ).
+
+    ".Agregamos los mensajes de retorno de la BAPI
+    go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno ) ).
+
+    ".Guardamos el log
+    go_log->guardar( ).
+
+  ENDMETHOD.
+ENDCLASS.
+class ZCLMME1089_INDIC_ENTREGA_FINAL definition
+  public
+  final
+  create public .
+
+public section.
+
+  class-methods INDICADOR_ENTREGA_FINAL
+    changing
+      !C_TI_XMCEKPO type MMDA_PUR_TTY_XMCEKPO .
+  class-methods ASIGNAR_IND_ENTREGA_FINAL
+    importing
+      value(I_CODIGO_TRANSACCION) type SYTCODE
+    changing
+      !C_TI_XMCEKPO type MMDA_PUR_TTY_XMCEKPO .
+  class-methods ASIGNAR_IND_ENTREGA_FINAL_ORIG
+    importing
+      value(I_CODIGO_TRANSACCION) type SYTCODE
+    changing
+      !C_TI_XMCEKPO type MMDA_PUR_TTY_XMCEKPO .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLMME1089_INDIC_ENTREGA_FINAL IMPLEMENTATION.
+
+
+  METHOD asignar_ind_entrega_final.
+
+    DATA: es_ind_ent_final TYPE ztmme1089_1,
+          procesado        TYPE ztmme1089_1-procesado.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1089' i_codigo_transaccion = i_codigo_transaccion ) = abap_true
+          AND c_ti_xmcekpo IS NOT INITIAL.
+
+    DATA(orden_compra) = c_ti_xmcekpo[ 1 ]-ebeln.
+
+    SELECT ebeln, ebelp, kztlf, eglkz
+      FROM ekpo
+      WHERE ebeln = @orden_compra
+      INTO TABLE @DATA(ti_ekpo).
+
+    CHECK ti_ekpo IS NOT INITIAL AND
+          line_exists( ti_ekpo[ kztlf = 'B' ] ).
+
+    IF line_exists( ti_ekpo[ eglkz = space ] ).
+      ".Existen posiciones pendientes sin indicador de entrega final
+      procesado = space.
+    ELSE.
+      ".No existen posiciones sin indicador de entrega final
+      procesado = 'N'.
+    ENDIF.
+
+    ".Insertamos el registro en la tabla de base de datos para procesar despues
+    es_ind_ent_final =  VALUE #( ebeln     = orden_compra
+                                 procesado = procesado ).
+    ".Se inserta el registro en la tabla
+    MODIFY ztmme1089_1 FROM @es_ind_ent_final.
+
+  ENDMETHOD.
+
+
+  METHOD indicador_entrega_final.
+*--------------------------------------------------------------------*
+* LEMORENO 01.11.2023:
+* Debido a que esta ampliación se había pensado para dos
+* transacciones (VL10B, VL10X) y que unicamente funciona para la VL10B
+* fue necesario crear el programa ZMME1089_1, el cual es capaz de
+* realizar el mismo proceso que hace esta ampliación, pero partiendo
+* de los datos de la tabla EKBE y EKPO. Dadas estas circustancias, la
+* ampliación ya no es necesaria.
+*--------------------------------------------------------------------*
+*    CALL FUNCTION 'ZMME1089_ASG_IND_ENTREGA_FINAL' STARTING NEW TASK 'ZMME1089_ASG_IND_ENTREGA_FINAL_NT'
+*      DESTINATION 'NONE'
+*      EXPORTING
+*        i_codigo_transaccion = sy-tcode
+*        i_ti_xmcekpo         = c_ti_xmcekpo.
+
+  ENDMETHOD.
+
+
+  METHOD ASIGNAR_IND_ENTREGA_FINAL_ORIG.
+
+    DATA: ti_posicion_pedido  TYPE STANDARD TABLE OF bapimepoitem,
+          ti_posicion_pedidox TYPE STANDARD TABLE OF bapimepoitemx,
+          es_datos_cabecera   TYPE bapimepoheader,
+          ti_msg_retorno      TYPE bapiret2_t,
+          go_log              TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CONSTANTS: c_object    TYPE balobj_d  VALUE 'ZMM_1',
+               c_subobject TYPE balsubobj VALUE 'ZE1089_1'.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1089' i_codigo_transaccion = i_codigo_transaccion ) = abap_true
+          AND c_ti_xmcekpo IS NOT INITIAL.
+
+    DATA(orden_compra) = c_ti_xmcekpo[ 1 ]-ebeln.
+
+*    SELECT ebeln, ebelp, kztlf, eglkz
+*    FROM ekpo
+*    FOR ALL ENTRIES IN @c_ti_xmcekpo
+*    WHERE ebeln = @c_ti_xmcekpo-ebeln
+*    INTO TABLE @DATA(ti_ekpo).
+
+    SELECT ebeln, ebelp, kztlf, eglkz
+      FROM ekpo
+      WHERE ebeln = @orden_compra
+      INTO TABLE @DATA(ti_ekpo).
+
+    CHECK ti_ekpo IS NOT INITIAL AND
+          line_exists( ti_ekpo[ kztlf = 'B' ] ).
+
+    LOOP AT ti_ekpo ASSIGNING FIELD-SYMBOL(<fs_es_ekpo>) WHERE eglkz = space.
+
+      ti_posicion_pedido  = VALUE #( BASE ti_posicion_pedido
+                                   ( po_item = <fs_es_ekpo>-ebelp deliv_compl = abap_true ) ).
+
+      ti_posicion_pedidox  = VALUE #( BASE ti_posicion_pedidox
+                                    ( po_item = <fs_es_ekpo>-ebelp deliv_compl = abap_true ) ).
+
+    ENDLOOP.
+
+    CHECK NOT ti_posicion_pedido IS INITIAL.
+
+    ".Instanciamos el Log
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( i_identificador   = CONV #( c_subobject )
+                                                       i_es_cabecera_log = VALUE #( extnumber  = orden_compra
+                                                                                    object     = c_object
+                                                                                    subobject  = c_subobject
+                                                                                    aldate_del = sy-datum ) ).
+
+    WAIT UP TO 2 SECONDS.
+
+    CALL FUNCTION 'BAPI_PO_CHANGE'
+      EXPORTING
+        purchaseorder = ti_ekpo[ 1 ]-ebeln
+      IMPORTING
+        expheader     = es_datos_cabecera
+      TABLES
+        return        = ti_msg_retorno
+        poitem        = ti_posicion_pedido
+        poitemx       = ti_posicion_pedidox.
+
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = abap_true.
+
+    ".Agregamos mensaje inicial para indicar la OC que se va a tratar
+    ".E1089 Ampliación VL10B Orden de Compra &1
+    go_log->set_es_log( i_es = VALUE #( type       = 'S'
+                                        id         = 'ZMM01'
+                                        number     = '403'
+                                        message_v1 = orden_compra ) ).
+
+    ".Agregamos los mensajes de retorno de la BAPI
+    go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno ) ).
+
+    ".Guardamos el log
+    go_log->guardar( ).
+
+  ENDMETHOD.
+ENDCLASS.

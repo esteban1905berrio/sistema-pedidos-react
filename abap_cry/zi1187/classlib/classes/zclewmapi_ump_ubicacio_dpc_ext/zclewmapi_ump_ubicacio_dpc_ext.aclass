@@ -1,0 +1,146 @@
+CLASS zclewmapi_ump_ubicacio_dpc_ext DEFINITION
+  PUBLIC
+  INHERITING FROM zclewmapi_ump_ubicacion_dpc
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    METHODS:
+      /iwbep/if_mgw_appl_srv_runtime~get_entity REDEFINITION,
+      /iwbep/if_mgw_appl_srv_runtime~get_entityset REDEFINITION.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclewmapi_ump_ubicacio_dpc_ext IMPLEMENTATION.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entityset.
+
+    DATA: r_ump            TYPE RANGE OF vekp-exidv,
+          o_contenedor_msg TYPE REF TO /iwbep/if_message_container,
+          ti_msg_retorno   TYPE bapiret2_t.
+
+    r_ump = CORRESPONDING #( VALUE #( it_filter_select_options[ property = 'UMP' ]-select_options OPTIONAL ) ).
+
+    CHECK r_ump IS NOT INITIAL.
+
+    BREAK seblondo.
+
+    SELECT
+    FROM vekp AS _ump
+    INNER JOIN vepo AS _ump_posicion ON
+    _ump_posicion~venum = _ump~venum
+    INNER JOIN mara AS _material ON
+    _material~matnr = _ump_posicion~matnr
+    LEFT JOIN wrf_charvalt AS _caracteristica ON
+    _caracteristica~atinn = _material~color_atinn AND
+    _caracteristica~atwrt = _material~color
+    INNER JOIN makt AS _material_txt ON
+    _material_txt~matnr = _ump_posicion~matnr AND
+    _material_txt~spras = 'S'
+    FIELDS DISTINCT _ump~exidv AS ump, _ump_posicion~matnr AS material, _material_txt~maktx AS descmaterial, _caracteristica~atwtb AS desccolor,
+    _ump_posicion~charg AS numerolote,
+    CAST( _ump_posicion~vemng AS INT8 ) AS pesocaja,
+    _ump_posicion~vemeh AS unidadmedida,
+    @space AS fechamovimiento,
+    _ump~zz1_conos_huh AS conoscaja
+    WHERE _ump~exidv IN @r_ump
+    INTO TABLE @DATA(ti_ump).
+
+    IF ti_ump IS INITIAL.
+      "Retornar mensaje de error
+      ti_msg_retorno = VALUE #( ( type = 'E' number = '002' id = 'WUSL' ) ).
+      me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                          iv_entity_type = iv_entity_name
+                                                          it_return = ti_msg_retorno
+                                                          it_key_tab = it_key_tab ).
+    ELSE.
+      CREATE DATA er_entityset TYPE zclewmapi_ump_ubicacacion_mpc=>tt_ubicacionump.
+      ASSIGN er_entityset->* TO FIELD-SYMBOL(<fs_ti_ump>).
+      CHECK sy-subrc IS INITIAL.
+      <fs_ti_ump> = CORRESPONDING #( ti_ump ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entity.
+    BREAK seblondo.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclewmapi_ump_ubicacio_dpc_ext DEFINITION
+  PUBLIC
+  INHERITING FROM zclewmapi_ump_ubicacion_dpc
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    METHODS:
+      /iwbep/if_mgw_appl_srv_runtime~get_entity REDEFINITION,
+      /iwbep/if_mgw_appl_srv_runtime~get_entityset REDEFINITION.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclewmapi_ump_ubicacio_dpc_ext IMPLEMENTATION.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entityset.
+
+    DATA: r_ump            TYPE RANGE OF vekp-exidv,
+          o_contenedor_msg TYPE REF TO /iwbep/if_message_container,
+          ti_msg_retorno   TYPE bapiret2_t.
+
+    r_ump = CORRESPONDING #( VALUE #( it_filter_select_options[ property = 'UMP' ]-select_options OPTIONAL ) ).
+
+    CHECK r_ump IS NOT INITIAL.
+
+    BREAK seblondo.
+
+    SELECT
+    FROM vekp AS _ump
+    INNER JOIN vepo AS _ump_posicion ON
+    _ump_posicion~venum = _ump~venum
+    INNER JOIN mara AS _material ON
+    _material~matnr = _ump_posicion~matnr
+    LEFT JOIN wrf_charvalt AS _caracteristica ON
+    _caracteristica~atinn = _material~color_atinn AND
+    _caracteristica~atwrt = _material~color
+    INNER JOIN makt AS _material_txt ON
+    _material_txt~matnr = _ump_posicion~matnr AND
+    _material_txt~spras = 'S'
+    FIELDS DISTINCT _ump~exidv AS ump, _ump_posicion~matnr AS material, _material_txt~maktx AS descmaterial, _caracteristica~atwtb AS desccolor,
+    _ump_posicion~charg AS numerolote,
+    CAST( _ump_posicion~vemng AS INT8 ) AS pesocaja,
+    _ump_posicion~vemeh AS unidadmedida,
+    @space AS fechamovimiento,
+    _ump~zz1_conos_huh AS conoscaja
+    WHERE _ump~exidv IN @r_ump
+    INTO TABLE @DATA(ti_ump).
+
+    IF ti_ump IS INITIAL.
+      "Retornar mensaje de error
+      ti_msg_retorno = VALUE #( ( type = 'E' number = '002' id = 'WUSL' ) ).
+      me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                          iv_entity_type = iv_entity_name
+                                                          it_return = ti_msg_retorno
+                                                          it_key_tab = it_key_tab ).
+    ELSE.
+      CREATE DATA er_entityset TYPE zclewmapi_ump_ubicacacion_mpc=>tt_ubicacionump.
+      ASSIGN er_entityset->* TO FIELD-SYMBOL(<fs_ti_ump>).
+      CHECK sy-subrc IS INITIAL.
+      <fs_ti_ump> = CORRESPONDING #( ti_ump ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entity.
+    BREAK seblondo.
+  ENDMETHOD.
+
+ENDCLASS.

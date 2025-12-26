@@ -1,0 +1,172 @@
+CLASS zclfi_exits_gestion_costos DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      habilitar_doc_co_idoc_ficc2
+        CHANGING
+          c_comp       TYPE trwpr-component
+          c_comp_check TYPE trwpr-component,
+      derivar_segmento_co
+        CHANGING
+          c_ti_coep TYPE tt_coep,
+      modifica_segmentos_idoc_codcmt
+        CHANGING
+          c_ti_idoc_contrl TYPE edidc_tt
+          c_ti_datos_idoc  TYPE edidd_tt,
+      modifica_segmentos_idoc_prcdoc
+        CHANGING
+          c_ti_idoc_contrl TYPE edidc_tt
+          c_ti_datos_idoc  TYPE edidd_tt,
+      completa_documento_anular_caja
+        CHANGING
+          c_ti_accit TYPE accit_tab.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_exits_gestion_costos IMPLEMENTATION.
+  METHOD derivar_segmento_co.
+    zclfii1008_integracion_afs=>derivar_segmento_co( CHANGING c_ti_coep = c_ti_coep ).
+  ENDMETHOD.
+
+  METHOD modifica_segmentos_idoc_codcmt.
+
+    TRY.
+        zclfii1008_integracion_afs=>validar_fecha_contab_doc_co(
+          CHANGING
+            c_ti_datos_idoc = c_ti_datos_idoc ).
+
+        zclfii1008_integracion_afs=>homologar_idoccreateondatabase(
+          CHANGING
+            c_ti_datos_idoc   = c_ti_datos_idoc
+            c_es_control_idoc = c_ti_idoc_contrl[ 1 ] ).
+      CATCH cx_t100_msg.
+        "handle exception
+    ENDTRY.
+
+    zclfii1008_integracion_afs=>modifica_segmentos_idoc_codcmt( CHANGING c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+  METHOD habilitar_doc_co_idoc_ficc2.
+
+    zclfii1008_integracion_afs=>habilitar_doc_co_idoc_ficc2(
+      CHANGING
+        c_comp       = c_comp
+        c_comp_check = c_comp_check  ).
+
+  ENDMETHOD.
+
+  METHOD completa_documento_anular_caja.
+    zclfii1008_integracion_afs=>completa_documento_anular_caja( CHANGING c_ti_accit = c_ti_accit ).
+  ENDMETHOD.
+
+  METHOD modifica_segmentos_idoc_prcdoc.
+    TRY.
+
+        CHECK line_exists( c_ti_idoc_contrl[ mestyp = 'PRCDOC' ] ).
+
+        zclfii1008_integracion_afs=>homologar_idoccreateondatabase(
+          CHANGING
+            c_ti_datos_idoc   = c_ti_datos_idoc
+            c_es_control_idoc = c_ti_idoc_contrl[ mestyp = 'PRCDOC' ] ).
+      CATCH cx_sy_itab_line_not_found.
+
+      CATCH cx_t100_msg.
+
+    ENDTRY.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfi_exits_gestion_costos DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      habilitar_doc_co_idoc_ficc2
+        CHANGING
+          c_comp       TYPE trwpr-component
+          c_comp_check TYPE trwpr-component,
+      derivar_segmento_co
+        CHANGING
+          c_ti_coep TYPE tt_coep,
+      modifica_segmentos_idoc_codcmt
+        CHANGING
+          c_ti_idoc_contrl TYPE edidc_tt
+          c_ti_datos_idoc  TYPE edidd_tt,
+      modifica_segmentos_idoc_prcdoc
+        CHANGING
+          c_ti_idoc_contrl TYPE edidc_tt
+          c_ti_datos_idoc  TYPE edidd_tt,
+      completa_documento_anular_caja
+        CHANGING
+          c_ti_accit TYPE accit_tab.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_exits_gestion_costos IMPLEMENTATION.
+  METHOD derivar_segmento_co.
+    zclfii1008_integracion_afs=>derivar_segmento_co( CHANGING c_ti_coep = c_ti_coep ).
+  ENDMETHOD.
+
+  METHOD modifica_segmentos_idoc_codcmt.
+
+    TRY.
+        zclfii1008_integracion_afs=>validar_fecha_contab_doc_co(
+          CHANGING
+            c_ti_datos_idoc = c_ti_datos_idoc ).
+
+        zclfii1008_integracion_afs=>homologar_idoccreateondatabase(
+          CHANGING
+            c_ti_datos_idoc   = c_ti_datos_idoc
+            c_es_control_idoc = c_ti_idoc_contrl[ 1 ] ).
+      CATCH cx_t100_msg.
+        "handle exception
+    ENDTRY.
+
+    zclfii1008_integracion_afs=>modifica_segmentos_idoc_codcmt( CHANGING c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+  METHOD habilitar_doc_co_idoc_ficc2.
+
+    zclfii1008_integracion_afs=>habilitar_doc_co_idoc_ficc2(
+      CHANGING
+        c_comp       = c_comp
+        c_comp_check = c_comp_check  ).
+
+  ENDMETHOD.
+
+  METHOD completa_documento_anular_caja.
+    zclfii1008_integracion_afs=>completa_documento_anular_caja( CHANGING c_ti_accit = c_ti_accit ).
+  ENDMETHOD.
+
+  METHOD modifica_segmentos_idoc_prcdoc.
+    TRY.
+
+        CHECK line_exists( c_ti_idoc_contrl[ mestyp = 'PRCDOC' ] ).
+
+        zclfii1008_integracion_afs=>homologar_idoccreateondatabase(
+          CHANGING
+            c_ti_datos_idoc   = c_ti_datos_idoc
+            c_es_control_idoc = c_ti_idoc_contrl[ mestyp = 'PRCDOC' ] ).
+      CATCH cx_sy_itab_line_not_found.
+
+      CATCH cx_t100_msg.
+
+    ENDTRY.
+  ENDMETHOD.
+
+ENDCLASS.

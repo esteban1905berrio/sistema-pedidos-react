@@ -1,0 +1,52 @@
+{
+  "enhancementName" : "ZFIR1005_1",
+  "header" : {
+    "enhancementName" : "ZFIR1005_1",
+    "description" : "Adicion de codigo para proceso de contabilización de impuestos diferidos",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZR1005",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-05-06",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-07-16"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "RGUCOMP4",
+    "fullName" : "\\PR:RGUCOMP4\\FO:SCREEN_MODIF_REMOTE\\SE:BEGIN\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "*&---------------------------------------------------------------------*\n*& Información General\n*&---------------------------------------------------------------------*\n* Identificador: R1005\n* Programa     : zfir1005_1\n* Tipo Objeto  : Reporte\n* Descripción  : Se recupera de memoria las cuentas cuando es llamado\n*                desde la transaccion Z\n* Autor Prog.  : Sebastian Londono\n* Fecha Creac. : 17.03.2021\n*----------------------------------------------------------------------*\n* Ordenes de Transporte\n*----------------------------------------------------------------------*\n* Fecha       | CR#         | Autor           | Modificación\n*----------------------------------------------------------------------*\n* 17.03.2021   D01K928334    Sebastian Londono Version Inicial\n*----------------------------------------------------------------------*\n  zclfi_exits_gestion_documentos=>imp_diferido_recupera_cuenta(\n    CHANGING\n      c_r_numero_cuenta = p_racct[]\n      c_ledger          = p_brldnr ).\n"
+  }, {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "RGUCOMP4",
+    "fullName" : "\\PR:RGUCOMP4\\FO:OUTPUT_RESULT\\SE:END\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "*&---------------------------------------------------------------------*\n*& Información General\n*&---------------------------------------------------------------------*\n* Identificador: R1005\n* Programa     : zfir1005_1\n* Tipo Objeto  : Ampliacion\n* Descripción  : Contabilizazicon de impuestos diferidos\n*\n* Autor Prog.  : Sebastian Londono\n* Fecha Creac. : 17.03.2021\n*----------------------------------------------------------------------*\n* Ordenes de Transporte\n*----------------------------------------------------------------------*\n* Fecha       | CR#         | Autor           | Modificación\n*----------------------------------------------------------------------*\n* 17.03.2021   D01K928334    Sebastian Londono Version Inicial\n*----------------------------------------------------------------------*\n\n  zclfi_exits_gestion_documentos=>imp_diferido_expor_comparacion(\n    CHANGING\n      c_ti_comparacion = t_compare_t[] ).\n"
+  }, {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "RGUCOMP4",
+    "fullName" : "\\PR:RGUCOMP4\\FO:FILL_EVENTS\\SE:BEGIN\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "*&---------------------------------------------------------------------*\n*& Información General\n*&---------------------------------------------------------------------*\n* Identificador: R1005\n* Programa     : zfir1005_1\n* Tipo Objeto  : Ampliacion\n* Descripción  : Contabilizazicon de impuestos diferidos\n*\n* Autor Prog.  : Sebastian Londono\n* Fecha Creac. : 17.03.2021\n*----------------------------------------------------------------------*\n* Ordenes de Transporte\n*----------------------------------------------------------------------*\n* Fecha       | CR#         | Autor           | Modificación\n*----------------------------------------------------------------------*\n* 17.03.2021   D01K928334    Sebastian Londono Version Inicial\n*----------------------------------------------------------------------*\n\n  zclfi_exits_gestion_documentos=>imp_diferido_expor_comparacion( CHANGING\n                                                                    c_ti_comparacion = t_compare_t[] )."
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

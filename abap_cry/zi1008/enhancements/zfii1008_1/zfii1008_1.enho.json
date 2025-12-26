@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFII1008_1",
+  "header" : {
+    "enhancementName" : "ZFII1008_1",
+    "description" : "Derivar Segmento para documentos FI-CO",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZI1008",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-06-22",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-10-01"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "ES_SAPLKALE",
+    "programName" : "SAPLKALE",
+    "fullName" : "\\PR:SAPLKALE\\EX:IDOC_INPUT_CODCMT_G1\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "  zclfi_exits_gestion_costos=>modifica_segmentos_idoc_codcmt( CHANGING c_ti_datos_idoc = idoc_data[]\n                                                                       c_ti_idoc_contrl = idoc_contrl[] )."
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

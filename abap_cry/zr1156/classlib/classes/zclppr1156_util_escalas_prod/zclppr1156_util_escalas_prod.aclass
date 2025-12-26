@@ -1,0 +1,676 @@
+CLASS zclppr1156_util_escalas_prod DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF gtp_param_app,
+*      cent_alma TYPE RANGE OF ztcxr1000_2-low, "Centro Almacen
+        difconse TYPE ztppr1156_1-ran_final,  "Diferencia entre Consecutivos
+      END OF gtp_param_app .
+    TYPES:
+      BEGIN OF tp_excel,
+        centro       TYPE werks_d,
+        mat_generico TYPE matnr,
+        version_fabr TYPE verid,
+        ran_inicial  TYPE zed_rango_inicial_textil,
+        ran_final    TYPE zed_rango_final_textil,
+      END OF tp_excel .
+    TYPES:
+      tp_t_excel TYPE STANDARD TABLE OF tp_excel .
+    TYPES:
+      tp_t_escalas        TYPE TABLE OF ztppr1156_1 .
+    TYPES:
+      tp_t_material_error TYPE TABLE OF matnr .
+
+    CLASS-METHODS descargar_plantilla_excel .
+    CLASS-METHODS validar_material_generico
+      IMPORTING
+        !i_ti_escalas        TYPE tp_t_escalas
+      EXPORTING
+        !e_ti_material_error TYPE tp_t_material_error .
+    CLASS-METHODS validar_rango_referencia
+      IMPORTING
+        VALUE(i_ti_escalas) TYPE tp_t_escalas
+        VALUE(i_es_escalas) TYPE zvppr1156_1
+      CHANGING
+        !c_mensaje          TYPE /aif/temse_lgmes OPTIONAL
+        !c_vim_abort_saving TYPE flag OPTIONAL .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclppr1156_util_escalas_prod IMPLEMENTATION.
+
+
+  METHOD descargar_plantilla_excel.
+
+    DATA: ruta      TYPE string,
+          ti_datos  TYPE tp_t_excel,
+          ti_bintab TYPE solix_tab,
+          tamanio   TYPE i.
+
+
+
+    cl_gui_frontend_services=>directory_browse(
+      CHANGING
+        selected_folder      = ruta
+      EXCEPTIONS
+        cntl_error           = 1
+        error_no_gui         = 2
+        not_supported_by_gui = 3
+        OTHERS               = 4
+    ).
+
+
+    CHECK ruta IS NOT INITIAL.
+
+    ti_datos = VALUE #( ( centro = ''
+                          mat_generico = ''
+                          version_fabr = ''
+                          ran_inicial = ''
+                          ran_final = '' ) ).
+
+    ruta = |{ ruta }{ '\' }Plantilla_carga_escalas.xlsx|.
+
+    DATA(xstring) = zclcxr1002_util=>ti_a_xstring( REF #( ti_datos ) ).
+
+    CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+      EXPORTING
+        buffer        = xstring
+      IMPORTING
+        output_length = tamanio
+      TABLES
+        binary_tab    = ti_bintab.
+
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING
+        bin_filesize            = tamanio
+        filename                = ruta
+        filetype                = 'BIN'
+      CHANGING
+        data_tab                = ti_bintab
+      EXCEPTIONS
+        file_write_error        = 1
+        no_batch                = 2
+        gui_refuse_filetransfer = 3
+        invalid_type            = 4
+        no_authority            = 5
+        unknown_error           = 6
+        header_not_allowed      = 7
+        separator_not_allowed   = 8
+        filesize_not_allowed    = 9
+        header_too_long         = 10
+        dp_error_create         = 11
+        dp_error_send           = 12
+        dp_error_write          = 13
+        unknown_dp_error        = 14
+        access_denied           = 15
+        dp_out_of_memory        = 16
+        disk_full               = 17
+        dp_timeout              = 18
+        file_not_found          = 19
+        dataprovider_exception  = 20
+        control_flush_error     = 21
+        not_supported_by_gui    = 22
+        error_no_gui            = 23
+        OTHERS                  = 24 ).
+
+    IF sy-subrc <> 0.
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD validar_material_generico.
+
+    DATA(ti_datos_aux) = i_ti_escalas[].
+    SORT: ti_datos_aux BY mat_generico.
+
+
+    DELETE ti_datos_aux WHERE mat_generico = ''.
+    DELETE ADJACENT DUPLICATES FROM ti_datos_aux COMPARING mat_generico.
+
+    CHECK ti_datos_aux IS NOT INITIAL.
+
+    SELECT DISTINCT matnr, satnr FROM mara INTO TABLE @DATA(ti_material)
+      FOR ALL ENTRIES IN @ti_datos_aux
+      WHERE satnr = @ti_datos_aux-mat_generico.
+    IF sy-subrc EQ 0.
+      LOOP AT i_ti_escalas INTO DATA(es_escalas).
+        CHECK es_escalas-mat_generico IS NOT INITIAL.
+        IF line_exists( ti_material[ satnr = es_escalas-mat_generico ] ).
+          CONTINUE.
+        ELSE.
+**         Agregar materiales que no sean genericos.
+          e_ti_material_error = VALUE #( BASE e_ti_material_error ( es_escalas-mat_generico ) ).
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+*      Agrega amteriales que nosean genericos.
+      e_ti_material_error = VALUE #( FOR es_material IN i_ti_escalas
+                                     ( es_material-mat_generico ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD validar_rango_referencia.
+
+    CONSTANTS:
+      c_modulo     TYPE ztcxr1000_1-modulo   VALUE 'PP',
+      c_ricefw     TYPE ztcxr1000_1-ricefw   VALUE 'R1156',
+      c_difconse   TYPE ztcxr1000_1-idparam  VALUE 'DIFCONSE',
+      c_COSECESCAL TYPE ztcxr1000_1-idparam  VALUE 'COSECESCAL'. "Adición Andres Diaz Gomez 6/10/2025
+
+    DATA: valor_adicional         TYPE ztppr1156_1-ran_final VALUE '0.01',
+          rango_referencia        TYPE ztppr1156_1-ran_final,
+          version_fabricacion_ref TYPE ztppr1156_1-version_fabr,
+          ti_escala_verificada    TYPE STANDARD TABLE OF ztppr1156_1-version_fabr.
+
+    DATA:
+          lv_meins TYPE mara-meins.
+
+*  data ES_PARAM_APP type GTP_PARAM_APP .
+*  data O_PARAMETROS type ref to ZCLCXR1000_PARAMETROS .
+
+*    BREAK seblondo.
+
+    CHECK i_ti_escalas IS NOT INITIAL.
+
+*    IF O_PARAMETROS IS INITIAL.
+*      call METHOD get_parameters( CHANGING ES_PARAM_APP = ES_PARAM_APP
+*                                           O_PARAMETROS = O_PARAMETROS ).
+*    ENDIF.
+
+    SORT i_ti_escalas BY centro mat_generico version_fabr ASCENDING.
+
+*Inicio adicion 13Dic2024 Sebastian Restrepo Villa
+    WRITE i_es_escalas-meins TO lv_meins.
+*    "Consultar la UM del material
+*    SELECT SINGLE meins
+*      FROM mara
+*     WHERE matnr EQ @i_es_escalas-mat_generico
+*      INTO @lv_meins.
+*    IF sy-subrc EQ 0.
+
+    "comentado  Andres Diaz Gomez 6/10/2025
+*    SELECT SINGLE *
+*      FROM ztcxr1000_2
+*     WHERE modulo   = @c_modulo
+*       AND ricefw   = @c_ricefw
+*       AND idparam  = @c_difconse
+*       AND low      = @lv_meins
+*     INTO @DATA(es_ztcxr1000_2).
+*    IF sy-subrc EQ 0.
+*      valor_adicional = es_ztcxr1000_2-high.
+*    ENDIF.
+**    ENDIF.
+    "fin comentado  Andres Diaz Gomez 6/10/2025
+
+    "Adicion  Andres Diaz Gomez 6/10/2025
+
+    DATA(lo_param) = NEW zclcxr1000_parametros( i_modulo = 'PP' i_ricefw = 'R1156' ).
+
+    IF sy-subrc EQ 0.
+
+      TRY.
+
+          valor_adicional = lo_param->gti_parametros[ idparam = c_difconse low = lv_meins ]-high.
+
+        CATCH cx_sy_itab_line_not_found.
+          IF c_mensaje IS SUPPLIED.
+            MESSAGE e001(zcx01) WITH c_difconse INTO c_mensaje.
+          ELSE.
+            MESSAGE e001(zcx01) WITH c_difconse DISPLAY LIKE 'E'.
+          ENDIF.
+
+          EXIT.
+      ENDTRY.
+
+      TRY.
+
+          DATA(clase_superalta) = lo_param->gti_parametros[ idparam = c_cosecescal ].
+
+        CATCH cx_sy_itab_line_not_found.
+          IF c_mensaje IS SUPPLIED.
+            MESSAGE s001(zcx01) WITH c_cosecescal INTO c_mensaje.
+          ELSE.
+            MESSAGE s001(zcx01) WITH c_cosecescal DISPLAY LIKE 'E'.
+          ENDIF.
+
+          EXIT.
+      ENDTRY.
+
+    ENDIF.
+    "Fin Adicion  Andres Diaz Gomez 6/10/2025
+*Fin adicion 13Dic2024 Sebastian Restrepo Villa
+
+    LOOP AT i_ti_escalas REFERENCE INTO DATA(r_escalas)
+                                            WHERE centro = i_es_escalas-centro
+                                              AND mat_generico = i_es_escalas-mat_generico
+                                              AND version_fabr = i_es_escalas-version_fabr.
+
+      CHECK NOT line_exists( ti_escala_verificada[ table_line = r_escalas->version_fabr+1(3) ] ).
+
+
+      "Adicion  Andres Diaz Gomez 6/10/2025
+      IF r_escalas->version_fabr(1) EQ clase_superalta-high. "se valida si la version de fabricacion es super alta
+
+        TRY.
+
+            DATA(les_alta) = i_ti_escalas[ centro = i_es_escalas-centro
+                                           mat_generico = i_es_escalas-mat_generico
+                                           version_fabr = |{ clase_superalta-low }{ r_escalas->version_fabr+1(3) }| ].
+
+          CATCH cx_sy_itab_line_not_found.
+
+            IF c_mensaje IS SUPPLIED.
+              MESSAGE s147(zcx01) INTO c_mensaje.
+            ELSE.
+              MESSAGE s147(zcx01) DISPLAY LIKE 'E'.
+            ENDIF.
+
+        ENDTRY.
+
+
+        rango_referencia = les_alta-ran_final + valor_adicional.
+        version_fabricacion_ref = les_alta-version_fabr.
+
+        IF r_escalas->ran_inicial NE rango_referencia.
+
+          IF c_mensaje IS SUPPLIED.
+            MESSAGE s112(zpp01) WITH r_escalas->version_fabr version_fabricacion_ref INTO c_mensaje.
+          ELSE.
+            MESSAGE s112(zpp01) WITH r_escalas->version_fabr version_fabricacion_ref DISPLAY LIKE 'E'.
+          ENDIF.
+
+          c_vim_abort_saving = abap_true.
+
+        ENDIF.
+
+      ELSE. "Fin Adicion  Andres Diaz Gomez 6/10/2025
+
+        DATA(indice) = sy-tabix + 1.
+*      rango_referencia = r_escalas->ran_final + valor_adicional.
+*      version_fabricacion_ref = r_escalas->version_fabr.
+
+        LOOP AT i_ti_escalas ASSIGNING FIELD-SYMBOL(<fs_es_escala>)
+                             FROM indice
+                             WHERE centro = r_escalas->centro
+                               AND mat_generico = r_escalas->mat_generico
+                               AND version_fabr+1(3) = r_escalas->version_fabr+1(3).
+
+          IF <fs_es_escala>-version_fabr(1) NE clase_superalta-high.
+
+            rango_referencia = <fs_es_escala>-ran_final + valor_adicional.
+            version_fabricacion_ref = <fs_es_escala>-version_fabr.
+
+            IF r_escalas->ran_inicial NE rango_referencia.
+
+              IF c_mensaje IS SUPPLIED.
+                MESSAGE s112(zpp01) WITH r_escalas->version_fabr version_fabricacion_ref INTO c_mensaje.
+              ELSE.
+                MESSAGE s112(zpp01) WITH r_escalas->version_fabr version_fabricacion_ref DISPLAY LIKE 'E'.
+              ENDIF.
+
+              c_vim_abort_saving = abap_true.
+            ENDIF.
+            "Solo valida la linea siguiente a la version que se esta validando
+            EXIT.
+
+          ENDIF.
+        ENDLOOP.
+
+      ENDIF.
+
+      APPEND r_escalas->version_fabr+1(3) TO ti_escala_verificada.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclppr1156_util_escalas_prod DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF gtp_param_app,
+*      cent_alma TYPE RANGE OF ztcxr1000_2-low, "Centro Almacen
+        difconse TYPE ztppr1156_1-ran_final,  "Diferencia entre Consecutivos
+      END OF gtp_param_app .
+    TYPES:
+      BEGIN OF tp_excel,
+        centro       TYPE werks_d,
+        mat_generico TYPE matnr,
+        version_fabr TYPE verid,
+        ran_inicial  TYPE zed_rango_inicial_textil,
+        ran_final    TYPE zed_rango_final_textil,
+      END OF tp_excel .
+    TYPES:
+      tp_t_excel TYPE STANDARD TABLE OF tp_excel .
+    TYPES:
+      tp_t_escalas        TYPE TABLE OF ztppr1156_1 .
+    TYPES:
+      tp_t_material_error TYPE TABLE OF matnr .
+
+    CLASS-METHODS descargar_plantilla_excel .
+    CLASS-METHODS validar_material_generico
+      IMPORTING
+        !i_ti_escalas        TYPE tp_t_escalas
+      EXPORTING
+        !e_ti_material_error TYPE tp_t_material_error .
+    CLASS-METHODS validar_rango_referencia
+      IMPORTING
+        VALUE(i_ti_escalas) TYPE tp_t_escalas
+        VALUE(i_es_escalas) TYPE zvppr1156_1
+      CHANGING
+        !c_mensaje          TYPE /aif/temse_lgmes OPTIONAL
+        !c_vim_abort_saving TYPE flag OPTIONAL .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclppr1156_util_escalas_prod IMPLEMENTATION.
+
+
+  METHOD descargar_plantilla_excel.
+
+    DATA: ruta      TYPE string,
+          ti_datos  TYPE tp_t_excel,
+          ti_bintab TYPE solix_tab,
+          tamanio   TYPE i.
+
+
+
+    cl_gui_frontend_services=>directory_browse(
+      CHANGING
+        selected_folder      = ruta
+      EXCEPTIONS
+        cntl_error           = 1
+        error_no_gui         = 2
+        not_supported_by_gui = 3
+        OTHERS               = 4
+    ).
+
+
+    CHECK ruta IS NOT INITIAL.
+
+    ti_datos = VALUE #( ( centro = ''
+                          mat_generico = ''
+                          version_fabr = ''
+                          ran_inicial = ''
+                          ran_final = '' ) ).
+
+    ruta = |{ ruta }{ '\' }Plantilla_carga_escalas.xlsx|.
+
+    DATA(xstring) = zclcxr1002_util=>ti_a_xstring( REF #( ti_datos ) ).
+
+    CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+      EXPORTING
+        buffer        = xstring
+      IMPORTING
+        output_length = tamanio
+      TABLES
+        binary_tab    = ti_bintab.
+
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING
+        bin_filesize            = tamanio
+        filename                = ruta
+        filetype                = 'BIN'
+      CHANGING
+        data_tab                = ti_bintab
+      EXCEPTIONS
+        file_write_error        = 1
+        no_batch                = 2
+        gui_refuse_filetransfer = 3
+        invalid_type            = 4
+        no_authority            = 5
+        unknown_error           = 6
+        header_not_allowed      = 7
+        separator_not_allowed   = 8
+        filesize_not_allowed    = 9
+        header_too_long         = 10
+        dp_error_create         = 11
+        dp_error_send           = 12
+        dp_error_write          = 13
+        unknown_dp_error        = 14
+        access_denied           = 15
+        dp_out_of_memory        = 16
+        disk_full               = 17
+        dp_timeout              = 18
+        file_not_found          = 19
+        dataprovider_exception  = 20
+        control_flush_error     = 21
+        not_supported_by_gui    = 22
+        error_no_gui            = 23
+        OTHERS                  = 24 ).
+
+    IF sy-subrc <> 0.
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD validar_material_generico.
+
+    DATA(ti_datos_aux) = i_ti_escalas[].
+    SORT: ti_datos_aux BY mat_generico.
+
+
+    DELETE ti_datos_aux WHERE mat_generico = ''.
+    DELETE ADJACENT DUPLICATES FROM ti_datos_aux COMPARING mat_generico.
+
+    CHECK ti_datos_aux IS NOT INITIAL.
+
+    SELECT DISTINCT matnr, satnr FROM mara INTO TABLE @DATA(ti_material)
+      FOR ALL ENTRIES IN @ti_datos_aux
+      WHERE satnr = @ti_datos_aux-mat_generico.
+    IF sy-subrc EQ 0.
+      LOOP AT i_ti_escalas INTO DATA(es_escalas).
+        CHECK es_escalas-mat_generico IS NOT INITIAL.
+        IF line_exists( ti_material[ satnr = es_escalas-mat_generico ] ).
+          CONTINUE.
+        ELSE.
+**         Agregar materiales que no sean genericos.
+          e_ti_material_error = VALUE #( BASE e_ti_material_error ( es_escalas-mat_generico ) ).
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+*      Agrega amteriales que nosean genericos.
+      e_ti_material_error = VALUE #( FOR es_material IN i_ti_escalas
+                                     ( es_material-mat_generico ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD validar_rango_referencia.
+
+    CONSTANTS:
+      c_modulo     TYPE ztcxr1000_1-modulo   VALUE 'PP',
+      c_ricefw     TYPE ztcxr1000_1-ricefw   VALUE 'R1156',
+      c_difconse   TYPE ztcxr1000_1-idparam  VALUE 'DIFCONSE',
+      c_COSECESCAL TYPE ztcxr1000_1-idparam  VALUE 'COSECESCAL'. "Adición Andres Diaz Gomez 6/10/2025
+
+    DATA: valor_adicional         TYPE ztppr1156_1-ran_final VALUE '0.01',
+          rango_referencia        TYPE ztppr1156_1-ran_final,
+          version_fabricacion_ref TYPE ztppr1156_1-version_fabr,
+          ti_escala_verificada    TYPE STANDARD TABLE OF ztppr1156_1-version_fabr.
+
+    DATA:
+          lv_meins TYPE mara-meins.
+
+*  data ES_PARAM_APP type GTP_PARAM_APP .
+*  data O_PARAMETROS type ref to ZCLCXR1000_PARAMETROS .
+
+*    BREAK seblondo.
+
+    CHECK i_ti_escalas IS NOT INITIAL.
+
+*    IF O_PARAMETROS IS INITIAL.
+*      call METHOD get_parameters( CHANGING ES_PARAM_APP = ES_PARAM_APP
+*                                           O_PARAMETROS = O_PARAMETROS ).
+*    ENDIF.
+
+    SORT i_ti_escalas BY centro mat_generico version_fabr ASCENDING.
+
+*Inicio adicion 13Dic2024 Sebastian Restrepo Villa
+    WRITE i_es_escalas-meins TO lv_meins.
+*    "Consultar la UM del material
+*    SELECT SINGLE meins
+*      FROM mara
+*     WHERE matnr EQ @i_es_escalas-mat_generico
+*      INTO @lv_meins.
+*    IF sy-subrc EQ 0.
+
+    "comentado  Andres Diaz Gomez 6/10/2025
+*    SELECT SINGLE *
+*      FROM ztcxr1000_2
+*     WHERE modulo   = @c_modulo
+*       AND ricefw   = @c_ricefw
+*       AND idparam  = @c_difconse
+*       AND low      = @lv_meins
+*     INTO @DATA(es_ztcxr1000_2).
+*    IF sy-subrc EQ 0.
+*      valor_adicional = es_ztcxr1000_2-high.
+*    ENDIF.
+**    ENDIF.
+    "fin comentado  Andres Diaz Gomez 6/10/2025
+
+    "Adicion  Andres Diaz Gomez 6/10/2025
+
+    DATA(lo_param) = NEW zclcxr1000_parametros( i_modulo = 'PP' i_ricefw = 'R1156' ).
+
+    IF sy-subrc EQ 0.
+
+      TRY.
+
+          valor_adicional = lo_param->gti_parametros[ idparam = c_difconse low = lv_meins ]-high.
+
+        CATCH cx_sy_itab_line_not_found.
+          IF c_mensaje IS SUPPLIED.
+            MESSAGE e001(zcx01) WITH c_difconse INTO c_mensaje.
+          ELSE.
+            MESSAGE e001(zcx01) WITH c_difconse DISPLAY LIKE 'E'.
+          ENDIF.
+
+          EXIT.
+      ENDTRY.
+
+      TRY.
+
+          DATA(clase_superalta) = lo_param->gti_parametros[ idparam = c_cosecescal ].
+
+        CATCH cx_sy_itab_line_not_found.
+          IF c_mensaje IS SUPPLIED.
+            MESSAGE s001(zcx01) WITH c_cosecescal INTO c_mensaje.
+          ELSE.
+            MESSAGE s001(zcx01) WITH c_cosecescal DISPLAY LIKE 'E'.
+          ENDIF.
+
+          EXIT.
+      ENDTRY.
+
+    ENDIF.
+    "Fin Adicion  Andres Diaz Gomez 6/10/2025
+*Fin adicion 13Dic2024 Sebastian Restrepo Villa
+
+    LOOP AT i_ti_escalas REFERENCE INTO DATA(r_escalas)
+                                            WHERE centro = i_es_escalas-centro
+                                              AND mat_generico = i_es_escalas-mat_generico
+                                              AND version_fabr = i_es_escalas-version_fabr.
+
+      CHECK NOT line_exists( ti_escala_verificada[ table_line = r_escalas->version_fabr+1(3) ] ).
+
+
+      "Adicion  Andres Diaz Gomez 6/10/2025
+      IF r_escalas->version_fabr(1) EQ clase_superalta-high. "se valida si la version de fabricacion es super alta
+
+        TRY.
+
+            DATA(les_alta) = i_ti_escalas[ centro = i_es_escalas-centro
+                                           mat_generico = i_es_escalas-mat_generico
+                                           version_fabr = |{ clase_superalta-low }{ r_escalas->version_fabr+1(3) }| ].
+
+          CATCH cx_sy_itab_line_not_found.
+
+            IF c_mensaje IS SUPPLIED.
+              MESSAGE s147(zcx01) INTO c_mensaje.
+            ELSE.
+              MESSAGE s147(zcx01) DISPLAY LIKE 'E'.
+            ENDIF.
+
+        ENDTRY.
+
+
+        rango_referencia = les_alta-ran_final + valor_adicional.
+        version_fabricacion_ref = les_alta-version_fabr.
+
+        IF r_escalas->ran_inicial NE rango_referencia.
+
+          IF c_mensaje IS SUPPLIED.
+            MESSAGE s112(zpp01) WITH r_escalas->version_fabr version_fabricacion_ref INTO c_mensaje.
+          ELSE.
+            MESSAGE s112(zpp01) WITH r_escalas->version_fabr version_fabricacion_ref DISPLAY LIKE 'E'.
+          ENDIF.
+
+          c_vim_abort_saving = abap_true.
+
+        ENDIF.
+
+      ELSE. "Fin Adicion  Andres Diaz Gomez 6/10/2025
+
+        DATA(indice) = sy-tabix + 1.
+*      rango_referencia = r_escalas->ran_final + valor_adicional.
+*      version_fabricacion_ref = r_escalas->version_fabr.
+
+        LOOP AT i_ti_escalas ASSIGNING FIELD-SYMBOL(<fs_es_escala>)
+                             FROM indice
+                             WHERE centro = r_escalas->centro
+                               AND mat_generico = r_escalas->mat_generico
+                               AND version_fabr+1(3) = r_escalas->version_fabr+1(3).
+
+          IF <fs_es_escala>-version_fabr(1) NE clase_superalta-high.
+
+            rango_referencia = <fs_es_escala>-ran_final + valor_adicional.
+            version_fabricacion_ref = <fs_es_escala>-version_fabr.
+
+            IF r_escalas->ran_inicial NE rango_referencia.
+
+              IF c_mensaje IS SUPPLIED.
+                MESSAGE s112(zpp01) WITH r_escalas->version_fabr version_fabricacion_ref INTO c_mensaje.
+              ELSE.
+                MESSAGE s112(zpp01) WITH r_escalas->version_fabr version_fabricacion_ref DISPLAY LIKE 'E'.
+              ENDIF.
+
+              c_vim_abort_saving = abap_true.
+            ENDIF.
+            "Solo valida la linea siguiente a la version que se esta validando
+            EXIT.
+
+          ENDIF.
+        ENDLOOP.
+
+      ENDIF.
+
+      APPEND r_escalas->version_fabr+1(3) TO ti_escala_verificada.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+ENDCLASS.

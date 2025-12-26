@@ -1,0 +1,1690 @@
+CLASS zclppe1092_cre_masiva_of DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_mensaje            TYPE symsgid VALUE 'ZPP01',
+               gc_operacion_registro_error TYPE c VALUE 'E',
+               gc_caracter_separador_of    TYPE string VALUE '-'.
+
+    TYPES: BEGIN OF gtp_es_datos_of,
+             icon                         TYPE string,
+             fila                         TYPE i,
+             material                     TYPE matnr,
+             centro                       TYPE werks_d,
+             clase_orden                  TYPE aufk-auart,
+             cantidad_total               TYPE sa_losvn,
+             um                           TYPE mara-meins,
+             fecha_fin_ext                TYPE string,
+             version                      TYPE mdfq-verid,
+             of_zp30_para_zp05            TYPE string,
+             segmento_de_stock            TYPE sgt_scat,
+             orden_fabricacion            TYPE aufk-aufnr,
+             observaciones                TYPE string,
+             cantidad_total_um_convertida TYPE sa_losvn,
+           END OF gtp_es_datos_of,
+
+           BEGIN OF gtp_es_datos_of_bd.
+             INCLUDE TYPE gtp_es_datos_of.
+    TYPES:
+      END OF gtp_es_datos_of_bd.
+
+    TYPES:
+      gtp_ti_datos_of        TYPE STANDARD TABLE OF gtp_es_datos_of_bd WITH EMPTY KEY.
+
+    DATA: gti_datos_of  TYPE gtp_ti_datos_of.
+
+    CLASS-DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS:
+      descargar_plantilla.
+
+    METHODS:
+      cargar_archivo
+        IMPORTING
+          i_nombre_archivo     TYPE localfile
+        RETURNING
+          VALUE(r_ti_datos_of) TYPE gtp_ti_datos_of
+        RAISING
+          cx_t100_msg,
+      iniciar_proceso_creacion_of
+        IMPORTING
+          i_nombre_archivo TYPE localfile,
+      visualizar_resultado_carga
+        RAISING
+          cx_t100_msg.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA: go_parametros                  TYPE REF TO zclcxr1000_parametros,
+                g_r_cl_orden_campo_obligatorio TYPE RANGE OF aufk-auart,
+                g_r_cl_orden_validar_campo     TYPE RANGE OF aufk-auart,
+                g_r_separador_of               TYPE RANGE OF string,
+                g_r_centro_campo_obligatorio   TYPE RANGE OF aufk-werks,
+                g_ruta_plantilla               TYPE string.
+
+
+    CLASS-METHODS:
+      cargar_parametros.
+
+    METHODS:
+      crear_of
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      validar_datos
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      crear_of_previsional
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      obtener_version
+        CHANGING
+          c_es_dato_of TYPE gtp_es_datos_of_bd,
+      eliminar_of_previsional
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      validar_centro_clorden_fecha
+        CHANGING
+          c_es_dato_of TYPE gtp_es_datos_of_bd,
+      ajustar_datos_para_salida
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      crear_catalogo_itab_salida
+        IMPORTING
+          i_ti                 TYPE gtp_ti_datos_of
+        RETURNING
+          VALUE(r_ti_catalogo) TYPE lvc_t_fcat,
+      verificar_version_valida
+        CHANGING
+          c_es_dato_of TYPE gtp_es_datos_of_bd,
+      verificar_um_material
+        CHANGING
+          c_es_dato_of TYPE gtp_es_datos_of_bd.
+
+ENDCLASS.
+
+
+
+CLASS zclppe1092_cre_masiva_of IMPLEMENTATION.
+
+  METHOD descargar_plantilla.
+
+    DATA: ruta_archivo_local TYPE string VALUE 'C:\tmp',
+          ti_datos           TYPE STANDARD TABLE OF gtp_es_datos_of,
+          ti_bintab          TYPE solix_tab,
+          tamanio            TYPE i,
+          d_binsize          TYPE i,
+          d_binfile          TYPE xstring,
+          es_file            TYPE rcgrepfile,
+          ti_file            TYPE TABLE OF rcgrepfile.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    cargar_parametros( ).
+
+    CHECK ruta_archivo_local IS NOT INITIAL.
+
+    IF g_ruta_plantilla IS INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '060' type = 'E' ) ).
+      go_log->mostrar_log( i_ventana_emergente = abap_true ).
+      RETURN.
+    ENDIF.
+
+    SPLIT g_ruta_plantilla AT '/' INTO TABLE DATA(ti_ruta).
+    ruta_archivo_local = |{ ruta_archivo_local }\\{ ti_ruta[ lines( ti_ruta ) ] }|.
+
+    "/usr/sap/interfaces/plantillas/ZPPE1092_Plantilla.xlsx
+    OPEN DATASET g_ruta_plantilla FOR INPUT IN BINARY MODE.
+
+    DO.
+      CLEAR: es_file, d_binsize.
+      READ DATASET g_ruta_plantilla INTO es_file LENGTH d_binsize.
+      IF sy-subrc = 0.
+        tamanio = tamanio + d_binsize.
+        APPEND es_file TO ti_file.
+      ELSE.
+        IF d_binsize > 0.
+          tamanio = tamanio + d_binsize.
+          APPEND es_file TO ti_file.
+        ENDIF.
+        EXIT.
+      ENDIF.
+    ENDDO.
+    CLOSE DATASET g_ruta_plantilla.
+
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING
+        bin_filesize              = tamanio
+        filename                  = ruta_archivo_local
+        filetype                  = 'BIN'
+      CHANGING
+        data_tab                  = ti_file
+      EXCEPTIONS
+        file_write_error          = 1
+        no_batch                  = 2
+        gui_refuse_filetransfer   = 3
+        invalid_type              = 4
+        no_authority              = 5
+        unknown_error             = 6
+        header_not_allowed        = 7
+        separator_not_allowed     = 8
+        filesize_not_allowed      = 9
+        header_too_long           = 10
+        dp_error_create           = 11
+        dp_error_send             = 12
+        dp_error_write            = 13
+        unknown_dp_error          = 14
+        access_denied             = 15
+        dp_out_of_memory          = 16
+        disk_full                 = 17
+        dp_timeout                = 18
+        file_not_found            = 19
+        dataprovider_exception    = 20
+        control_flush_error       = 21
+        not_supported_by_gui      = 22
+        error_no_gui              = 23
+        OTHERS                    = 24 ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+    ELSE.
+      cl_gui_frontend_services=>execute(
+        EXPORTING
+          document               = ruta_archivo_local
+        EXCEPTIONS
+          cntl_error             = 1
+          error_no_gui           = 2
+          bad_parameter          = 3
+          file_not_found         = 4
+          path_not_found         = 5
+          file_extension_unknown = 6
+          error_execute_failed   = 7
+          synchronous_failed     = 8
+          not_supported_by_gui   = 9
+          OTHERS                 = 10 ).
+
+      IF sy-subrc <> 0.
+        go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                        message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                        message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+      ENDIF.
+    ENDIF.
+
+    go_log->mostrar_log( i_ventana_emergente = abap_true ).
+
+  ENDMETHOD.
+
+  METHOD cargar_archivo.
+
+    DATA: cantidad_columnas    TYPE i,
+          columna_incial_datos TYPE i VALUE 2,
+          columna_material     TYPE i,
+          columna_clase_orden  TYPE i,
+          columna_fecha        TYPE i,
+          columna_of           TYPE i.
+
+    DATA(ti_datos_archivo) =  zclcxr1002_cargar_archivo=>cargar_excel_multiples_hojas( i_filename  = i_nombre_archivo i_n_hojas    = 1 ).
+
+    cantidad_columnas = REDUCE i( INIT x = 0
+                                  FOR es_linea IN ti_datos_archivo WHERE ( row = 1 )
+                                  NEXT x = x + 1
+                                ).
+
+    columna_material = columna_incial_datos + 1.
+    columna_of = columna_incial_datos + 8.
+    columna_fecha = columna_incial_datos + 6.
+    columna_clase_orden = columna_incial_datos + 3.
+
+    LOOP AT ti_datos_archivo REFERENCE INTO DATA(r_es_dato_archivo_grp) WHERE sheetno = 1 AND
+                                                                              row > 1
+                             GROUP BY ( row = r_es_dato_archivo_grp->row ).
+
+      APPEND INITIAL LINE TO r_ti_datos_of ASSIGNING FIELD-SYMBOL(<fs_es_of>).
+
+      "Asignar numero de fila
+      ASSIGN COMPONENT 2 OF STRUCTURE <fs_es_of> TO FIELD-SYMBOL(<fs_valor_campo>).
+      <fs_valor_campo> = r_es_dato_archivo_grp->row - 1.
+
+      LOOP AT GROUP r_es_dato_archivo_grp ASSIGNING FIELD-SYMBOL(<fs_es_fila>).
+
+        ADD columna_incial_datos TO <fs_es_fila>-col."La primera columna es el ICON
+
+        ASSIGN COMPONENT <fs_es_fila>-col OF STRUCTURE <fs_es_of> TO <fs_valor_campo>.
+
+        TRY.
+            <fs_valor_campo> = <fs_es_fila>-value.
+          CATCH cx_sy_conversion_no_number INTO DATA(o_cx_conv).
+            go_log->set_o_cx_log( i_o_cx_log = o_cx_conv ).
+            <fs_es_of>-observaciones = gc_operacion_registro_error.
+        ENDTRY.
+        "Ajustar Material
+        IF <fs_es_fila>-col = columna_material.
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+            EXPORTING
+              input        = <fs_valor_campo>
+            IMPORTING
+              output       = <fs_valor_campo>
+            EXCEPTIONS
+              length_error = 1
+              OTHERS       = 2.
+
+          IF sy-subrc <> 0.
+            MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+          ENDIF.
+
+        ENDIF.
+
+        "Ajustar OF
+        IF <fs_es_fila>-col = columna_of.
+          "Incluir logica requerida para campo OF
+        ENDIF.
+
+        "Clase de Orden
+        IF <fs_es_fila>-col = columna_clase_orden.
+          <fs_valor_campo> = to_upper( val = <fs_valor_campo> ).
+        ENDIF.
+
+        "Formato Fecha
+        IF <fs_es_fila>-col = columna_fecha AND <fs_valor_campo> IS NOT INITIAL.
+          SPLIT <fs_valor_campo> AT '/' INTO TABLE DATA(ti_fecha).
+          CHECK lines( ti_fecha ) = 3.
+
+          ti_fecha[ 2 ] = COND #( WHEN strlen( ti_fecha[ 2 ] ) = 1 THEN |0{ ti_fecha[ 2 ] }| ELSE ti_fecha[ 2 ] ).
+          ti_fecha[ 1 ] = COND #( WHEN strlen( ti_fecha[ 1 ] ) = 1 THEN |0{ ti_fecha[ 1 ] }| ELSE ti_fecha[ 1 ] ).
+          <fs_valor_campo> =  ti_fecha[ 3 ] && ti_fecha[ 2 ] && ti_fecha[ 1 ].
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD iniciar_proceso_creacion_of.
+
+    CLEAR: gti_datos_of.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    TRY.
+
+        cargar_parametros(  ).
+
+        DATA(ti_datos) = cargar_archivo( i_nombre_archivo = i_nombre_archivo ).
+
+        validar_datos( CHANGING c_ti_datos_of = ti_datos ).
+
+        crear_of_previsional( CHANGING c_ti_datos_of = ti_datos ).
+
+        eliminar_of_previsional( CHANGING c_ti_datos_of = ti_datos ).
+
+        crear_of( CHANGING c_ti_datos_of = ti_datos ).
+
+        ajustar_datos_para_salida( CHANGING c_ti_datos_of = ti_datos ).
+
+      CATCH cx_t100_msg INTO DATA(o_cx).
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+    ENDTRY.
+
+    gti_datos_of = ti_datos.
+
+  ENDMETHOD.
+
+  METHOD crear_of.
+
+    DATA: es_cabecera_of TYPE bapi_pp_order_create,
+          es_msg_retorno TYPE bapiret2.
+
+    CHECK go_log->get_errores( ) IS INITIAL.
+
+    CHECK go_log->get_errores( ) IS INITIAL.
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of).
+
+      CLEAR: es_cabecera_of, es_msg_retorno.
+
+      es_cabecera_of = VALUE #( material = r_es_datos_of->material plant = r_es_datos_of->centro basic_end_date = r_es_datos_of->fecha_fin_ext
+                                order_type = r_es_datos_of->clase_orden
+                                quantity = r_es_datos_of->cantidad_total quantity_uom = r_es_datos_of->um prod_version = r_es_datos_of->version
+                                unloading_point = r_es_datos_of->of_zp30_para_zp05 stock_segment = r_es_datos_of->segmento_de_stock ).
+
+      CALL FUNCTION 'BAPI_PRODORD_CREATE'
+        EXPORTING
+          orderdata    = es_cabecera_of
+        IMPORTING
+          return       = es_msg_retorno
+          order_number = r_es_datos_of->orden_fabricacion.
+
+      IF es_msg_retorno-type = 'E'.
+        r_es_datos_of->observaciones = es_msg_retorno-message.
+        es_msg_retorno-row = r_es_datos_of->fila.
+        go_log->set_es_log( i_es = CORRESPONDING #( es_msg_retorno MAPPING fila_referencia = row ) ).
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      ELSE.
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD visualizar_resultado_carga.
+
+***    go_log->mostrar_log( i_alv = abap_true i_asignar_icono = abap_true ).
+
+    DATA(ti_catalogo) = crear_catalogo_itab_salida( i_ti = gti_datos_of ).
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos    = REF #( gti_datos_of )
+        i_ti_catalogo = ti_catalogo.
+
+  ENDMETHOD.
+
+
+  METHOD validar_datos.
+
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of).
+
+      verificar_um_material( CHANGING c_es_dato_of = r_es_datos_of->* ).
+
+      "Centro y clase de orden con campo obligatorio “OF ZP30 para ZP05”:
+      validar_centro_clorden_fecha( CHANGING c_es_dato_of = r_es_datos_of->* ).
+
+      DATA(ti_log) = go_log->get_log( ).
+
+      "Version
+      IF r_es_datos_of->version  IS INITIAL.
+        obtener_version( CHANGING c_es_dato_of = r_es_datos_of->* ).
+      ENDIF.
+
+      verificar_version_valida( CHANGING c_es_dato_of = r_es_datos_of->* ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD crear_of_previsional.
+
+    DATA: es_cabecera_ofp               TYPE bapiplaf_i1,
+          es_msg_retorno                TYPE bapireturn1,
+          orden_fabricacion_previsional TYPE plnum.
+
+    DATA(ti_log_errores) = go_log->get_errores( ).
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of).
+
+      CLEAR: es_cabecera_ofp, es_msg_retorno.
+
+      IF ( r_es_datos_of->observaciones IS NOT INITIAL AND line_exists( ti_log_errores[ fila_referencia = r_es_datos_of->fila type = 'E' ] ) )
+      AND NOT line_exists( ti_log_errores[ fila_referencia = r_es_datos_of->fila type = 'E' id = gc_clase_mensaje number = '064' ] ).
+        CONTINUE.
+      ENDIF.
+
+      es_cabecera_ofp = VALUE #( material = r_es_datos_of->material plan_plant = r_es_datos_of->centro order_fin_date = r_es_datos_of->fecha_fin_ext
+                                 total_plord_qty = r_es_datos_of->cantidad_total version = r_es_datos_of->version
+                                 pldord_profile  = 'LA' stock_segment = r_es_datos_of->segmento_de_stock ).
+
+      CALL FUNCTION 'BAPI_PLANNEDORDER_CREATE'
+        EXPORTING
+          headerdata   = es_cabecera_ofp
+        IMPORTING
+          return       = es_msg_retorno
+          plannedorder = orden_fabricacion_previsional.
+
+      IF es_msg_retorno-type = 'E'.
+        r_es_datos_of->observaciones = es_msg_retorno-message.
+        es_msg_retorno-log_no = r_es_datos_of->fila.
+        CONDENSE es_msg_retorno-log_no.
+        go_log->set_es_log( i_es = CORRESPONDING #( es_msg_retorno MAPPING fila_referencia = log_no row = log_no ) ).
+      ELSE.
+        r_es_datos_of->orden_fabricacion = |{ orden_fabricacion_previsional ALPHA = OUT }|.
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_version.
+
+    DATA: fecha_version TYPE d,
+          ti_mdfq       TYPE STANDARD TABLE OF mdfq.
+
+    fecha_version = CONV #( c_es_dato_of-fecha_fin_ext ).
+
+    CALL FUNCTION 'MD_PRODUCTION_VERSIONS_GET_ALL'
+      EXPORTING
+        matnr                  = c_es_dato_of-material
+        plant                  = c_es_dato_of-centro
+        date                   = fecha_version
+        lotsize                = c_es_dato_of-cantidad_total
+        selid                  = '01'
+        usequ                  = space
+        quseq                  = space
+      TABLES
+        emdfqx                 = ti_mdfq
+      EXCEPTIONS
+        no_version_selected    = 1
+        selection_id_not_found = 2
+        OTHERS                 = 3.
+
+    IF sy-subrc IS INITIAL AND lines( ti_mdfq ) = 1.
+      c_es_dato_of-version = ti_mdfq[ 1 ]-verid.
+    ELSEIF lines( ti_mdfq ) > 1.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '061'
+                                          fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                          message_v1 = |{ c_es_dato_of-material ALPHA = OUT }| ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+    ELSEIF sy-subrc IS NOT INITIAL OR ti_mdfq IS INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '059' fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD eliminar_of_previsional.
+    DATA: es_msg_retorno                TYPE bapireturn1,
+          orden_fabricacion_previsional TYPE plnum.
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of)
+                          WHERE orden_fabricacion IS NOT INITIAL.
+
+      CLEAR: es_msg_retorno.
+
+      orden_fabricacion_previsional = |{ r_es_datos_of->orden_fabricacion ALPHA = IN }|.
+
+      CALL FUNCTION 'BAPI_PLANNEDORDER_DELETE'
+        EXPORTING
+          plannedorder = orden_fabricacion_previsional
+        IMPORTING
+          return       = es_msg_retorno.
+
+      IF es_msg_retorno-type = 'E'.
+        r_es_datos_of->observaciones = es_msg_retorno-message.
+        go_log->set_es_log( i_es = CORRESPONDING #( es_msg_retorno ) ).
+      ELSE.
+        r_es_datos_of->orden_fabricacion = space.
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD cargar_parametros.
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'PP' i_ricefw = 'E1092'  ).
+    ENDIF.
+
+    TRY.
+        g_r_centro_campo_obligatorio = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CENTRO_OBL' )
+                                                ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                                            ).
+        g_r_cl_orden_campo_obligatorio = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CLORDE_OBL' )
+                                                ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                                            ).
+
+        g_r_cl_orden_validar_campo = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CLORD_VAL' )
+                                                ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                                            ).
+
+        g_r_separador_of = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'SEPARA_OF' )
+                                        ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                                    ).
+
+        g_ruta_plantilla = VALUE #( go_parametros->gti_parametros[ idparam = 'RUT_PLANTI' ]-low OPTIONAL ).
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD validar_centro_clorden_fecha.
+
+    DATA: ti_of_separada     TYPE STANDARD TABLE OF aufk-aufnr.
+
+    IF c_es_dato_of-centro IN g_r_centro_campo_obligatorio AND
+       c_es_dato_of-clase_orden IN g_r_cl_orden_campo_obligatorio AND
+       g_r_centro_campo_obligatorio IS NOT INITIAL AND
+       g_r_cl_orden_campo_obligatorio IS NOT INITIAL.
+
+      "a.   Para cada fila donde el campo “OF ZP30 para ZP05” no se encuentre diligenciado
+      IF c_es_dato_of-of_zp30_para_zp05 IS INITIAL.
+        go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                            id = gc_clase_mensaje type = 'E' number = '056' message_v1 = c_es_dato_of-fila ) ).
+        c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+      ENDIF.
+
+    ENDIF.
+
+    IF c_es_dato_of-fecha_fin_ext IS INITIAL.
+
+      go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                          id = gc_clase_mensaje type = 'E' number = '063' ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+
+    ELSEIF c_es_dato_of-fecha_fin_ext < sy-datum.
+      go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                        id = gc_clase_mensaje type = 'E' number = '064' message_v1 = c_es_dato_of-fecha_fin_ext ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+    ENDIF.
+
+    IF c_es_dato_of-of_zp30_para_zp05 IS NOT INITIAL.
+
+      "Separar OF cuando esta tiene varios valores{
+      LOOP AT g_r_separador_of ASSIGNING FIELD-SYMBOL(<f_es_separador_of>).
+
+        CHECK <f_es_separador_of>-low IS NOT INITIAL AND c_es_dato_of-of_zp30_para_zp05 CS <f_es_separador_of>-low.
+
+        c_es_dato_of-of_zp30_para_zp05 =  replace( val = c_es_dato_of-of_zp30_para_zp05 occ = 0 sub = <f_es_separador_of>-low with = '-' ).
+
+      ENDLOOP.
+
+      SPLIT c_es_dato_of-of_zp30_para_zp05 AT gc_caracter_separador_of INTO TABLE ti_of_separada.
+
+      "Si solo tiene un valor
+      IF ti_of_separada IS INITIAL.
+        APPEND c_es_dato_of-of_zp30_para_zp05 TO ti_of_separada.
+      ENDIF.
+
+      SORT ti_of_separada.
+      DELETE ADJACENT DUPLICATES FROM ti_of_separada COMPARING ALL FIELDS.
+
+      LOOP AT ti_of_separada ASSIGNING FIELD-SYMBOL(<f_es_of>).
+
+        <f_es_of> = |{ <f_es_of> ALPHA = IN }|.
+
+      ENDLOOP.
+      "}
+
+      SELECT aufnr, auart, werks
+        FROM aufk
+        FOR ALL ENTRIES IN @ti_of_separada
+        WHERE aufnr = @ti_of_separada-table_line
+        INTO TABLE @DATA(ti_of).
+
+      "b.   Para cada fila donde el campo “OF ZP30 para ZP05” se encuentre diligenciado, pero la orden no exista
+      LOOP AT ti_of_separada ASSIGNING <f_es_of>.
+
+        DATA(es_of) = VALUE #( ti_of[ aufnr = <f_es_of> ] OPTIONAL ).
+
+        IF es_of-aufnr IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila id = gc_clase_mensaje type = 'E' number = '057'
+                                              message_v1 = <f_es_of> message_v2 = c_es_dato_of-fila ) ).
+          c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+        ENDIF.
+
+        "c.   Para cada fila donde el campo “OF ZP30 para ZP05” se encuentre diligenciado, la orden exista
+        "     pero la clase de orden no está dentro del parámetro: Clase de orden a validar en el campo “OF ZP30 para ZP05”
+        IF es_of-aufnr IS NOT INITIAL AND
+           es_of-auart NOT IN g_r_cl_orden_validar_campo AND
+           g_r_cl_orden_validar_campo IS NOT INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                              id = gc_clase_mensaje type = 'E' number = '058'
+                                              message_v1 = es_of-aufnr message_v2 = c_es_dato_of-fila ) ).
+          c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD ajustar_datos_para_salida.
+
+    DATA: primera_iteracion TYPE flag,
+          es_datos_of       LIKE LINE OF c_ti_datos_of.
+
+    DATA(ti_log) = go_log->get_log( ).
+
+    SORT ti_log BY fila_referencia ASCENDING.
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of).
+
+      primera_iteracion = abap_false.
+
+      LOOP AT ti_log REFERENCE INTO DATA(r_es_log) WHERE fila_referencia = r_es_datos_of->fila.
+
+        AT END OF fila_referencia.
+          CONTINUE.
+        ENDAT.
+
+        es_datos_of = r_es_datos_of->*.
+        es_datos_of-observaciones = r_es_log->message.
+        es_datos_of-icon = r_es_log->icon.
+        APPEND es_datos_of TO c_ti_datos_of.
+
+      ENDLOOP.
+
+      DELETE ti_log WHERE fila_referencia = r_es_datos_of->fila.
+
+      CONDENSE r_es_datos_of->observaciones.
+      IF r_es_datos_of->observaciones IS INITIAL AND
+         r_es_datos_of->orden_fabricacion IS NOT INITIAL.
+
+        r_es_datos_of->icon = icon_green_light.
+      ELSEIF r_es_datos_of->observaciones IS NOT INITIAL.
+        r_es_datos_of->icon = icon_red_light.
+      ENDIF.
+
+    ENDLOOP.
+
+    SORT c_ti_datos_of BY fila.
+
+  ENDMETHOD.
+
+
+  METHOD crear_catalogo_itab_salida.
+    TRY.
+        r_ti_catalogo = zclcxr1002_util=>construir_catalogo( i_ti = gti_datos_of i_optimizar_columnas = abap_true ).
+
+        LOOP AT r_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+          CASE <fs_es_catalogo>-fieldname.
+            WHEN 'FILA'.
+              <fs_es_catalogo>-coltext = TEXT-fli.
+            WHEN 'ICON'.
+              <fs_es_catalogo>-coltext = TEXT-sta.
+            WHEN 'CANTIDAD_TOTAL'.
+              <fs_es_catalogo>-coltext = TEXT-ctt.
+            WHEN 'FECHA_FIN_EXT'.
+              <fs_es_catalogo>-coltext = TEXT-fch.
+            WHEN 'OF_ZP30_PARA_ZP05'.
+              <fs_es_catalogo>-coltext = TEXT-ofz.
+            WHEN 'ORDEN_FABRICACION'.
+              <fs_es_catalogo>-coltext = TEXT-ofc.
+            WHEN 'CANTIDAD_TOTAL_UM_CONVERTIDA'.
+              <fs_es_catalogo>-no_out = abap_true.
+            WHEN 'OBSERVACIONES'.
+              <fs_es_catalogo>-coltext = TEXT-obs.
+              <fs_es_catalogo>-just = 'L'.
+          ENDCASE.
+        ENDLOOP.
+
+      CATCH cx_dynamic_check cx_static_check.
+        "handle exception
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD verificar_version_valida.
+
+    DATA: fecha_version TYPE d,
+          ti_mdfq       TYPE STANDARD TABLE OF mdfq.
+
+    fecha_version = CONV #( c_es_dato_of-fecha_fin_ext ).
+
+    DATA(ti_log) = go_log->get_errores( ).
+    "Valida que no exista errore con el material/centro, la fecha o la version no sean iniciales
+    CHECK NOT line_exists( ti_log[ fila_referencia = c_es_dato_of-fila id = gc_clase_mensaje number = '038' type = 'E' ] )
+    AND c_es_dato_of-version IS NOT INITIAL
+    AND fecha_version IS NOT INITIAL.
+
+    CALL FUNCTION 'MD_PRODUCTION_VERSION_CHECK'
+      EXPORTING
+        matnr                         = c_es_dato_of-material
+        plant                         = c_es_dato_of-centro
+        verid                         = c_es_dato_of-version
+        date                          = fecha_version
+        lotsize                       = c_es_dato_of-cantidad_total_um_convertida
+        selid                         = '01'
+        usequ                         = space
+        quseq                         = space
+      EXCEPTIONS
+        version_not_valid             = 1
+        version_valid_quota_not_valid = 2
+        selection_id_not_found        = 3
+        OTHERS                        = 4.
+
+    IF sy-subrc IS NOT INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '062' fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                          message_v1 = c_es_dato_of-version ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD verificar_um_material.
+
+    DATA: menge         TYPE bstmg.
+
+    "Validar material en centro
+    SELECT SINGLE
+    FROM marc
+    FIELDS matnr
+    WHERE matnr =  @c_es_dato_of-material
+    AND werks =  @c_es_dato_of-centro
+    INTO @DATA(material).
+
+    "Validar material
+    IF sy-subrc IS NOT INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '038' fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                        message_v1 = c_es_dato_of-material message_v2 = c_es_dato_of-centro ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+      RETURN.
+    ENDIF.
+
+    "Recuperar UM del dato maestro
+    SELECT SINGLE
+    FROM mara
+    FIELDS matnr, meins
+    WHERE matnr = @c_es_dato_of-material
+    INTO @DATA(es_material).
+
+    CALL FUNCTION 'CONVERSION_EXIT_CUNIT_INPUT'
+      EXPORTING
+        input          = c_es_dato_of-um
+*       language       = SY-LANGU
+      IMPORTING
+        output         = c_es_dato_of-um
+      EXCEPTIONS
+        unit_not_found = 1
+        OTHERS         = 2.
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila id = sy-msgid number = sy-msgno type = sy-msgty
+                                          message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                          message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+    ENDIF.
+
+    "Si UM son diferentes ejecutar rutina de conversion
+    IF es_material-meins NE c_es_dato_of-um.
+      CALL FUNCTION 'MD_CONVERT_MATERIAL_UNIT'
+        EXPORTING
+          i_matnr              = es_material-matnr
+          i_in_me              = c_es_dato_of-um
+          i_out_me             = es_material-meins
+          i_menge              = c_es_dato_of-cantidad_total
+        IMPORTING
+          e_menge              = menge
+        EXCEPTIONS
+          error_in_application = 1
+          error                = 2
+          OTHERS               = 3.
+
+      IF sy-subrc IS INITIAL.
+        c_es_dato_of-cantidad_total_um_convertida = menge.
+      ELSE.
+        go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila id = sy-msgid number = sy-msgno type = sy-msgty
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+      ENDIF.
+    ELSE.
+      c_es_dato_of-cantidad_total_um_convertida = c_es_dato_of-cantidad_total.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclppe1092_cre_masiva_of DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_mensaje            TYPE symsgid VALUE 'ZPP01',
+               gc_operacion_registro_error TYPE c VALUE 'E',
+               gc_caracter_separador_of    TYPE string VALUE '-'.
+
+    TYPES: BEGIN OF gtp_es_datos_of,
+             icon                         TYPE string,
+             fila                         TYPE i,
+             material                     TYPE matnr,
+             centro                       TYPE werks_d,
+             clase_orden                  TYPE aufk-auart,
+             cantidad_total               TYPE sa_losvn,
+             um                           TYPE mara-meins,
+             fecha_fin_ext                TYPE string,
+             version                      TYPE mdfq-verid,
+             of_zp30_para_zp05            TYPE string,
+             segmento_de_stock            TYPE sgt_scat,
+             orden_fabricacion            TYPE aufk-aufnr,
+             observaciones                TYPE string,
+             cantidad_total_um_convertida TYPE sa_losvn,
+           END OF gtp_es_datos_of,
+
+           BEGIN OF gtp_es_datos_of_bd.
+             INCLUDE TYPE gtp_es_datos_of.
+    TYPES:
+      END OF gtp_es_datos_of_bd.
+
+    TYPES:
+      gtp_ti_datos_of        TYPE STANDARD TABLE OF gtp_es_datos_of_bd WITH EMPTY KEY.
+
+    DATA: gti_datos_of  TYPE gtp_ti_datos_of.
+
+    CLASS-DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS:
+      descargar_plantilla.
+
+    METHODS:
+      cargar_archivo
+        IMPORTING
+          i_nombre_archivo     TYPE localfile
+        RETURNING
+          VALUE(r_ti_datos_of) TYPE gtp_ti_datos_of
+        RAISING
+          cx_t100_msg,
+      iniciar_proceso_creacion_of
+        IMPORTING
+          i_nombre_archivo TYPE localfile,
+      visualizar_resultado_carga
+        RAISING
+          cx_t100_msg.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA: go_parametros                  TYPE REF TO zclcxr1000_parametros,
+                g_r_cl_orden_campo_obligatorio TYPE RANGE OF aufk-auart,
+                g_r_cl_orden_validar_campo     TYPE RANGE OF aufk-auart,
+                g_r_separador_of               TYPE RANGE OF string,
+                g_r_centro_campo_obligatorio   TYPE RANGE OF aufk-werks,
+                g_ruta_plantilla               TYPE string.
+
+
+    CLASS-METHODS:
+      cargar_parametros.
+
+    METHODS:
+      crear_of
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      validar_datos
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      crear_of_previsional
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      obtener_version
+        CHANGING
+          c_es_dato_of TYPE gtp_es_datos_of_bd,
+      eliminar_of_previsional
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      validar_centro_clorden_fecha
+        CHANGING
+          c_es_dato_of TYPE gtp_es_datos_of_bd,
+      ajustar_datos_para_salida
+        CHANGING
+          c_ti_datos_of TYPE gtp_ti_datos_of,
+      crear_catalogo_itab_salida
+        IMPORTING
+          i_ti                 TYPE gtp_ti_datos_of
+        RETURNING
+          VALUE(r_ti_catalogo) TYPE lvc_t_fcat,
+      verificar_version_valida
+        CHANGING
+          c_es_dato_of TYPE gtp_es_datos_of_bd,
+      verificar_um_material
+        CHANGING
+          c_es_dato_of TYPE gtp_es_datos_of_bd.
+
+ENDCLASS.
+
+
+
+CLASS zclppe1092_cre_masiva_of IMPLEMENTATION.
+
+  METHOD descargar_plantilla.
+
+    DATA: ruta_archivo_local TYPE string VALUE 'C:\tmp',
+          ti_datos           TYPE STANDARD TABLE OF gtp_es_datos_of,
+          ti_bintab          TYPE solix_tab,
+          tamanio            TYPE i,
+          d_binsize          TYPE i,
+          d_binfile          TYPE xstring,
+          es_file            TYPE rcgrepfile,
+          ti_file            TYPE TABLE OF rcgrepfile.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    cargar_parametros( ).
+
+    CHECK ruta_archivo_local IS NOT INITIAL.
+
+    IF g_ruta_plantilla IS INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '060' type = 'E' ) ).
+      go_log->mostrar_log( i_ventana_emergente = abap_true ).
+      RETURN.
+    ENDIF.
+
+    SPLIT g_ruta_plantilla AT '/' INTO TABLE DATA(ti_ruta).
+    ruta_archivo_local = |{ ruta_archivo_local }\\{ ti_ruta[ lines( ti_ruta ) ] }|.
+
+    "/usr/sap/interfaces/plantillas/ZPPE1092_Plantilla.xlsx
+    OPEN DATASET g_ruta_plantilla FOR INPUT IN BINARY MODE.
+
+    DO.
+      CLEAR: es_file, d_binsize.
+      READ DATASET g_ruta_plantilla INTO es_file LENGTH d_binsize.
+      IF sy-subrc = 0.
+        tamanio = tamanio + d_binsize.
+        APPEND es_file TO ti_file.
+      ELSE.
+        IF d_binsize > 0.
+          tamanio = tamanio + d_binsize.
+          APPEND es_file TO ti_file.
+        ENDIF.
+        EXIT.
+      ENDIF.
+    ENDDO.
+    CLOSE DATASET g_ruta_plantilla.
+
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING
+        bin_filesize              = tamanio
+        filename                  = ruta_archivo_local
+        filetype                  = 'BIN'
+      CHANGING
+        data_tab                  = ti_file
+      EXCEPTIONS
+        file_write_error          = 1
+        no_batch                  = 2
+        gui_refuse_filetransfer   = 3
+        invalid_type              = 4
+        no_authority              = 5
+        unknown_error             = 6
+        header_not_allowed        = 7
+        separator_not_allowed     = 8
+        filesize_not_allowed      = 9
+        header_too_long           = 10
+        dp_error_create           = 11
+        dp_error_send             = 12
+        dp_error_write            = 13
+        unknown_dp_error          = 14
+        access_denied             = 15
+        dp_out_of_memory          = 16
+        disk_full                 = 17
+        dp_timeout                = 18
+        file_not_found            = 19
+        dataprovider_exception    = 20
+        control_flush_error       = 21
+        not_supported_by_gui      = 22
+        error_no_gui              = 23
+        OTHERS                    = 24 ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+    ELSE.
+      cl_gui_frontend_services=>execute(
+        EXPORTING
+          document               = ruta_archivo_local
+        EXCEPTIONS
+          cntl_error             = 1
+          error_no_gui           = 2
+          bad_parameter          = 3
+          file_not_found         = 4
+          path_not_found         = 5
+          file_extension_unknown = 6
+          error_execute_failed   = 7
+          synchronous_failed     = 8
+          not_supported_by_gui   = 9
+          OTHERS                 = 10 ).
+
+      IF sy-subrc <> 0.
+        go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                        message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                        message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+      ENDIF.
+    ENDIF.
+
+    go_log->mostrar_log( i_ventana_emergente = abap_true ).
+
+  ENDMETHOD.
+
+  METHOD cargar_archivo.
+
+    DATA: cantidad_columnas    TYPE i,
+          columna_incial_datos TYPE i VALUE 2,
+          columna_material     TYPE i,
+          columna_clase_orden  TYPE i,
+          columna_fecha        TYPE i,
+          columna_of           TYPE i.
+
+    DATA(ti_datos_archivo) =  zclcxr1002_cargar_archivo=>cargar_excel_multiples_hojas( i_filename  = i_nombre_archivo i_n_hojas    = 1 ).
+
+    cantidad_columnas = REDUCE i( INIT x = 0
+                                  FOR es_linea IN ti_datos_archivo WHERE ( row = 1 )
+                                  NEXT x = x + 1
+                                ).
+
+    columna_material = columna_incial_datos + 1.
+    columna_of = columna_incial_datos + 8.
+    columna_fecha = columna_incial_datos + 6.
+    columna_clase_orden = columna_incial_datos + 3.
+
+    LOOP AT ti_datos_archivo REFERENCE INTO DATA(r_es_dato_archivo_grp) WHERE sheetno = 1 AND
+                                                                              row > 1
+                             GROUP BY ( row = r_es_dato_archivo_grp->row ).
+
+      APPEND INITIAL LINE TO r_ti_datos_of ASSIGNING FIELD-SYMBOL(<fs_es_of>).
+
+      "Asignar numero de fila
+      ASSIGN COMPONENT 2 OF STRUCTURE <fs_es_of> TO FIELD-SYMBOL(<fs_valor_campo>).
+      <fs_valor_campo> = r_es_dato_archivo_grp->row - 1.
+
+      LOOP AT GROUP r_es_dato_archivo_grp ASSIGNING FIELD-SYMBOL(<fs_es_fila>).
+
+        ADD columna_incial_datos TO <fs_es_fila>-col."La primera columna es el ICON
+
+        ASSIGN COMPONENT <fs_es_fila>-col OF STRUCTURE <fs_es_of> TO <fs_valor_campo>.
+
+        TRY.
+            <fs_valor_campo> = <fs_es_fila>-value.
+          CATCH cx_sy_conversion_no_number INTO DATA(o_cx_conv).
+            go_log->set_o_cx_log( i_o_cx_log = o_cx_conv ).
+            <fs_es_of>-observaciones = gc_operacion_registro_error.
+        ENDTRY.
+        "Ajustar Material
+        IF <fs_es_fila>-col = columna_material.
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+            EXPORTING
+              input        = <fs_valor_campo>
+            IMPORTING
+              output       = <fs_valor_campo>
+            EXCEPTIONS
+              length_error = 1
+              OTHERS       = 2.
+
+          IF sy-subrc <> 0.
+            MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+          ENDIF.
+
+        ENDIF.
+
+        "Ajustar OF
+        IF <fs_es_fila>-col = columna_of.
+          "Incluir logica requerida para campo OF
+        ENDIF.
+
+        "Clase de Orden
+        IF <fs_es_fila>-col = columna_clase_orden.
+          <fs_valor_campo> = to_upper( val = <fs_valor_campo> ).
+        ENDIF.
+
+        "Formato Fecha
+        IF <fs_es_fila>-col = columna_fecha AND <fs_valor_campo> IS NOT INITIAL.
+          SPLIT <fs_valor_campo> AT '/' INTO TABLE DATA(ti_fecha).
+          CHECK lines( ti_fecha ) = 3.
+
+          ti_fecha[ 2 ] = COND #( WHEN strlen( ti_fecha[ 2 ] ) = 1 THEN |0{ ti_fecha[ 2 ] }| ELSE ti_fecha[ 2 ] ).
+          ti_fecha[ 1 ] = COND #( WHEN strlen( ti_fecha[ 1 ] ) = 1 THEN |0{ ti_fecha[ 1 ] }| ELSE ti_fecha[ 1 ] ).
+          <fs_valor_campo> =  ti_fecha[ 3 ] && ti_fecha[ 2 ] && ti_fecha[ 1 ].
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD iniciar_proceso_creacion_of.
+
+    CLEAR: gti_datos_of.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    TRY.
+
+        cargar_parametros(  ).
+
+        DATA(ti_datos) = cargar_archivo( i_nombre_archivo = i_nombre_archivo ).
+
+        validar_datos( CHANGING c_ti_datos_of = ti_datos ).
+
+        crear_of_previsional( CHANGING c_ti_datos_of = ti_datos ).
+
+        eliminar_of_previsional( CHANGING c_ti_datos_of = ti_datos ).
+
+        crear_of( CHANGING c_ti_datos_of = ti_datos ).
+
+        ajustar_datos_para_salida( CHANGING c_ti_datos_of = ti_datos ).
+
+      CATCH cx_t100_msg INTO DATA(o_cx).
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+    ENDTRY.
+
+    gti_datos_of = ti_datos.
+
+  ENDMETHOD.
+
+  METHOD crear_of.
+
+    DATA: es_cabecera_of TYPE bapi_pp_order_create,
+          es_msg_retorno TYPE bapiret2.
+
+    CHECK go_log->get_errores( ) IS INITIAL.
+
+    CHECK go_log->get_errores( ) IS INITIAL.
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of).
+
+      CLEAR: es_cabecera_of, es_msg_retorno.
+
+      es_cabecera_of = VALUE #( material = r_es_datos_of->material plant = r_es_datos_of->centro basic_end_date = r_es_datos_of->fecha_fin_ext
+                                order_type = r_es_datos_of->clase_orden
+                                quantity = r_es_datos_of->cantidad_total quantity_uom = r_es_datos_of->um prod_version = r_es_datos_of->version
+                                unloading_point = r_es_datos_of->of_zp30_para_zp05 stock_segment = r_es_datos_of->segmento_de_stock ).
+
+      CALL FUNCTION 'BAPI_PRODORD_CREATE'
+        EXPORTING
+          orderdata    = es_cabecera_of
+        IMPORTING
+          return       = es_msg_retorno
+          order_number = r_es_datos_of->orden_fabricacion.
+
+      IF es_msg_retorno-type = 'E'.
+        r_es_datos_of->observaciones = es_msg_retorno-message.
+        es_msg_retorno-row = r_es_datos_of->fila.
+        go_log->set_es_log( i_es = CORRESPONDING #( es_msg_retorno MAPPING fila_referencia = row ) ).
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      ELSE.
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD visualizar_resultado_carga.
+
+***    go_log->mostrar_log( i_alv = abap_true i_asignar_icono = abap_true ).
+
+    DATA(ti_catalogo) = crear_catalogo_itab_salida( i_ti = gti_datos_of ).
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos    = REF #( gti_datos_of )
+        i_ti_catalogo = ti_catalogo.
+
+  ENDMETHOD.
+
+
+  METHOD validar_datos.
+
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of).
+
+      verificar_um_material( CHANGING c_es_dato_of = r_es_datos_of->* ).
+
+      "Centro y clase de orden con campo obligatorio “OF ZP30 para ZP05”:
+      validar_centro_clorden_fecha( CHANGING c_es_dato_of = r_es_datos_of->* ).
+
+      DATA(ti_log) = go_log->get_log( ).
+
+      "Version
+      IF r_es_datos_of->version  IS INITIAL.
+        obtener_version( CHANGING c_es_dato_of = r_es_datos_of->* ).
+      ENDIF.
+
+      verificar_version_valida( CHANGING c_es_dato_of = r_es_datos_of->* ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD crear_of_previsional.
+
+    DATA: es_cabecera_ofp               TYPE bapiplaf_i1,
+          es_msg_retorno                TYPE bapireturn1,
+          orden_fabricacion_previsional TYPE plnum.
+
+    DATA(ti_log_errores) = go_log->get_errores( ).
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of).
+
+      CLEAR: es_cabecera_ofp, es_msg_retorno.
+
+      IF ( r_es_datos_of->observaciones IS NOT INITIAL AND line_exists( ti_log_errores[ fila_referencia = r_es_datos_of->fila type = 'E' ] ) )
+      AND NOT line_exists( ti_log_errores[ fila_referencia = r_es_datos_of->fila type = 'E' id = gc_clase_mensaje number = '064' ] ).
+        CONTINUE.
+      ENDIF.
+
+      es_cabecera_ofp = VALUE #( material = r_es_datos_of->material plan_plant = r_es_datos_of->centro order_fin_date = r_es_datos_of->fecha_fin_ext
+                                 total_plord_qty = r_es_datos_of->cantidad_total version = r_es_datos_of->version
+                                 pldord_profile  = 'LA' stock_segment = r_es_datos_of->segmento_de_stock ).
+
+      CALL FUNCTION 'BAPI_PLANNEDORDER_CREATE'
+        EXPORTING
+          headerdata   = es_cabecera_ofp
+        IMPORTING
+          return       = es_msg_retorno
+          plannedorder = orden_fabricacion_previsional.
+
+      IF es_msg_retorno-type = 'E'.
+        r_es_datos_of->observaciones = es_msg_retorno-message.
+        es_msg_retorno-log_no = r_es_datos_of->fila.
+        CONDENSE es_msg_retorno-log_no.
+        go_log->set_es_log( i_es = CORRESPONDING #( es_msg_retorno MAPPING fila_referencia = log_no row = log_no ) ).
+      ELSE.
+        r_es_datos_of->orden_fabricacion = |{ orden_fabricacion_previsional ALPHA = OUT }|.
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_version.
+
+    DATA: fecha_version TYPE d,
+          ti_mdfq       TYPE STANDARD TABLE OF mdfq.
+
+    fecha_version = CONV #( c_es_dato_of-fecha_fin_ext ).
+
+    CALL FUNCTION 'MD_PRODUCTION_VERSIONS_GET_ALL'
+      EXPORTING
+        matnr                  = c_es_dato_of-material
+        plant                  = c_es_dato_of-centro
+        date                   = fecha_version
+        lotsize                = c_es_dato_of-cantidad_total
+        selid                  = '01'
+        usequ                  = space
+        quseq                  = space
+      TABLES
+        emdfqx                 = ti_mdfq
+      EXCEPTIONS
+        no_version_selected    = 1
+        selection_id_not_found = 2
+        OTHERS                 = 3.
+
+    IF sy-subrc IS INITIAL AND lines( ti_mdfq ) = 1.
+      c_es_dato_of-version = ti_mdfq[ 1 ]-verid.
+    ELSEIF lines( ti_mdfq ) > 1.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '061'
+                                          fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                          message_v1 = |{ c_es_dato_of-material ALPHA = OUT }| ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+    ELSEIF sy-subrc IS NOT INITIAL OR ti_mdfq IS INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '059' fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD eliminar_of_previsional.
+    DATA: es_msg_retorno                TYPE bapireturn1,
+          orden_fabricacion_previsional TYPE plnum.
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of)
+                          WHERE orden_fabricacion IS NOT INITIAL.
+
+      CLEAR: es_msg_retorno.
+
+      orden_fabricacion_previsional = |{ r_es_datos_of->orden_fabricacion ALPHA = IN }|.
+
+      CALL FUNCTION 'BAPI_PLANNEDORDER_DELETE'
+        EXPORTING
+          plannedorder = orden_fabricacion_previsional
+        IMPORTING
+          return       = es_msg_retorno.
+
+      IF es_msg_retorno-type = 'E'.
+        r_es_datos_of->observaciones = es_msg_retorno-message.
+        go_log->set_es_log( i_es = CORRESPONDING #( es_msg_retorno ) ).
+      ELSE.
+        r_es_datos_of->orden_fabricacion = space.
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD cargar_parametros.
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'PP' i_ricefw = 'E1092'  ).
+    ENDIF.
+
+    TRY.
+        g_r_centro_campo_obligatorio = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CENTRO_OBL' )
+                                                ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                                            ).
+        g_r_cl_orden_campo_obligatorio = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CLORDE_OBL' )
+                                                ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                                            ).
+
+        g_r_cl_orden_validar_campo = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CLORD_VAL' )
+                                                ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                                            ).
+
+        g_r_separador_of = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'SEPARA_OF' )
+                                        ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                                    ).
+
+        g_ruta_plantilla = VALUE #( go_parametros->gti_parametros[ idparam = 'RUT_PLANTI' ]-low OPTIONAL ).
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD validar_centro_clorden_fecha.
+
+    DATA: ti_of_separada     TYPE STANDARD TABLE OF aufk-aufnr.
+
+    IF c_es_dato_of-centro IN g_r_centro_campo_obligatorio AND
+       c_es_dato_of-clase_orden IN g_r_cl_orden_campo_obligatorio AND
+       g_r_centro_campo_obligatorio IS NOT INITIAL AND
+       g_r_cl_orden_campo_obligatorio IS NOT INITIAL.
+
+      "a.   Para cada fila donde el campo “OF ZP30 para ZP05” no se encuentre diligenciado
+      IF c_es_dato_of-of_zp30_para_zp05 IS INITIAL.
+        go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                            id = gc_clase_mensaje type = 'E' number = '056' message_v1 = c_es_dato_of-fila ) ).
+        c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+      ENDIF.
+
+    ENDIF.
+
+    IF c_es_dato_of-fecha_fin_ext IS INITIAL.
+
+      go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                          id = gc_clase_mensaje type = 'E' number = '063' ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+
+    ELSEIF c_es_dato_of-fecha_fin_ext < sy-datum.
+      go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                        id = gc_clase_mensaje type = 'E' number = '064' message_v1 = c_es_dato_of-fecha_fin_ext ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+    ENDIF.
+
+    IF c_es_dato_of-of_zp30_para_zp05 IS NOT INITIAL.
+
+      "Separar OF cuando esta tiene varios valores{
+      LOOP AT g_r_separador_of ASSIGNING FIELD-SYMBOL(<f_es_separador_of>).
+
+        CHECK <f_es_separador_of>-low IS NOT INITIAL AND c_es_dato_of-of_zp30_para_zp05 CS <f_es_separador_of>-low.
+
+        c_es_dato_of-of_zp30_para_zp05 =  replace( val = c_es_dato_of-of_zp30_para_zp05 occ = 0 sub = <f_es_separador_of>-low with = '-' ).
+
+      ENDLOOP.
+
+      SPLIT c_es_dato_of-of_zp30_para_zp05 AT gc_caracter_separador_of INTO TABLE ti_of_separada.
+
+      "Si solo tiene un valor
+      IF ti_of_separada IS INITIAL.
+        APPEND c_es_dato_of-of_zp30_para_zp05 TO ti_of_separada.
+      ENDIF.
+
+      SORT ti_of_separada.
+      DELETE ADJACENT DUPLICATES FROM ti_of_separada COMPARING ALL FIELDS.
+
+      LOOP AT ti_of_separada ASSIGNING FIELD-SYMBOL(<f_es_of>).
+
+        <f_es_of> = |{ <f_es_of> ALPHA = IN }|.
+
+      ENDLOOP.
+      "}
+
+      SELECT aufnr, auart, werks
+        FROM aufk
+        FOR ALL ENTRIES IN @ti_of_separada
+        WHERE aufnr = @ti_of_separada-table_line
+        INTO TABLE @DATA(ti_of).
+
+      "b.   Para cada fila donde el campo “OF ZP30 para ZP05” se encuentre diligenciado, pero la orden no exista
+      LOOP AT ti_of_separada ASSIGNING <f_es_of>.
+
+        DATA(es_of) = VALUE #( ti_of[ aufnr = <f_es_of> ] OPTIONAL ).
+
+        IF es_of-aufnr IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila id = gc_clase_mensaje type = 'E' number = '057'
+                                              message_v1 = <f_es_of> message_v2 = c_es_dato_of-fila ) ).
+          c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+        ENDIF.
+
+        "c.   Para cada fila donde el campo “OF ZP30 para ZP05” se encuentre diligenciado, la orden exista
+        "     pero la clase de orden no está dentro del parámetro: Clase de orden a validar en el campo “OF ZP30 para ZP05”
+        IF es_of-aufnr IS NOT INITIAL AND
+           es_of-auart NOT IN g_r_cl_orden_validar_campo AND
+           g_r_cl_orden_validar_campo IS NOT INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                              id = gc_clase_mensaje type = 'E' number = '058'
+                                              message_v1 = es_of-aufnr message_v2 = c_es_dato_of-fila ) ).
+          c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD ajustar_datos_para_salida.
+
+    DATA: primera_iteracion TYPE flag,
+          es_datos_of       LIKE LINE OF c_ti_datos_of.
+
+    DATA(ti_log) = go_log->get_log( ).
+
+    SORT ti_log BY fila_referencia ASCENDING.
+
+    LOOP AT c_ti_datos_of REFERENCE INTO DATA(r_es_datos_of).
+
+      primera_iteracion = abap_false.
+
+      LOOP AT ti_log REFERENCE INTO DATA(r_es_log) WHERE fila_referencia = r_es_datos_of->fila.
+
+        AT END OF fila_referencia.
+          CONTINUE.
+        ENDAT.
+
+        es_datos_of = r_es_datos_of->*.
+        es_datos_of-observaciones = r_es_log->message.
+        es_datos_of-icon = r_es_log->icon.
+        APPEND es_datos_of TO c_ti_datos_of.
+
+      ENDLOOP.
+
+      DELETE ti_log WHERE fila_referencia = r_es_datos_of->fila.
+
+      CONDENSE r_es_datos_of->observaciones.
+      IF r_es_datos_of->observaciones IS INITIAL AND
+         r_es_datos_of->orden_fabricacion IS NOT INITIAL.
+
+        r_es_datos_of->icon = icon_green_light.
+      ELSEIF r_es_datos_of->observaciones IS NOT INITIAL.
+        r_es_datos_of->icon = icon_red_light.
+      ENDIF.
+
+    ENDLOOP.
+
+    SORT c_ti_datos_of BY fila.
+
+  ENDMETHOD.
+
+
+  METHOD crear_catalogo_itab_salida.
+    TRY.
+        r_ti_catalogo = zclcxr1002_util=>construir_catalogo( i_ti = gti_datos_of i_optimizar_columnas = abap_true ).
+
+        LOOP AT r_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+          CASE <fs_es_catalogo>-fieldname.
+            WHEN 'FILA'.
+              <fs_es_catalogo>-coltext = TEXT-fli.
+            WHEN 'ICON'.
+              <fs_es_catalogo>-coltext = TEXT-sta.
+            WHEN 'CANTIDAD_TOTAL'.
+              <fs_es_catalogo>-coltext = TEXT-ctt.
+            WHEN 'FECHA_FIN_EXT'.
+              <fs_es_catalogo>-coltext = TEXT-fch.
+            WHEN 'OF_ZP30_PARA_ZP05'.
+              <fs_es_catalogo>-coltext = TEXT-ofz.
+            WHEN 'ORDEN_FABRICACION'.
+              <fs_es_catalogo>-coltext = TEXT-ofc.
+            WHEN 'CANTIDAD_TOTAL_UM_CONVERTIDA'.
+              <fs_es_catalogo>-no_out = abap_true.
+            WHEN 'OBSERVACIONES'.
+              <fs_es_catalogo>-coltext = TEXT-obs.
+              <fs_es_catalogo>-just = 'L'.
+          ENDCASE.
+        ENDLOOP.
+
+      CATCH cx_dynamic_check cx_static_check.
+        "handle exception
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD verificar_version_valida.
+
+    DATA: fecha_version TYPE d,
+          ti_mdfq       TYPE STANDARD TABLE OF mdfq.
+
+    fecha_version = CONV #( c_es_dato_of-fecha_fin_ext ).
+
+    DATA(ti_log) = go_log->get_errores( ).
+    "Valida que no exista errore con el material/centro, la fecha o la version no sean iniciales
+    CHECK NOT line_exists( ti_log[ fila_referencia = c_es_dato_of-fila id = gc_clase_mensaje number = '038' type = 'E' ] )
+    AND c_es_dato_of-version IS NOT INITIAL
+    AND fecha_version IS NOT INITIAL.
+
+    CALL FUNCTION 'MD_PRODUCTION_VERSION_CHECK'
+      EXPORTING
+        matnr                         = c_es_dato_of-material
+        plant                         = c_es_dato_of-centro
+        verid                         = c_es_dato_of-version
+        date                          = fecha_version
+        lotsize                       = c_es_dato_of-cantidad_total_um_convertida
+        selid                         = '01'
+        usequ                         = space
+        quseq                         = space
+      EXCEPTIONS
+        version_not_valid             = 1
+        version_valid_quota_not_valid = 2
+        selection_id_not_found        = 3
+        OTHERS                        = 4.
+
+    IF sy-subrc IS NOT INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '062' fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                          message_v1 = c_es_dato_of-version ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD verificar_um_material.
+
+    DATA: menge         TYPE bstmg.
+
+    "Validar material en centro
+    SELECT SINGLE
+    FROM marc
+    FIELDS matnr
+    WHERE matnr =  @c_es_dato_of-material
+    AND werks =  @c_es_dato_of-centro
+    INTO @DATA(material).
+
+    "Validar material
+    IF sy-subrc IS NOT INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '038' fila_referencia = c_es_dato_of-fila row = c_es_dato_of-fila
+                                        message_v1 = c_es_dato_of-material message_v2 = c_es_dato_of-centro ) ).
+      c_es_dato_of-observaciones = go_log->get_ultimo_msg( )-message.
+      RETURN.
+    ENDIF.
+
+    "Recuperar UM del dato maestro
+    SELECT SINGLE
+    FROM mara
+    FIELDS matnr, meins
+    WHERE matnr = @c_es_dato_of-material
+    INTO @DATA(es_material).
+
+    CALL FUNCTION 'CONVERSION_EXIT_CUNIT_INPUT'
+      EXPORTING
+        input          = c_es_dato_of-um
+*       language       = SY-LANGU
+      IMPORTING
+        output         = c_es_dato_of-um
+      EXCEPTIONS
+        unit_not_found = 1
+        OTHERS         = 2.
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila id = sy-msgid number = sy-msgno type = sy-msgty
+                                          message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                          message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+    ENDIF.
+
+    "Si UM son diferentes ejecutar rutina de conversion
+    IF es_material-meins NE c_es_dato_of-um.
+      CALL FUNCTION 'MD_CONVERT_MATERIAL_UNIT'
+        EXPORTING
+          i_matnr              = es_material-matnr
+          i_in_me              = c_es_dato_of-um
+          i_out_me             = es_material-meins
+          i_menge              = c_es_dato_of-cantidad_total
+        IMPORTING
+          e_menge              = menge
+        EXCEPTIONS
+          error_in_application = 1
+          error                = 2
+          OTHERS               = 3.
+
+      IF sy-subrc IS INITIAL.
+        c_es_dato_of-cantidad_total_um_convertida = menge.
+      ELSE.
+        go_log->set_es_log( i_es = VALUE #( fila_referencia = c_es_dato_of-fila id = sy-msgid number = sy-msgno type = sy-msgty
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 =  sy-msgv4 ) ).
+      ENDIF.
+    ELSE.
+      c_es_dato_of-cantidad_total_um_convertida = c_es_dato_of-cantidad_total.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.

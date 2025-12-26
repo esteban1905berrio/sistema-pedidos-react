@@ -1,0 +1,369 @@
+FUNCTION zmmc1001_cargararticulos_1
+  IMPORTING
+    VALUE(i_ti_datos_material) TYPE zpxmaterial_materiales_tab
+  EXPORTING
+    VALUE(e_rc) TYPE sysubrc.
+
+
+
+  CONSTANTS: c_repvalorad TYPE string VALUE 'REPVALORAD',
+             c_repnovalor TYPE string VALUE 'REPNOVALOR'.
+
+  DATA: BEGIN OF es_variante_asignada,
+          indice            TYPE i,
+          material          TYPE mara-matnr,
+          nombre_estructura TYPE abap_componentdescr-name,
+          variante_inicial  TYPE zpxmaterial_materiales-material,
+          variante_asignada TYPE zpxmaterial_materiales-material,
+        END OF es_variante_asignada.
+
+  DATA:
+    ti_datos_material         TYPE zpxmaterial_materiales_tab,
+    ti_variante_asignada      LIKE STANDARD TABLE OF es_variante_asignada,
+    ti_retorno                TYPE bapiret2_t,
+    ti_nombres_componentes    TYPE abap_component_tab,
+    ti_mbew                   TYPE STANDARD TABLE OF mbew,
+    es_valoracion             TYPE zpxmaterial_valoracion,
+    r_tipo_material_respuesto TYPE RANGE OF mara-mtart,
+    r_material                TYPE RANGE OF mara-matnr.
+
+  DATA:
+    es_material       TYPE zpxmaterial,
+    es_datos_material TYPE zpxmaterial_materiales.
+
+  DATA:
+    consecutivo_variante TYPE numc3,
+    longitud_mat         TYPE numc3,
+    mat_generico         TYPE zpxmaterial_materiales-material,
+    variante_inicial     TYPE zpxmaterial_materiales-material,
+    ultima_variante      TYPE zpxmaterial_materiales-material.
+
+  DATA:
+    r_es_datos_material TYPE REF TO data,
+    o_ttdescribe        TYPE REF TO cl_abap_tabledescr,
+    o_stdescribe        TYPE REF TO cl_abap_structdescr.
+
+
+  FIELD-SYMBOLS: <fs_ti_datos_variante> TYPE ANY TABLE.
+
+*  IF sy-uname = 'RFC_FROM_ECC'. DO.ENDDO.ENDIF.
+
+  e_rc = '0'.
+
+  DATA(o_materiales) = NEW zclmmi1009_gen_articulos_flex( i_c_ricefw = 'I1009'
+                                                          i_es_info_mensaje = VALUE #( ob_system = zclmmi1009_gen_articulos_flex=>gc_systema_origen_afs ) ).
+
+  o_materiales->g_o_parametros->get_parametro(
+    EXPORTING
+      i_idparam               = 'REPUESTOS'
+    IMPORTING
+      e_ti_valrango           = r_tipo_material_respuesto
+    EXCEPTIONS
+      parametro_no_encontrado = 1
+      OTHERS                  = 2 ).
+
+  "Consultar centros
+  SELECT werks
+  FROM t001w
+  INTO TABLE @DATA(ti_centros).
+
+  zclcxr1002_util=>crear_rango(
+    EXPORTING
+      i_ti                           = i_ti_datos_material
+      i_nombre_columna               = 'MATERIAL'
+    CHANGING
+      c_ti_rango                     = r_material ).
+
+  "Consultar datos de material
+  SELECT matnr,bismt, concat( size1, color ) AS valor_matriz, satnr
+   FROM mara
+   WHERE satnr IN @r_material[]
+   ORDER BY matnr DESCENDING
+   INTO TABLE @DATA(ti_mara).
+
+  "Recuperar estructura de itab
+  o_ttdescribe ?= cl_abap_structdescr=>describe_by_data( i_ti_datos_material ).
+  o_stdescribe ?= o_ttdescribe->get_table_line_type( ).
+  ti_nombres_componentes = o_stdescribe->get_components( ).
+
+  LOOP AT i_ti_datos_material ASSIGNING FIELD-SYMBOL(<fs_es_datos_material>).
+
+    CLEAR ultima_variante.      "Adicion SRV 30Dic2021
+    CLEAR longitud_mat.         "Adicion SRV 30Dic2021
+    CLEAR mat_generico.         "Adicion SRV 30Dic2021
+    CLEAR consecutivo_variante. "Adicion SRV 30Dic2021
+
+    DATA(ti_mara_aux) = ti_mara.    "Adicion SRV 30Dic2021
+    DELETE ti_mara_aux WHERE satnr NE <fs_es_datos_material>-material. "Adicion SRV 30Dic2021
+    LOOP AT <fs_es_datos_material>-datos_material ASSIGNING FIELD-SYMBOL(<fs_es_datos_basico_material>).
+
+      IF <fs_es_datos_basico_material>-brand_id IS INITIAL.
+        CLEAR: <fs_es_datos_basico_material>-brand_id.
+      ENDIF.
+
+      "Asignar "Grupo de tipos de posición general" SOLO para GENERICO
+      "dado que la BAPI asigna el que ingresa en la estructura y no el que aplica en la regla de la
+      "BADI CL_IM_ARTICLE_REFSITE_LOG->IF_EX_BADI_ARTICLE_REF_RT~REFERENZ_BEFORE
+      IF NOT line_exists( <fs_es_datos_material>-variantes[ variant = <fs_es_datos_basico_material>-material ] )
+         AND <fs_es_datos_basico_material>-old_mat_no IS INITIAL
+         AND <fs_es_datos_material>-matl_cat = '01'.
+        <fs_es_datos_basico_material>-item_cat = 'SAMM'.
+      ENDIF.
+
+      variante_inicial = <fs_es_datos_basico_material>-material.
+
+      "Solo se ejecuta el codigo para varaitnes
+      CHECK <fs_es_datos_basico_material>-old_mat_no IS NOT INITIAL.
+
+*Inicio Modificacion SRV 30Dic2021
+      "asignar valor de variante correspondiente al Val Matriz cuando este ya existe
+      READ TABLE ti_mara_aux INTO DATA(es_mara) WITH KEY satnr        = <fs_es_datos_material>-material
+                                                         valor_matriz = <fs_es_datos_basico_material>-old_mat_no.
+      "Si ya existen variante y la que se envia es una nueva, se asigna un consecutivo nuevo a la variante
+      IF sy-subrc IS NOT INITIAL.
+        TRY.
+            TRY.
+                IF ultima_variante IS INITIAL.
+                  ultima_variante = ti_mara_aux[ 1 ]-matnr + 1.
+                ELSE.
+                  ultima_variante = ultima_variante + 1.
+                ENDIF.
+              CATCH cx_sy_conversion_no_number.
+                IF consecutivo_variante IS INITIAL.
+                  DATA(variante_db) = ti_mara_aux[ 1 ]-matnr.
+                  longitud_mat = strlen( variante_db ) - 3.
+                  mat_generico = variante_db(longitud_mat).
+                  consecutivo_variante = variante_db+longitud_mat(3).
+                ENDIF.
+                consecutivo_variante = consecutivo_variante + 1.
+                ultima_variante = mat_generico && consecutivo_variante.
+            ENDTRY.
+
+            CONDENSE ultima_variante NO-GAPS.
+            CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+              EXPORTING
+                input        = ultima_variante
+              IMPORTING
+                output       = ultima_variante
+              EXCEPTIONS
+                length_error = 1
+                OTHERS       = 2.
+          CATCH cx_sy_itab_line_not_found.
+        ENDTRY.
+        es_mara-matnr = ultima_variante.
+
+      ENDIF.
+*Fin Modificacion SRV 30Dic2021
+
+      IF ( es_mara IS NOT INITIAL AND es_mara-matnr NE <fs_es_datos_basico_material>-material ).
+
+        LOOP AT ti_nombres_componentes INTO DATA(es_componente) WHERE type->kind EQ 'T'.
+
+          ASSIGN COMPONENT es_componente-name OF STRUCTURE <fs_es_datos_material> TO <fs_ti_datos_variante>.
+
+          CHECK sy-subrc IS INITIAL.
+
+          es_variante_asignada-nombre_estructura = es_componente-name.
+
+          LOOP AT <fs_ti_datos_variante> ASSIGNING FIELD-SYMBOL(<fs_es_linea>).
+
+            es_variante_asignada-indice = sy-tabix.
+            es_variante_asignada-material = <fs_es_datos_material>-material.
+            es_variante_asignada-variante_inicial = variante_inicial.
+            es_variante_asignada-variante_asignada = es_mara-matnr.
+
+            ASSIGN COMPONENT 'MATERIAL' OF STRUCTURE <fs_es_linea> TO FIELD-SYMBOL(<fs_variante>).
+
+            IF sy-subrc IS INITIAL AND <fs_variante> = variante_inicial AND
+               NOT line_exists( ti_variante_asignada[ indice = es_variante_asignada-indice
+                                                      material = <fs_es_datos_material>-material
+                                                      nombre_estructura = es_variante_asignada-nombre_estructura ] ).
+              <fs_variante> = es_mara-matnr.
+              APPEND es_variante_asignada  TO ti_variante_asignada.
+            ENDIF.
+
+            ASSIGN COMPONENT 'VARIANT' OF STRUCTURE <fs_es_linea> TO <fs_variante>.
+
+            IF sy-subrc IS INITIAL AND <fs_variante> = variante_inicial AND
+               NOT line_exists( ti_variante_asignada[ indice   = es_variante_asignada-indice
+                                                      material = <fs_es_datos_material>-material
+                                                      nombre_estructura = es_variante_asignada-nombre_estructura ] ).
+              <fs_variante> = es_mara-matnr.
+              APPEND es_variante_asignada TO ti_variante_asignada.
+            ENDIF.
+
+          ENDLOOP.
+
+        ENDLOOP.
+
+      ENDIF.
+
+      CLEAR: es_mara.
+
+    ENDLOOP.
+
+    "luego de reasignar el valor de las variantes, consultamos datos necesarios para validar datos de centros y ventas
+    AT NEW material.
+      CLEAR: r_material, ti_mbew.
+
+      zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_ti                           = <fs_es_datos_material>-datos_material
+          i_nombre_columna               = 'MATERIAL'
+        CHANGING
+          c_ti_rango                     = r_material ).
+
+*Inicio Adicion SRV 27Dic2021
+      "Consultar datos x Centros del material
+      SELECT matnr,werks
+        FROM marc
+       WHERE matnr IN @r_material[]
+        INTO TABLE @DATA(ti_marc).
+
+      "Evaluar si ya esta o no catalogado
+      SELECT filia,artnr,vrkme,datbi,lfdnr
+        FROM wlk1
+       WHERE artnr IN @r_material[]
+        INTO TABLE @DATA(ti_wlk1).
+
+*Fin Adicion SRV 27Dic2021
+
+      "datos de venta
+      SELECT matnr,vkorg,vtweg
+      FROM mvke
+      WHERE matnr IN @r_material
+      INTO TABLE @DATA(ti_mvke).
+
+      SELECT *
+      FROM mbew
+      WHERE matnr IN @r_material[]
+      ORDER BY  matnr, bwkey,bwtar
+      INTO TABLE @ti_mbew.
+
+    ENDAT.
+
+    "Filtrar Matial/Variante centros en MARC, para evitar que se envien al idoc algunos que no existan
+    LOOP AT <fs_es_datos_material>-centros ASSIGNING FIELD-SYMBOL(<fs_es_centros>).
+*Inicio Modificacion SRV 27Dic2021
+      READ TABLE ti_wlk1
+        WITH KEY artnr = <fs_es_centros>-material
+        TRANSPORTING NO FIELDS.
+      IF sy-subrc EQ 0.
+        "Garantizar que el material exista en MARC para evitar escenario de catalogación sin datos basicos desde AFS
+        IF  line_exists( ti_marc[ matnr = <fs_es_centros>-material ] )
+            AND NOT line_exists( ti_marc[ matnr = <fs_es_centros>-material werks = <fs_es_centros>-plant ] ).
+          DELETE TABLE <fs_es_datos_material>-centros FROM <fs_es_centros>.
+        ENDIF.
+      ELSE.
+        IF NOT line_exists( ti_centros[ werks = <fs_es_centros>-plant ] ).
+          DELETE TABLE <fs_es_datos_material>-centros FROM <fs_es_centros>.
+        ENDIF.
+      ENDIF.
+*Fin Modificacion SRV 27Dic2021
+    ENDLOOP.
+
+    LOOP AT <fs_es_datos_material>-valoracion ASSIGNING FIELD-SYMBOL(<fs_es_valoracion>).
+*Inicio Modificacion SRV 27Dic2021
+*      IF NOT line_exists( ti_centros[ werks = <fs_es_valoracion>-val_area ] ).
+*        DELETE TABLE <fs_es_datos_material>-valoracion FROM <fs_es_valoracion>.
+*      ENDIF.
+      READ TABLE ti_wlk1
+        WITH KEY artnr = <fs_es_valoracion>-material
+        TRANSPORTING NO FIELDS.
+      IF sy-subrc EQ 0.
+        IF NOT line_exists( ti_marc[ matnr = <fs_es_valoracion>-material werks = <fs_es_valoracion>-val_area ] ).
+          DELETE TABLE <fs_es_datos_material>-valoracion FROM <fs_es_valoracion>.
+        ENDIF.
+      ELSE.
+        IF NOT line_exists( ti_centros[ werks = <fs_es_valoracion>-val_area ] ).
+          DELETE TABLE <fs_es_datos_material>-valoracion FROM <fs_es_valoracion>.
+        ENDIF.
+      ENDIF.
+*Fin Modificacion SRV 27Dic2021
+    ENDLOOP.
+    "Agregar Centro y Clases de valoracion para materiales de Repuesto{
+    IF <fs_es_datos_material>-matl_type IN r_tipo_material_respuesto AND
+       r_tipo_material_respuesto IS NOT INITIAL.
+      LOOP AT ti_mbew ASSIGNING FIELD-SYMBOL(<fs_es_mbew>).
+        IF <fs_es_mbew>-bwkey(1) CO '0123456789'.
+
+          "Leer linea de referencia
+          IF NOT line_exists( <fs_es_datos_material>-valoracion[ val_area = <fs_es_mbew>-bwkey val_type = space ] ).
+
+            es_valoracion = CORRESPONDING #( VALUE #( <fs_es_datos_material>-valoracion[ val_type = space ] OPTIONAL ) EXCEPT moving_pr std_price ).
+            "Linea sin clase de valoracion
+            APPEND VALUE zpxmaterial_valoracion( BASE es_valoracion
+                                                 material  = <fs_es_mbew>-matnr val_area = <fs_es_mbew>-bwkey val_type = space )
+            TO <fs_es_datos_material>-valoracion.
+          ENDIF.
+
+          "Linea con clase de valoracion REPNOVALOR
+          IF ( NOT line_exists( ti_mbew[ bwkey = <fs_es_mbew>-bwkey bwtar = c_repnovalor ] ) AND
+               NOT line_exists( <fs_es_datos_material>-valoracion[ val_area = <fs_es_mbew>-bwkey val_type = c_repnovalor ] ) ).
+            APPEND VALUE #( BASE es_valoracion
+                            material  = <fs_es_mbew>-matnr val_area = <fs_es_mbew>-bwkey val_type = c_repnovalor )
+            TO <fs_es_datos_material>-valoracion.
+          ENDIF.
+
+          "Si existe clase valoracio REPNOVALOR, debe ir con todos los valores en cero
+          IF ( line_exists( <fs_es_datos_material>-valoracion[ val_area = <fs_es_mbew>-bwkey val_type = c_repnovalor ] ) ).
+            MODIFY <fs_es_datos_material>-valoracion
+            FROM VALUE #( moving_pr = space std_price = space std_pr_pp = space std_pr_py = space )
+            TRANSPORTING moving_pr std_price
+            WHERE val_area = <fs_es_mbew>-bwkey AND
+                  val_type = c_repnovalor.
+          ENDIF.
+
+          "Linea con clase de valoracion REPVALORAD debe ir sin valores
+          IF ( NOT line_exists( ti_mbew[ bwkey = <fs_es_mbew>-bwkey bwtar = c_repvalorad ] ) AND
+               NOT line_exists( <fs_es_datos_material>-valoracion[ val_area = <fs_es_mbew>-bwkey val_type = c_repvalorad ] ) ).
+            APPEND VALUE #( BASE es_valoracion
+                            material  = <fs_es_mbew>-matnr val_area = <fs_es_mbew>-bwkey val_type = c_repvalorad )
+            TO <fs_es_datos_material>-valoracion.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+
+      SORT <fs_es_datos_material>-valoracion BY material val_area val_type.
+    ENDIF.
+    "}
+    "depurar datos de ventas que no correspondan con el maestro en S4
+    LOOP AT <fs_es_datos_material>-ventas ASSIGNING FIELD-SYMBOL(<fs_es_venta>).
+      IF NOT line_exists( ti_mvke[ matnr = <fs_es_venta>-material vkorg = <fs_es_venta>-sales_org vtweg = <fs_es_venta>-distr_chan ] ).
+        DELETE TABLE <fs_es_datos_material>-ventas FROM <fs_es_venta>.
+      ENDIF.
+    ENDLOOP.
+
+    "valor comodin vacio para la caracteristica
+    LOOP AT <fs_es_datos_material>-caracteristicas ASSIGNING FIELD-SYMBOL(<fs_es_caracteristicas>).
+
+      IF <fs_es_caracteristicas>-char_value = space.
+        <fs_es_caracteristicas>-char_value = '[VACIO]'.
+      ENDIF.
+    ENDLOOP.
+
+  ENDLOOP.
+
+*Inicio Modificacion SRV 30Dic2021
+  "Enviar Material por material ya si falla uno la logica de Main_idoc se sale y no procesa los demas idoc
+  LOOP AT i_ti_datos_material INTO es_datos_material.
+    CLEAR ti_datos_material.
+    APPEND es_datos_material TO ti_datos_material.
+    es_material-materiales = ti_datos_material.
+    r_es_datos_material = REF #( es_material ).
+
+*  o_materiales->generar_idoc( i_ti_datos_material ).
+
+    "Limpiar la variable global de la clase
+    CLEAR o_materiales->go_product.
+
+    CLEAR ti_retorno.
+    o_materiales->main_idoc(
+      IMPORTING
+        e_ti_return   =  ti_retorno
+      CHANGING
+        i_datos_proxy = r_es_datos_material ).
+  ENDLOOP.
+*Fin Modificacion SRV 30Dic2021
+
+ENDFUNCTION.

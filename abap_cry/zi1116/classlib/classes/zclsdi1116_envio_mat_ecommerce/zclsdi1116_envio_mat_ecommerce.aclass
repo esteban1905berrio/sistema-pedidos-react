@@ -1,0 +1,1902 @@
+CLASS zclsdi1116_envio_mat_ecommerce DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF gtp_es_material,
+        material TYPE matnr,
+        ean      TYPE mean-ean11,
+        taklv    TYPE mara-taklv,
+      END OF gtp_es_material .
+    TYPES:
+      gtp_ti_material         TYPE STANDARD TABLE OF gtp_es_material WITH EMPTY KEY .
+    TYPES:
+      gtp_ti_grupos_mercancia TYPE STANDARD TABLE OF t023t WITH EMPTY KEY .
+    TYPES:
+      gtp_r_ean   TYPE RANGE OF mean-ean11 .
+    TYPES:
+      gtp_r_matnr TYPE RANGE OF mvke-matnr .
+    TYPES:
+      gtp_r_vkorg TYPE RANGE OF mvke-vkorg .
+    TYPES:
+      gtp_r_fecha TYPE RANGE OF a002-datbi .
+    TYPES:
+      gtp_r_vtweg TYPE RANGE OF mvke-vtweg .
+    TYPES:
+      BEGIN OF gtp_es_params,
+        tp_talla TYPE string,
+        tp_color TYPE string,
+        tipo_mat TYPE RANGE OF string,
+      END OF gtp_es_params .
+
+    CONSTANTS gc_true TYPE string VALUE 'TRUE' ##NO_TEXT.
+    CONSTANTS gc_language_id TYPE string VALUE '-24' ##NO_TEXT.
+    CONSTANTS gc_ricefw TYPE ztcxr1000_1-ricefw VALUE 'I1116' ##NO_TEXT.
+    CONSTANTS gc_false TYPE string VALUE 'FALSE' ##NO_TEXT.
+    CONSTANTS gc_modulo TYPE zzedmodulo VALUE 'SD' ##NO_TEXT.
+    CONSTANTS gc_object TYPE bal_s_log-object VALUE 'ZSD_I1116' ##NO_TEXT.
+    CONSTANTS gc_subobject TYPE bal_s_log-subobject VALUE 'ZSDI1116_1' ##NO_TEXT.
+    DATA gv_log_handle TYPE balloghndl .
+
+    METHODS constructor
+      IMPORTING
+        !i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL .
+    METHODS generar_archivo
+      IMPORTING
+        !i_r_ean               TYPE gtp_r_ean
+        !i_r_material          TYPE gtp_r_matnr
+        !i_r_vkorg             TYPE gtp_r_vkorg
+        !i_r_vtweg             TYPE gtp_r_vtweg
+        !i_fecha_precio        TYPE a002-datbi
+        !i_categoria_productos TYPE flag
+        !i_diccionario_datos   TYPE flag
+        !i_atributos_productos TYPE flag
+        !i_productos_e_items   TYPE flag
+        !i_impuesto_material   TYPE flag
+      EXPORTING
+        !e_datos_transferidos  TYPE flag .
+    METHODS recuperar_datos_material
+      IMPORTING
+        !i_r_ean               TYPE gtp_r_ean
+      EXPORTING
+        !e_ti_material_ean     TYPE gtp_ti_material
+        !e_ti_grupos_mercancia TYPE gtp_ti_grupos_mercancia
+        !e_ti_info_materiales  TYPE zclmm_util_articulo=>gtp_tt_info_materiales
+        !e_ti_caracteristicas  TYPE zttmmr1032_1 .
+    METHODS generar_diccionario
+      IMPORTING
+        !i_r_ean                TYPE gtp_r_ean
+        !i_r_vkorg              TYPE gtp_r_vkorg
+        !i_r_vtweg              TYPE gtp_r_vtweg
+      RETURNING
+        VALUE(r_es_diccionario) TYPE zpxdiccionario1 .
+    METHODS generar_impuestos_maeteriales
+      IMPORTING
+        !i_r_ean                      TYPE gtp_r_ean
+        !i_r_vkorg                    TYPE gtp_r_vkorg
+        !i_r_vtweg                    TYPE gtp_r_vtweg
+        !i_fecha_precio               TYPE a002-datbi
+      RETURNING
+        VALUE(r_es_impuesto_material) TYPE zpxproduct_tax1 .
+    METHODS generar_categoria_productos
+      IMPORTING
+        !i_r_ean               TYPE gtp_r_ean
+        !i_r_vkorg             TYPE gtp_r_vkorg
+        !i_r_vtweg             TYPE gtp_r_vtweg
+      RETURNING
+        VALUE(r_es_categorias) TYPE zpxcategorias1 .
+    METHODS enviar_maestros_ecommerce
+      EXPORTING
+        !e_ti_return   TYPE bapiret2_t
+      CHANGING
+        !i_datos_proxy TYPE REF TO data .
+    METHODS consulta_param_tipo_material
+      EXPORTING
+        !es_param TYPE gtp_es_params .
+    METHODS consulta_talla_color
+      IMPORTING
+        !i_es_param TYPE gtp_es_params
+      EXPORTING
+        !e_v_flag   TYPE xfeld
+      CHANGING
+        !c_r_ean    TYPE gtp_r_ean .
+    METHODS agregar_mensaje
+      IMPORTING
+        !i_v_mensaje TYPE char100 .
+    METHODS crear_log .
+    METHODS grabar_log .
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    DATA go_parametros TYPE REF TO zclcxr1000_parametros .
+    DATA go_log TYPE REF TO zclcxr1002_log_aplicacion .
+    DATA:
+      g_r_bp_ecommerce     TYPE RANGE OF kna1-kunnr .
+    DATA ges_info_mensaje TYPE ztcxr1001_1 .
+    DATA:
+      g_r_bp_condicion_iva TYPE RANGE OF prcd_elements-kschl .
+ENDCLASS.
+
+
+
+CLASS zclsdi1116_envio_mat_ecommerce IMPLEMENTATION.
+
+
+  METHOD constructor.
+
+    ges_info_mensaje = i_es_info_mensaje.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'SD' i_ricefw = gc_ricefw  ).
+    ENDIF.
+
+    TRY.
+        g_r_bp_ecommerce = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'BP_ECOMMER' )
+                                    ( sign = es_parametro-sign option = es_parametro-opti low = |{ es_parametro-low ALPHA = IN }| high = |{ es_parametro-high  ALPHA = IN }| )
+                                  ).
+        g_r_bp_condicion_iva = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'COND_IVA' )
+                                        ( sign = es_parametro-sign option = es_parametro-opti low = es_parametro-low high = es_parametro-high )
+                                      ).
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD generar_categoria_productos.
+
+    DATA:
+      v_group_identifier        TYPE string,
+      v_parent_group_identifier TYPE string,
+      v_sec                     TYPE zpxcategorias_detalle-sequence,
+      es_detalle                LIKE LINE OF r_es_categorias-categorias-detalle,
+      ti_jerarquia              TYPE STANDARD TABLE OF wgh01,
+      es_jerarquia              LIKE LINE OF ti_jerarquia,
+      es_control                TYPE ztsdi1116_1,
+      ".Definición de tablas.
+      ti_comodin                TYPE RANGE OF char100.
+
+    CONSTANTS:
+      ".Definición de constantes.
+      c_sec      TYPE zzedidparam VALUE 'ZCAT_SEC'.
+*--------------------------------------------------------------------*
+*   Consulta de parámetro de tipo de material
+    consulta_param_tipo_material(
+      IMPORTING
+        es_param = DATA(es_param) ).
+
+    ".Instancia Constructor.
+    DATA(o_parametros) = NEW zclcxr1000_parametros( i_modulo  = gc_modulo
+                                                    i_ricefw  = gc_ricefw ).
+
+    ".Consultar: Color.
+    o_parametros->get_parametro(  EXPORTING   i_idparam     = c_sec
+                                  IMPORTING   e_ti_valrango = ti_comodin
+                                  EXCEPTIONS  parametro_no_encontrado = 1 ).
+
+    IF line_exists( ti_comodin[ 1 ] ).
+      ".Asignar parametro.
+      v_sec = ti_comodin[ 1 ]-low.
+    ELSE.
+      v_sec = 0.
+      CONDENSE v_sec NO-GAPS.
+    ENDIF.
+
+    recuperar_datos_material(
+      EXPORTING
+        i_r_ean              = i_r_ean
+      IMPORTING
+        e_ti_material_ean     = DATA(ti_material_ean)
+        e_ti_grupos_mercancia = DATA(ti_grupos_mercancia)
+        e_ti_info_materiales  = DATA(ti_info_materiales)
+        e_ti_caracteristicas  = DATA(ti_caracteristicas) ).
+
+    SELECT  atinn, atnam
+      FROM  cabn
+      INTO  TABLE @DATA(ti_caract_int)
+      FOR   ALL ENTRIES IN @ti_caracteristicas
+      WHERE atinn EQ @ti_caracteristicas-atinn.
+
+*    SELECT *
+*    FROM ztsdi1116_1
+*    INTO TABLE @DATA(ti_log_catalogo).
+
+*   Consulta de tabla de control para validación por categoría.
+    SELECT mandt, group_identifier, control, marca, fechaenvio, texto
+    INTO TABLE @DATA(t_control)
+    FROM ztsdi1116_1.
+
+    LOOP AT ti_material_ean ASSIGNING FIELD-SYMBOL(<fs_es_material_ean>).
+
+      DATA(es_material) = VALUE #( ti_info_materiales[ material = <fs_es_material_ean>-material ] OPTIONAL ).
+
+      READ TABLE ti_caract_int INTO DATA(es_caract_int)
+        WITH KEY atnam = 'MM_MAT_DEPARTAMENTO'.
+
+      IF sy-subrc = 0.
+        DATA(es_caracteristica) = VALUE #( ti_caracteristicas[ objek = <fs_es_material_ean>-material atinn = es_caract_int-atinn ] OPTIONAL ).
+      ENDIF.
+
+      CALL FUNCTION 'MERCHANDISE_GROUP_HIER_ART_SEL'
+        EXPORTING
+          matkl       = es_material-gr_articulos
+        TABLES
+          o_wgh01     = ti_jerarquia
+        EXCEPTIONS
+          no_basis_mg = 1
+          no_mg_hier  = 2
+          OTHERS      = 3.
+
+      IF sy-subrc <> 0.
+*        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+*          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+      es_jerarquia = VALUE #( ti_jerarquia[ stufe = '01' ] OPTIONAL ).
+
+      "Descripcion tipo prenda
+      DATA(es_grupos_mercancia) = VALUE #( ti_grupos_mercancia[ matkl = es_material-gr_articulos ] OPTIONAL ).
+
+*     Validación de tipo de material para arrastre de parámetro.
+      IF es_material-tipo_material NOT IN es_param-tipo_mat.
+        v_group_identifier = |{ es_material-descr_marca } { es_grupos_mercancia-wgbez }|.
+        v_parent_group_identifier = |{ es_material-descr_marca }|.
+      ELSE.
+        v_group_identifier = |{ es_material-descr_marca } { es_caracteristica-atwtb } { es_jerarquia-klsbez } { es_grupos_mercancia-wgbez }|.
+        v_parent_group_identifier = |{ es_material-descr_marca } { es_caracteristica-atwtb } { es_jerarquia-klsbez }|.
+      ENDIF.
+
+      TRANSLATE v_group_identifier TO UPPER CASE.
+      TRANSLATE v_parent_group_identifier TO UPPER CASE.
+*      CONDENSE v_parent_group_identifier NO-GAPS.
+
+*     Validación por categoría.
+      READ TABLE t_control TRANSPORTING NO FIELDS
+        WITH KEY group_identifier = v_group_identifier.
+
+      IF sy-subrc <> 0.
+        CLEAR es_control.
+        SORT t_control BY control DESCENDING.
+        READ TABLE t_control INTO DATA(es_aux1)
+         INDEX 1.
+
+        es_control-group_identifier = v_group_identifier.
+        es_control-control          = es_aux1-control + 1.
+        es_control-marca            = es_material-descr_marca.
+        es_control-fechaenvio       = sy-datum.
+
+        READ TABLE t_control TRANSPORTING NO FIELDS
+          WITH KEY marca = es_control-marca.
+
+        IF sy-subrc = 0.
+          es_control-texto = gc_false.
+        ELSE.
+          es_control-texto = gc_true.
+        ENDIF.
+
+        APPEND es_control TO t_control.
+      ELSE.
+        CONTINUE.
+      ENDIF.
+
+      es_detalle = VALUE #( group_identifier        = v_group_identifier
+                            top_group               = es_control-texto
+                            parent_group_identifier = v_parent_group_identifier
+                            sequence                = v_sec
+                            name                    = es_grupos_mercancia-wgbez
+                            short_description       = es_grupos_mercancia-wgbez
+                            published               = 1
+                            delete                  = 0
+                            language_id             = '-24'
+                          ).
+
+      APPEND es_detalle TO r_es_categorias-categorias-detalle.
+    ENDLOOP.
+
+    MODIFY ztsdi1116_1 FROM TABLE @t_control.  "Carga de control.
+
+    SORT r_es_categorias-categorias-detalle.
+    DELETE ADJACENT DUPLICATES FROM r_es_categorias-categorias-detalle.
+  ENDMETHOD.
+
+
+  METHOD recuperar_datos_material.
+
+    DATA:
+      es_material      LIKE LINE OF e_ti_material_ean,
+      r_grupo_articulo TYPE RANGE OF mara-matkl.
+
+    CONSTANTS:
+      c_s TYPE sy-langu VALUE 'S'.
+*--------------------------------------------------------------------*
+    SELECT m~matnr AS material, e~ean11 AS ean, taklv
+    FROM mean AS e
+    INNER JOIN mara AS m
+    ON m~matnr = e~matnr
+    WHERE e~ean11 IN @i_r_ean
+    INTO TABLE @e_ti_material_ean.
+
+    e_ti_info_materiales = zclmm_util_articulo=>obtener_talla_color( i_ti_materiales = VALUE #( FOR es_ean IN e_ti_material_ean ( material = es_ean-material ) ) ).
+    e_ti_caracteristicas = zclmm_util_articulo=>obtener_caracteristicas( i_ti_range_matnr = VALUE #( FOR es_ean IN e_ti_material_ean ( sign = 'I' option = 'EQ' low = es_ean-material ) ) ).
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                           = e_ti_info_materiales
+        i_nombre_columna               = 'GR_ARTICULOS'
+      CHANGING
+        c_ti_rango                     = r_grupo_articulo  ).
+
+    SELECT *
+    FROM  t023t
+    WHERE matkl IN @r_grupo_articulo
+      AND spras = @c_s
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_grupos_mercancia.
+
+  ENDMETHOD.
+
+
+  METHOD generar_diccionario.
+
+    CONSTANTS:
+      c_delete              TYPE string VALUE '0',
+      c_type_string         TYPE string VALUE 'String',
+      c_atri_assignedvalues TYPE string VALUE 'AssignedValues',
+      c_atri_allowed_value  TYPE string VALUE 'AllowedValues'.
+
+    DATA:
+      es_detalle      LIKE LINE OF r_es_diccionario-diccionario-detalle,
+      t_allowed_val_c TYPE zpxdiccionario_allowed_val_tab,
+      t_allowed_val_s TYPE zpxdiccionario_allowed_val_tab.
+*--------------------------------------------------------------------*
+
+    consulta_param_tipo_material(
+      IMPORTING
+        es_param = DATA(e_es_param) ).
+
+    recuperar_datos_material(
+      EXPORTING
+        i_r_ean              = i_r_ean
+      IMPORTING
+        e_ti_material_ean     = DATA(ti_material_ean)
+        e_ti_grupos_mercancia = DATA(ti_grupos_mercancia)
+        e_ti_info_materiales  = DATA(ti_info_materiales)
+        e_ti_caracteristicas  = DATA(ti_caracteristicas) ).
+
+    LOOP AT ti_info_materiales ASSIGNING FIELD-SYMBOL(<fs_es_info_material>).
+
+      IF <fs_es_info_material>-tipo_material NOT IN e_es_param-tipo_mat.
+        <fs_es_info_material>-descr_color = e_es_param-tp_color.
+        <fs_es_info_material>-talla       = e_es_param-tp_talla.
+      ENDIF.
+
+      TRANSLATE <fs_es_info_material>-descr_color TO UPPER CASE.
+      READ TABLE t_allowed_val_c INTO DATA(es_val_c)
+        WITH KEY valor = <fs_es_info_material>-descr_color.
+
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO t_allowed_val_c ASSIGNING FIELD-SYMBOL(<fs_val_c>).
+        <fs_val_c>-titulo = 'swatchColor'.
+        <fs_val_c>-valor = <fs_es_info_material>-descr_color.
+      ENDIF.
+
+      TRANSLATE <fs_es_info_material>-talla TO UPPER CASE.
+      READ TABLE t_allowed_val_s INTO DATA(es_val_s)
+        WITH KEY valor = <fs_es_info_material>-talla.
+
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO t_allowed_val_s ASSIGNING FIELD-SYMBOL(<fs_val_s>).
+        <fs_val_s>-titulo = 'swatchSize'.
+        <fs_val_s>-valor = <fs_es_info_material>-talla.
+      ENDIF.
+    ENDLOOP.
+
+    APPEND VALUE #( identifier = 'swatchColor'
+                      type = c_type_string
+                      attribute_type = c_atri_allowed_value
+                      name = 'COLOR'
+                      allowed_values-allowed_value = t_allowed_val_c
+                      delete = c_delete
+                      language_id = gc_language_id
+                    )
+     TO r_es_diccionario-diccionario-detalle.
+
+    APPEND VALUE #( identifier = 'swatchSize'
+                    type = c_type_string
+                    attribute_type = c_atri_allowed_value
+                    name = 'TALLA'
+                    allowed_values-allowed_value = t_allowed_val_s
+                    delete = c_delete
+                    language_id = gc_language_id
+                  )
+    TO r_es_diccionario-diccionario-detalle.
+  ENDMETHOD.
+
+
+  METHOD generar_impuestos_maeteriales.
+
+    DATA: es_material                TYPE gtp_es_material,
+          r_clasificacion_fiscal_mat TYPE RANGE OF mara-taklv.
+
+    recuperar_datos_material(
+      EXPORTING
+        i_r_ean              = i_r_ean
+      IMPORTING
+        e_ti_material_ean     = DATA(ti_material_ean)
+        e_ti_grupos_mercancia = DATA(ti_grupos_mercancia)
+        e_ti_info_materiales  = DATA(ti_info_materiales)
+        e_ti_caracteristicas  = DATA(ti_caracteristicas) ).
+
+    CHECK ti_material_ean IS NOT INITIAL.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                           = ti_material_ean
+        i_nombre_columna               = 'TAKLV'
+      CHANGING
+        c_ti_rango                     = r_clasificacion_fiscal_mat ).
+
+    "Condiciones
+    SELECT
+    CAST( CAST( c~kbetr AS D34N ) / CAST( 10 AS D34N ) AS INT8 )  AS kbetr,
+    taxm1, k~kunnr, tatyp, taxkd, k~aland, c~knumh, datbi, datab
+    FROM knvi AS k
+    INNER JOIN a002 AS a ON
+    a~kschl = k~tatyp AND
+    a~aland = k~aland AND
+    a~taxk1 = k~taxkd
+    INNER JOIN konp AS c
+    ON c~knumh = a~knumh
+    AND c~kschl = a~kschl
+    WHERE k~kunnr IN @g_r_bp_ecommerce
+    AND   k~tatyp IN @g_r_bp_condicion_iva
+    AND   a~taxm1 IN @r_clasificacion_fiscal_mat
+    AND   ( a~datab <= @i_fecha_precio AND
+            a~datbi >= @i_fecha_precio )
+    INTO TABLE @DATA(ti_impuestos).
+
+    CHECK ti_impuestos IS NOT INITIAL.
+
+    DELETE ADJACENT DUPLICATES FROM ti_impuestos COMPARING ALL FIELDS.
+
+    r_es_impuesto_material-product_tax-cabecera-operacion = 'I'.
+
+    LOOP AT ti_material_ean INTO DATA(es_mat_ean).
+
+      LOOP AT ti_impuestos ASSIGNING FIELD-SYMBOL(<fs_es_impuestos>)
+        WHERE taxm1 = es_mat_ean-taklv
+        GROUP BY ( kbetr = <fs_es_impuestos>-kbetr ).
+
+        APPEND INITIAL LINE TO r_es_impuesto_material-product_tax-detalle ASSIGNING FIELD-SYMBOL(<fs_es_impuesto_material>).
+
+        <fs_es_impuesto_material>-catentry_part_number = |{ es_mat_ean-ean ALPHA = OUT }|.
+        CONDENSE <fs_es_impuesto_material>-catentry_part_number NO-GAPS.
+        <fs_es_impuesto_material>-sales_tax_calculation_code = |{ <fs_es_impuestos>-aland }_IVA{ <fs_es_impuestos>-kbetr }|.
+      ENDLOOP.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD generar_archivo.
+
+    DATA:
+      o_monitor_integracion TYPE REF TO zclcxr1001_monitor_integracion,
+      es_ztcxr1001_1        TYPE ztcxr1001_1,
+      o_datos_ecommerce     TYPE REF TO zclsdi1116_get_data_ecommerce.
+*--------------------------------------------------------------------*
+    o_datos_ecommerce = NEW zclsdi1116_get_data_ecommerce( ).
+
+    es_ztcxr1001_1    = VALUE ztcxr1001_1(  pid       = 'SENDER'
+                                            fecha_ini = sy-datum
+                                            hora_ini  = sy-uzeit
+                                            hora_fin  = sy-uzeit
+                                            ob_system = 'S4'
+                                            ib_system = 'ECOMMERCE' ).
+
+*...Atributo de productos
+    IF i_atributos_productos = abap_true.
+
+      o_datos_ecommerce->atributos_productos( EXPORTING
+                                                  i_r_vkorg         = i_r_vkorg
+                                                  i_r_vtweg         = i_r_vtweg
+                                                  i_r_ean11         = i_r_ean
+                                                  i_v_langu         = sy-langu
+                                                  IMPORTING
+                                                   e_es_atrib_produc = DATA(es_atributos_productos) ).
+
+      es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'ATRIBUTOS_RECIBIR'
+                                                    ob_name   = 'ATRIBUTOS_ENVIAR'
+                                                    adminuser = sy-uname ).
+      TRY.
+          o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                      i_es_info_mensaje = es_ztcxr1001_1
+                                                                      i_datos_proxy     = es_atributos_productos
+                                                                    ).
+
+          o_monitor_integracion->main( i_datos_proxy = REF #( es_atributos_productos ) ).
+        CATCH zcxr1001_excepciones_monitor.
+      ENDTRY.
+    ENDIF.
+
+*...Catalogue_products
+    IF i_productos_e_items = abap_true.
+      TRY.
+          o_datos_ecommerce->productos_e_items( EXPORTING
+                                                  i_r_vkorg         = i_r_vkorg
+                                                  i_r_vtweg         = i_r_vtweg
+                                                  i_r_ean11         = i_r_ean
+                                                  i_v_langu         = sy-langu
+                                                IMPORTING
+                                                  e_es_product        = DATA(es_product)
+                                                  e_es_product_weight = DATA(es_product_weight)
+                                              ).
+
+          es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'PRODUCTOS_E_ITEMS_RECIBIR'
+                                                        ob_name   = 'PRODUCTOS_E_ITEMS_ENVIAR'
+                                                        adminuser = sy-uname ).
+          TRY.
+              o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                          i_es_info_mensaje = es_ztcxr1001_1
+                                                                          i_datos_proxy     = es_product
+                                                                        ).
+
+              o_monitor_integracion->main( i_datos_proxy = REF #( es_product ) ).
+
+            CATCH zcxr1001_excepciones_monitor.
+          ENDTRY.
+
+          es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'PRODUCTOS_E_ITEMS_W_RECIBIR'
+                                                        ob_name   = 'PRODUCTOS_E_ITEMS_W_ENVIAR'
+                                                        adminuser = sy-uname ).
+          TRY.
+              o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                          i_es_info_mensaje = es_ztcxr1001_1
+                                                                          i_datos_proxy     = es_product_weight
+                                                                        ).
+
+              o_monitor_integracion->main( i_datos_proxy = REF #( es_product_weight ) ).
+
+            CATCH zcxr1001_excepciones_monitor.
+          ENDTRY.
+        CATCH cx_ai_system_fault.
+      ENDTRY.
+    ENDIF.
+
+*...Categoria de materiales - Catalogue_categories
+    IF i_categoria_productos = abap_true.
+
+      DATA(es_categoria) = generar_categoria_productos( i_r_ean         = i_r_ean
+                                                        i_r_vkorg       = i_r_vkorg
+                                                        i_r_vtweg       = i_r_vtweg  ).
+
+      IF es_categoria-categorias-detalle IS NOT INITIAL.
+
+        es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'CATEGORIAS_RECIBIR'
+                                                      ob_name   = 'CATEGORIAS_ENVIAR'
+                                                      adminuser = sy-uname ).
+        TRY.
+            o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                        i_es_info_mensaje = es_ztcxr1001_1
+                                                                        i_datos_proxy     = es_categoria
+                                                                      ).
+
+            o_monitor_integracion->main( i_datos_proxy = REF #( es_categoria ) ).
+
+          CATCH zcxr1001_excepciones_monitor.
+        ENDTRY.
+      ENDIF.
+    ENDIF.
+
+*...Catalogue_products_tax
+    IF i_impuesto_material = abap_true.
+
+      DATA(es_impuesto_material) = generar_impuestos_maeteriales( i_r_ean         = i_r_ean
+                                                                  i_r_vkorg       = i_r_vkorg
+                                                                  i_r_vtweg       = i_r_vtweg
+                                                                  i_fecha_precio  = i_fecha_precio  ).
+
+      es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'IMPUESTO_MATERIAL_RECIBIR'
+                                                    ob_name   = 'IMPUESTO_MATERIAL_ENVIAR'
+                                                    adminuser = sy-uname ).
+      TRY.
+          o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                      i_es_info_mensaje = es_ztcxr1001_1
+                                                                      i_datos_proxy     = es_impuesto_material
+                                                                    ).
+
+          o_monitor_integracion->main( i_datos_proxy = REF #( es_impuesto_material ) ).
+
+        CATCH zcxr1001_excepciones_monitor.
+      ENDTRY.
+    ENDIF.
+
+*...Diccionario de atributos - attribute_dictionary
+    IF i_diccionario_datos = abap_true.
+
+      DATA(es_diccionario_datos) = generar_diccionario( i_r_ean         = i_r_ean
+                                                        i_r_vkorg       = i_r_vkorg
+                                                        i_r_vtweg       = i_r_vtweg  ).
+
+      es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'DICCIONARIO_RECIBIR'
+                                                    ob_name   = 'DICCIONARIO_ENVIAR'
+                                                    adminuser = sy-uname ).
+
+      TRY.
+          o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                      i_es_info_mensaje = es_ztcxr1001_1
+                                                                      i_datos_proxy     = es_diccionario_datos
+                                                                    ).
+
+          o_monitor_integracion->main( i_datos_proxy = REF #( es_diccionario_datos ) ).
+
+        CATCH zcxr1001_excepciones_monitor.
+      ENDTRY.
+    ENDIF.
+    e_datos_transferidos = abap_true.
+  ENDMETHOD.
+
+
+  METHOD enviar_maestros_ecommerce.
+
+    DATA: o_async_messaging       TYPE REF TO if_wsprotocol_async_messaging,
+          o_enviar_categorias     TYPE REF TO zpxco_categorias_out,
+          o_enviar_diccionario    TYPE REF TO zpxco_diccionario_enviar_out,
+          o_productos_tax_enviar  TYPE REF TO zpxco_product_tax_enviar_out,
+          o_productos_enviar      TYPE REF TO zpxco_productos_enviar_out,
+          o_product_weight_enviar TYPE REF TO zpxco_product_weight_enviar_ou,
+          o_enviar_atributos      TYPE REF TO zpxco_atributos_enviar_out.
+
+    TRY.
+
+        ASSIGN i_datos_proxy->* TO FIELD-SYMBOL(<fs_datos_proxy>).
+
+        CASE ges_info_mensaje-ob_name.
+          WHEN 'DICCIONARIO_ENVIAR'.
+            o_enviar_diccionario = NEW zpxco_diccionario_enviar_out( ).
+            o_async_messaging ?= o_enviar_diccionario->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_D_EO| ).
+
+            o_enviar_diccionario->diccionario_enviar_async( output = <fs_datos_proxy> ).
+          WHEN 'IMPUESTO_MATERIAL_ENVIAR'.
+            o_productos_tax_enviar = NEW zpxco_product_tax_enviar_out( ).
+            o_async_messaging ?= o_productos_tax_enviar->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_I_EO| ).
+
+            o_productos_tax_enviar->product_tax_enviar_async( output = <fs_datos_proxy> ).
+          WHEN 'PRODUCTOS_E_ITEMS_W_ENVIAR'.
+            o_product_weight_enviar = NEW zpxco_product_weight_enviar_ou( ).
+            o_async_messaging ?= o_product_weight_enviar->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_PW_EO| ).
+
+            o_product_weight_enviar->product_weight_enviar_async( output = <fs_datos_proxy> ).
+          WHEN 'PRODUCTOS_E_ITEMS_ENVIAR'.
+            o_productos_enviar = NEW zpxco_productos_enviar_out( ).
+            o_async_messaging ?= o_productos_enviar->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_P_EO| ).
+
+            o_productos_enviar->productos_enviar_async( output = <fs_datos_proxy> ).
+          WHEN 'CATEGORIAS_ENVIAR'.
+            o_enviar_categorias = NEW zpxco_categorias_out( ).
+            o_async_messaging ?= o_enviar_categorias->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_C_EO| ).
+
+            o_enviar_categorias->categorias_async( output = <fs_datos_proxy> ).
+          WHEN 'ATRIBUTOS_ENVIAR'.
+            o_enviar_atributos = NEW zpxco_atributos_enviar_out( ).
+            o_async_messaging ?= o_enviar_atributos->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_A_EO| ).
+
+            o_enviar_atributos->atributos_enviar_async( output = <fs_datos_proxy> ).
+            "{ Inicio SGR 02.05.2024 | Condicionar metodo para nuevo mapeo
+          WHEN 'ZPXCO_PRODUCTO_ATRIBUTOS_ENVIA'.
+            DATA(o_enviar_shopify) = NEW zpxco_producto_atributos_envia( ).
+            o_async_messaging ?= o_enviar_shopify->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_S_EO| ).
+
+            o_enviar_shopify->producto_atributos_enviar_asyn( output = <fs_datos_proxy> ).
+            "{ Fin SGR 02.05.2024
+        ENDCASE.
+
+        COMMIT WORK AND WAIT.
+
+        go_log->set_es_log( i_es = VALUE #( type = 'S' id = 'ZCX01' number  = '037'  ) ).
+
+        e_ti_return = CORRESPONDING #( go_log->get_log( ) ).
+
+      CATCH cx_ai_system_fault.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD consulta_param_tipo_material.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Consulta de parámetros para validación de
+*                       tipo de material
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    DATA:
+      ".Definición de tablas.
+      ti_comodin TYPE RANGE OF char100.
+*--------------------------------------------------------------------*
+    CONSTANTS:
+      c_tp_talla TYPE zzedidparam VALUE 'TP_TALLA',
+      c_tp_color TYPE zzedidparam VALUE 'TP_COLOR',
+      c_tipo_mat TYPE zzedidparam VALUE 'TIPO_MATER'.
+*--------------------------------------------------------------------*
+    ".Instancia Constructor.
+    DATA(o_parametros) = NEW zclcxr1000_parametros( i_modulo  = gc_modulo
+                                                    i_ricefw  = gc_ricefw ).
+
+    ".Consultar: talla para diferentes de ZMOD
+    o_parametros->get_parametro(  EXPORTING   i_idparam     = c_tp_talla
+                                  IMPORTING   e_ti_valrango = ti_comodin
+                                  EXCEPTIONS  parametro_no_encontrado = 1 ).
+    "__Validar si se ha encontrado el parametro.
+    IF line_exists( ti_comodin[ 1 ] ).
+      ".Asignar parametro.
+      es_param-tp_talla = ti_comodin[ 1 ]-low.
+    ENDIF.
+
+    ".Consultar: Color para diferentes de ZMOD
+    o_parametros->get_parametro(  EXPORTING   i_idparam     = c_tp_color
+                                  IMPORTING   e_ti_valrango = ti_comodin
+                                  EXCEPTIONS  parametro_no_encontrado = 1 ).
+    "__Validar si se ha encontrado el parametro.
+    IF line_exists( ti_comodin[ 1 ] ).
+      ".Asignar parametro.
+      es_param-tp_color = ti_comodin[ 1 ]-low.
+    ENDIF.
+
+    ".Consultar: Color para diferentes de ZMOD
+    o_parametros->get_parametro(  EXPORTING   i_idparam     = c_tipo_mat
+                                  IMPORTING   e_ti_valrango = ti_comodin
+                                  EXCEPTIONS  parametro_no_encontrado = 1 ).
+    "__Validar si se ha encontrado el parametro.
+    IF line_exists( ti_comodin[ 1 ] ).
+
+      es_param-tipo_mat =
+      VALUE #( FOR <fs_comodin>
+               IN ti_comodin (  option  = <fs_comodin>-option
+                                sign    = <fs_comodin>-sign
+                                low     = <fs_comodin>-low ) ) .
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD consulta_talla_color.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Consulta de talla y color
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    DATA:
+      lv_flag TYPE xfeld.
+*--------------------------------------------------------------------*
+
+    "__Validar EAN.
+    CHECK c_r_ean IS NOT INITIAL.
+
+    ".Consultar Materiales asociados a los EAN.
+    SELECT  matnr, mtart, ean11, color, size1
+      FROM  mara
+      INTO  TABLE @DATA(t_mara)
+      WHERE ean11 IN @c_r_ean.
+
+    LOOP AT c_r_ean INTO DATA(es_ean).
+
+      CLEAR lv_flag.
+      READ TABLE t_mara INTO DATA(es_mara)
+        WITH KEY ean11 = es_ean-low.
+
+      IF sy-subrc <> 0.
+        agregar_mensaje( TEXT-e01 ).   "Código EAN desconocido
+        lv_flag = abap_true.
+      ELSE.
+
+        IF es_mara-mtart IN i_es_param-tipo_mat.
+          IF es_mara-color IS INITIAL.
+            agregar_mensaje( TEXT-e02 ). "Código EAN sin color matriculado
+            lv_flag = abap_true.
+          ENDIF.
+          IF es_mara-size1 IS INITIAL.
+            agregar_mensaje( TEXT-e03 ). "Código EAN sin talla matriculada
+            lv_flag = abap_true.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      IF lv_flag = abap_true.
+        e_v_flag = abap_true.
+        DELETE c_r_ean WHERE low = es_ean-low.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD agregar_mensaje.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Adicionar mensaje de error
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    CALL FUNCTION 'BAL_LOG_MSG_ADD_FREE_TEXT'
+      EXPORTING
+        i_log_handle     = gv_log_handle
+        i_msgty          = 'E'
+        i_text           = i_v_mensaje
+      EXCEPTIONS
+        log_not_found    = 1
+        msg_inconsistent = 2
+        log_is_full      = 3
+        OTHERS           = 4.
+  ENDMETHOD.
+
+
+  METHOD crear_log.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Adicionar mensaje de error
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    DATA:
+      es_log_header         TYPE bal_s_log.
+*--------------------------------------------------------------------*
+
+    es_log_header-object    = gc_object.
+    es_log_header-subobject = gc_subobject.
+
+    CALL FUNCTION 'BAL_LOG_CREATE'
+      EXPORTING
+        i_s_log                 = es_log_header
+      IMPORTING
+        e_log_handle            = gv_log_handle
+      EXCEPTIONS
+        log_header_inconsistent = 1
+        OTHERS                  = 2.
+  ENDMETHOD.
+
+
+  METHOD grabar_log.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Adicionar mensaje de error
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    CALL FUNCTION 'BAL_DB_SAVE'
+      EXPORTING
+        i_save_all       = 'X'
+      EXCEPTIONS
+        log_not_found    = 1
+        save_not_allowed = 2
+        numbering_error  = 3
+        OTHERS           = 4.
+
+    CALL FUNCTION 'BAL_DSP_LOG_DISPLAY'
+      EXCEPTIONS
+        OTHERS = 1.
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclsdi1116_envio_mat_ecommerce DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF gtp_es_material,
+        material TYPE matnr,
+        ean      TYPE mean-ean11,
+        taklv    TYPE mara-taklv,
+      END OF gtp_es_material .
+    TYPES:
+      gtp_ti_material         TYPE STANDARD TABLE OF gtp_es_material WITH EMPTY KEY .
+    TYPES:
+      gtp_ti_grupos_mercancia TYPE STANDARD TABLE OF t023t WITH EMPTY KEY .
+    TYPES:
+      gtp_r_ean   TYPE RANGE OF mean-ean11 .
+    TYPES:
+      gtp_r_matnr TYPE RANGE OF mvke-matnr .
+    TYPES:
+      gtp_r_vkorg TYPE RANGE OF mvke-vkorg .
+    TYPES:
+      gtp_r_fecha TYPE RANGE OF a002-datbi .
+    TYPES:
+      gtp_r_vtweg TYPE RANGE OF mvke-vtweg .
+    TYPES:
+      BEGIN OF gtp_es_params,
+        tp_talla TYPE string,
+        tp_color TYPE string,
+        tipo_mat TYPE RANGE OF string,
+      END OF gtp_es_params .
+
+    CONSTANTS gc_true TYPE string VALUE 'TRUE' ##NO_TEXT.
+    CONSTANTS gc_language_id TYPE string VALUE '-24' ##NO_TEXT.
+    CONSTANTS gc_ricefw TYPE ztcxr1000_1-ricefw VALUE 'I1116' ##NO_TEXT.
+    CONSTANTS gc_false TYPE string VALUE 'FALSE' ##NO_TEXT.
+    CONSTANTS gc_modulo TYPE zzedmodulo VALUE 'SD' ##NO_TEXT.
+    CONSTANTS gc_object TYPE bal_s_log-object VALUE 'ZSD_I1116' ##NO_TEXT.
+    CONSTANTS gc_subobject TYPE bal_s_log-subobject VALUE 'ZSDI1116_1' ##NO_TEXT.
+    DATA gv_log_handle TYPE balloghndl .
+
+    METHODS constructor
+      IMPORTING
+        !i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL .
+    METHODS generar_archivo
+      IMPORTING
+        !i_r_ean               TYPE gtp_r_ean
+        !i_r_material          TYPE gtp_r_matnr
+        !i_r_vkorg             TYPE gtp_r_vkorg
+        !i_r_vtweg             TYPE gtp_r_vtweg
+        !i_fecha_precio        TYPE a002-datbi
+        !i_categoria_productos TYPE flag
+        !i_diccionario_datos   TYPE flag
+        !i_atributos_productos TYPE flag
+        !i_productos_e_items   TYPE flag
+        !i_impuesto_material   TYPE flag
+      EXPORTING
+        !e_datos_transferidos  TYPE flag .
+    METHODS recuperar_datos_material
+      IMPORTING
+        !i_r_ean               TYPE gtp_r_ean
+      EXPORTING
+        !e_ti_material_ean     TYPE gtp_ti_material
+        !e_ti_grupos_mercancia TYPE gtp_ti_grupos_mercancia
+        !e_ti_info_materiales  TYPE zclmm_util_articulo=>gtp_tt_info_materiales
+        !e_ti_caracteristicas  TYPE zttmmr1032_1 .
+    METHODS generar_diccionario
+      IMPORTING
+        !i_r_ean                TYPE gtp_r_ean
+        !i_r_vkorg              TYPE gtp_r_vkorg
+        !i_r_vtweg              TYPE gtp_r_vtweg
+      RETURNING
+        VALUE(r_es_diccionario) TYPE zpxdiccionario1 .
+    METHODS generar_impuestos_maeteriales
+      IMPORTING
+        !i_r_ean                      TYPE gtp_r_ean
+        !i_r_vkorg                    TYPE gtp_r_vkorg
+        !i_r_vtweg                    TYPE gtp_r_vtweg
+        !i_fecha_precio               TYPE a002-datbi
+      RETURNING
+        VALUE(r_es_impuesto_material) TYPE zpxproduct_tax1 .
+    METHODS generar_categoria_productos
+      IMPORTING
+        !i_r_ean               TYPE gtp_r_ean
+        !i_r_vkorg             TYPE gtp_r_vkorg
+        !i_r_vtweg             TYPE gtp_r_vtweg
+      RETURNING
+        VALUE(r_es_categorias) TYPE zpxcategorias1 .
+    METHODS enviar_maestros_ecommerce
+      EXPORTING
+        !e_ti_return   TYPE bapiret2_t
+      CHANGING
+        !i_datos_proxy TYPE REF TO data .
+    METHODS consulta_param_tipo_material
+      EXPORTING
+        !es_param TYPE gtp_es_params .
+    METHODS consulta_talla_color
+      IMPORTING
+        !i_es_param TYPE gtp_es_params
+      EXPORTING
+        !e_v_flag   TYPE xfeld
+      CHANGING
+        !c_r_ean    TYPE gtp_r_ean .
+    METHODS agregar_mensaje
+      IMPORTING
+        !i_v_mensaje TYPE char100 .
+    METHODS crear_log .
+    METHODS grabar_log .
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    DATA go_parametros TYPE REF TO zclcxr1000_parametros .
+    DATA go_log TYPE REF TO zclcxr1002_log_aplicacion .
+    DATA:
+      g_r_bp_ecommerce     TYPE RANGE OF kna1-kunnr .
+    DATA ges_info_mensaje TYPE ztcxr1001_1 .
+    DATA:
+      g_r_bp_condicion_iva TYPE RANGE OF prcd_elements-kschl .
+ENDCLASS.
+
+
+
+CLASS zclsdi1116_envio_mat_ecommerce IMPLEMENTATION.
+
+
+  METHOD constructor.
+
+    ges_info_mensaje = i_es_info_mensaje.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'SD' i_ricefw = gc_ricefw  ).
+    ENDIF.
+
+    TRY.
+        g_r_bp_ecommerce = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'BP_ECOMMER' )
+                                    ( sign = es_parametro-sign option = es_parametro-opti low = |{ es_parametro-low ALPHA = IN }| high = |{ es_parametro-high  ALPHA = IN }| )
+                                  ).
+        g_r_bp_condicion_iva = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'COND_IVA' )
+                                        ( sign = es_parametro-sign option = es_parametro-opti low = es_parametro-low high = es_parametro-high )
+                                      ).
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD generar_categoria_productos.
+
+    DATA:
+      v_group_identifier        TYPE string,
+      v_parent_group_identifier TYPE string,
+      v_sec                     TYPE zpxcategorias_detalle-sequence,
+      es_detalle                LIKE LINE OF r_es_categorias-categorias-detalle,
+      ti_jerarquia              TYPE STANDARD TABLE OF wgh01,
+      es_jerarquia              LIKE LINE OF ti_jerarquia,
+      es_control                TYPE ztsdi1116_1,
+      ".Definición de tablas.
+      ti_comodin                TYPE RANGE OF char100.
+
+    CONSTANTS:
+      ".Definición de constantes.
+      c_sec      TYPE zzedidparam VALUE 'ZCAT_SEC'.
+*--------------------------------------------------------------------*
+*   Consulta de parámetro de tipo de material
+    consulta_param_tipo_material(
+      IMPORTING
+        es_param = DATA(es_param) ).
+
+    ".Instancia Constructor.
+    DATA(o_parametros) = NEW zclcxr1000_parametros( i_modulo  = gc_modulo
+                                                    i_ricefw  = gc_ricefw ).
+
+    ".Consultar: Color.
+    o_parametros->get_parametro(  EXPORTING   i_idparam     = c_sec
+                                  IMPORTING   e_ti_valrango = ti_comodin
+                                  EXCEPTIONS  parametro_no_encontrado = 1 ).
+
+    IF line_exists( ti_comodin[ 1 ] ).
+      ".Asignar parametro.
+      v_sec = ti_comodin[ 1 ]-low.
+    ELSE.
+      v_sec = 0.
+      CONDENSE v_sec NO-GAPS.
+    ENDIF.
+
+    recuperar_datos_material(
+      EXPORTING
+        i_r_ean              = i_r_ean
+      IMPORTING
+        e_ti_material_ean     = DATA(ti_material_ean)
+        e_ti_grupos_mercancia = DATA(ti_grupos_mercancia)
+        e_ti_info_materiales  = DATA(ti_info_materiales)
+        e_ti_caracteristicas  = DATA(ti_caracteristicas) ).
+
+    SELECT  atinn, atnam
+      FROM  cabn
+      INTO  TABLE @DATA(ti_caract_int)
+      FOR   ALL ENTRIES IN @ti_caracteristicas
+      WHERE atinn EQ @ti_caracteristicas-atinn.
+
+*    SELECT *
+*    FROM ztsdi1116_1
+*    INTO TABLE @DATA(ti_log_catalogo).
+
+*   Consulta de tabla de control para validación por categoría.
+    SELECT mandt, group_identifier, control, marca, fechaenvio, texto
+    INTO TABLE @DATA(t_control)
+    FROM ztsdi1116_1.
+
+    LOOP AT ti_material_ean ASSIGNING FIELD-SYMBOL(<fs_es_material_ean>).
+
+      DATA(es_material) = VALUE #( ti_info_materiales[ material = <fs_es_material_ean>-material ] OPTIONAL ).
+
+      READ TABLE ti_caract_int INTO DATA(es_caract_int)
+        WITH KEY atnam = 'MM_MAT_DEPARTAMENTO'.
+
+      IF sy-subrc = 0.
+        DATA(es_caracteristica) = VALUE #( ti_caracteristicas[ objek = <fs_es_material_ean>-material atinn = es_caract_int-atinn ] OPTIONAL ).
+      ENDIF.
+
+      CALL FUNCTION 'MERCHANDISE_GROUP_HIER_ART_SEL'
+        EXPORTING
+          matkl       = es_material-gr_articulos
+        TABLES
+          o_wgh01     = ti_jerarquia
+        EXCEPTIONS
+          no_basis_mg = 1
+          no_mg_hier  = 2
+          OTHERS      = 3.
+
+      IF sy-subrc <> 0.
+*        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+*          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+
+      es_jerarquia = VALUE #( ti_jerarquia[ stufe = '01' ] OPTIONAL ).
+
+      "Descripcion tipo prenda
+      DATA(es_grupos_mercancia) = VALUE #( ti_grupos_mercancia[ matkl = es_material-gr_articulos ] OPTIONAL ).
+
+*     Validación de tipo de material para arrastre de parámetro.
+      IF es_material-tipo_material NOT IN es_param-tipo_mat.
+        v_group_identifier = |{ es_material-descr_marca } { es_grupos_mercancia-wgbez }|.
+        v_parent_group_identifier = |{ es_material-descr_marca }|.
+      ELSE.
+        v_group_identifier = |{ es_material-descr_marca } { es_caracteristica-atwtb } { es_jerarquia-klsbez } { es_grupos_mercancia-wgbez }|.
+        v_parent_group_identifier = |{ es_material-descr_marca } { es_caracteristica-atwtb } { es_jerarquia-klsbez }|.
+      ENDIF.
+
+      TRANSLATE v_group_identifier TO UPPER CASE.
+      TRANSLATE v_parent_group_identifier TO UPPER CASE.
+*      CONDENSE v_parent_group_identifier NO-GAPS.
+
+*     Validación por categoría.
+      READ TABLE t_control TRANSPORTING NO FIELDS
+        WITH KEY group_identifier = v_group_identifier.
+
+      IF sy-subrc <> 0.
+        CLEAR es_control.
+        SORT t_control BY control DESCENDING.
+        READ TABLE t_control INTO DATA(es_aux1)
+         INDEX 1.
+
+        es_control-group_identifier = v_group_identifier.
+        es_control-control          = es_aux1-control + 1.
+        es_control-marca            = es_material-descr_marca.
+        es_control-fechaenvio       = sy-datum.
+
+        READ TABLE t_control TRANSPORTING NO FIELDS
+          WITH KEY marca = es_control-marca.
+
+        IF sy-subrc = 0.
+          es_control-texto = gc_false.
+        ELSE.
+          es_control-texto = gc_true.
+        ENDIF.
+
+        APPEND es_control TO t_control.
+      ELSE.
+        CONTINUE.
+      ENDIF.
+
+      es_detalle = VALUE #( group_identifier        = v_group_identifier
+                            top_group               = es_control-texto
+                            parent_group_identifier = v_parent_group_identifier
+                            sequence                = v_sec
+                            name                    = es_grupos_mercancia-wgbez
+                            short_description       = es_grupos_mercancia-wgbez
+                            published               = 1
+                            delete                  = 0
+                            language_id             = '-24'
+                          ).
+
+      APPEND es_detalle TO r_es_categorias-categorias-detalle.
+    ENDLOOP.
+
+    MODIFY ztsdi1116_1 FROM TABLE @t_control.  "Carga de control.
+
+    SORT r_es_categorias-categorias-detalle.
+    DELETE ADJACENT DUPLICATES FROM r_es_categorias-categorias-detalle.
+  ENDMETHOD.
+
+
+  METHOD recuperar_datos_material.
+
+    DATA:
+      es_material      LIKE LINE OF e_ti_material_ean,
+      r_grupo_articulo TYPE RANGE OF mara-matkl.
+
+    CONSTANTS:
+      c_s TYPE sy-langu VALUE 'S'.
+*--------------------------------------------------------------------*
+    SELECT m~matnr AS material, e~ean11 AS ean, taklv
+    FROM mean AS e
+    INNER JOIN mara AS m
+    ON m~matnr = e~matnr
+    WHERE e~ean11 IN @i_r_ean
+    INTO TABLE @e_ti_material_ean.
+
+    e_ti_info_materiales = zclmm_util_articulo=>obtener_talla_color( i_ti_materiales = VALUE #( FOR es_ean IN e_ti_material_ean ( material = es_ean-material ) ) ).
+    e_ti_caracteristicas = zclmm_util_articulo=>obtener_caracteristicas( i_ti_range_matnr = VALUE #( FOR es_ean IN e_ti_material_ean ( sign = 'I' option = 'EQ' low = es_ean-material ) ) ).
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                           = e_ti_info_materiales
+        i_nombre_columna               = 'GR_ARTICULOS'
+      CHANGING
+        c_ti_rango                     = r_grupo_articulo  ).
+
+    SELECT *
+    FROM  t023t
+    WHERE matkl IN @r_grupo_articulo
+      AND spras = @c_s
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_grupos_mercancia.
+
+  ENDMETHOD.
+
+
+  METHOD generar_diccionario.
+
+    CONSTANTS:
+      c_delete              TYPE string VALUE '0',
+      c_type_string         TYPE string VALUE 'String',
+      c_atri_assignedvalues TYPE string VALUE 'AssignedValues',
+      c_atri_allowed_value  TYPE string VALUE 'AllowedValues'.
+
+    DATA:
+      es_detalle      LIKE LINE OF r_es_diccionario-diccionario-detalle,
+      t_allowed_val_c TYPE zpxdiccionario_allowed_val_tab,
+      t_allowed_val_s TYPE zpxdiccionario_allowed_val_tab.
+*--------------------------------------------------------------------*
+
+    consulta_param_tipo_material(
+      IMPORTING
+        es_param = DATA(e_es_param) ).
+
+    recuperar_datos_material(
+      EXPORTING
+        i_r_ean              = i_r_ean
+      IMPORTING
+        e_ti_material_ean     = DATA(ti_material_ean)
+        e_ti_grupos_mercancia = DATA(ti_grupos_mercancia)
+        e_ti_info_materiales  = DATA(ti_info_materiales)
+        e_ti_caracteristicas  = DATA(ti_caracteristicas) ).
+
+    LOOP AT ti_info_materiales ASSIGNING FIELD-SYMBOL(<fs_es_info_material>).
+
+      IF <fs_es_info_material>-tipo_material NOT IN e_es_param-tipo_mat.
+        <fs_es_info_material>-descr_color = e_es_param-tp_color.
+        <fs_es_info_material>-talla       = e_es_param-tp_talla.
+      ENDIF.
+
+      TRANSLATE <fs_es_info_material>-descr_color TO UPPER CASE.
+      READ TABLE t_allowed_val_c INTO DATA(es_val_c)
+        WITH KEY valor = <fs_es_info_material>-descr_color.
+
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO t_allowed_val_c ASSIGNING FIELD-SYMBOL(<fs_val_c>).
+        <fs_val_c>-titulo = 'swatchColor'.
+        <fs_val_c>-valor = <fs_es_info_material>-descr_color.
+      ENDIF.
+
+      TRANSLATE <fs_es_info_material>-talla TO UPPER CASE.
+      READ TABLE t_allowed_val_s INTO DATA(es_val_s)
+        WITH KEY valor = <fs_es_info_material>-talla.
+
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO t_allowed_val_s ASSIGNING FIELD-SYMBOL(<fs_val_s>).
+        <fs_val_s>-titulo = 'swatchSize'.
+        <fs_val_s>-valor = <fs_es_info_material>-talla.
+      ENDIF.
+    ENDLOOP.
+
+    APPEND VALUE #( identifier = 'swatchColor'
+                      type = c_type_string
+                      attribute_type = c_atri_allowed_value
+                      name = 'COLOR'
+                      allowed_values-allowed_value = t_allowed_val_c
+                      delete = c_delete
+                      language_id = gc_language_id
+                    )
+     TO r_es_diccionario-diccionario-detalle.
+
+    APPEND VALUE #( identifier = 'swatchSize'
+                    type = c_type_string
+                    attribute_type = c_atri_allowed_value
+                    name = 'TALLA'
+                    allowed_values-allowed_value = t_allowed_val_s
+                    delete = c_delete
+                    language_id = gc_language_id
+                  )
+    TO r_es_diccionario-diccionario-detalle.
+  ENDMETHOD.
+
+
+  METHOD generar_impuestos_maeteriales.
+
+    DATA: es_material                TYPE gtp_es_material,
+          r_clasificacion_fiscal_mat TYPE RANGE OF mara-taklv.
+
+    recuperar_datos_material(
+      EXPORTING
+        i_r_ean              = i_r_ean
+      IMPORTING
+        e_ti_material_ean     = DATA(ti_material_ean)
+        e_ti_grupos_mercancia = DATA(ti_grupos_mercancia)
+        e_ti_info_materiales  = DATA(ti_info_materiales)
+        e_ti_caracteristicas  = DATA(ti_caracteristicas) ).
+
+    CHECK ti_material_ean IS NOT INITIAL.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                           = ti_material_ean
+        i_nombre_columna               = 'TAKLV'
+      CHANGING
+        c_ti_rango                     = r_clasificacion_fiscal_mat ).
+
+    "Condiciones
+    SELECT
+    CAST( CAST( c~kbetr AS D34N ) / CAST( 10 AS D34N ) AS INT8 )  AS kbetr,
+    taxm1, k~kunnr, tatyp, taxkd, k~aland, c~knumh, datbi, datab
+    FROM knvi AS k
+    INNER JOIN a002 AS a ON
+    a~kschl = k~tatyp AND
+    a~aland = k~aland AND
+    a~taxk1 = k~taxkd
+    INNER JOIN konp AS c
+    ON c~knumh = a~knumh
+    AND c~kschl = a~kschl
+    WHERE k~kunnr IN @g_r_bp_ecommerce
+    AND   k~tatyp IN @g_r_bp_condicion_iva
+    AND   a~taxm1 IN @r_clasificacion_fiscal_mat
+    AND   ( a~datab <= @i_fecha_precio AND
+            a~datbi >= @i_fecha_precio )
+    INTO TABLE @DATA(ti_impuestos).
+
+    CHECK ti_impuestos IS NOT INITIAL.
+
+    DELETE ADJACENT DUPLICATES FROM ti_impuestos COMPARING ALL FIELDS.
+
+    r_es_impuesto_material-product_tax-cabecera-operacion = 'I'.
+
+    LOOP AT ti_material_ean INTO DATA(es_mat_ean).
+
+      LOOP AT ti_impuestos ASSIGNING FIELD-SYMBOL(<fs_es_impuestos>)
+        WHERE taxm1 = es_mat_ean-taklv
+        GROUP BY ( kbetr = <fs_es_impuestos>-kbetr ).
+
+        APPEND INITIAL LINE TO r_es_impuesto_material-product_tax-detalle ASSIGNING FIELD-SYMBOL(<fs_es_impuesto_material>).
+
+        <fs_es_impuesto_material>-catentry_part_number = |{ es_mat_ean-ean ALPHA = OUT }|.
+        CONDENSE <fs_es_impuesto_material>-catentry_part_number NO-GAPS.
+        <fs_es_impuesto_material>-sales_tax_calculation_code = |{ <fs_es_impuestos>-aland }_IVA{ <fs_es_impuestos>-kbetr }|.
+      ENDLOOP.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD generar_archivo.
+
+    DATA:
+      o_monitor_integracion TYPE REF TO zclcxr1001_monitor_integracion,
+      es_ztcxr1001_1        TYPE ztcxr1001_1,
+      o_datos_ecommerce     TYPE REF TO zclsdi1116_get_data_ecommerce.
+*--------------------------------------------------------------------*
+    o_datos_ecommerce = NEW zclsdi1116_get_data_ecommerce( ).
+
+    es_ztcxr1001_1    = VALUE ztcxr1001_1(  pid       = 'SENDER'
+                                            fecha_ini = sy-datum
+                                            hora_ini  = sy-uzeit
+                                            hora_fin  = sy-uzeit
+                                            ob_system = 'S4'
+                                            ib_system = 'ECOMMERCE' ).
+
+*...Atributo de productos
+    IF i_atributos_productos = abap_true.
+
+      o_datos_ecommerce->atributos_productos( EXPORTING
+                                                  i_r_vkorg         = i_r_vkorg
+                                                  i_r_vtweg         = i_r_vtweg
+                                                  i_r_ean11         = i_r_ean
+                                                  i_v_langu         = sy-langu
+                                                  IMPORTING
+                                                   e_es_atrib_produc = DATA(es_atributos_productos) ).
+
+      es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'ATRIBUTOS_RECIBIR'
+                                                    ob_name   = 'ATRIBUTOS_ENVIAR'
+                                                    adminuser = sy-uname ).
+      TRY.
+          o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                      i_es_info_mensaje = es_ztcxr1001_1
+                                                                      i_datos_proxy     = es_atributos_productos
+                                                                    ).
+
+          o_monitor_integracion->main( i_datos_proxy = REF #( es_atributos_productos ) ).
+        CATCH zcxr1001_excepciones_monitor.
+      ENDTRY.
+    ENDIF.
+
+*...Catalogue_products
+    IF i_productos_e_items = abap_true.
+      TRY.
+          o_datos_ecommerce->productos_e_items( EXPORTING
+                                                  i_r_vkorg         = i_r_vkorg
+                                                  i_r_vtweg         = i_r_vtweg
+                                                  i_r_ean11         = i_r_ean
+                                                  i_v_langu         = sy-langu
+                                                IMPORTING
+                                                  e_es_product        = DATA(es_product)
+                                                  e_es_product_weight = DATA(es_product_weight)
+                                              ).
+
+          es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'PRODUCTOS_E_ITEMS_RECIBIR'
+                                                        ob_name   = 'PRODUCTOS_E_ITEMS_ENVIAR'
+                                                        adminuser = sy-uname ).
+          TRY.
+              o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                          i_es_info_mensaje = es_ztcxr1001_1
+                                                                          i_datos_proxy     = es_product
+                                                                        ).
+
+              o_monitor_integracion->main( i_datos_proxy = REF #( es_product ) ).
+
+            CATCH zcxr1001_excepciones_monitor.
+          ENDTRY.
+
+          es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'PRODUCTOS_E_ITEMS_W_RECIBIR'
+                                                        ob_name   = 'PRODUCTOS_E_ITEMS_W_ENVIAR'
+                                                        adminuser = sy-uname ).
+          TRY.
+              o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                          i_es_info_mensaje = es_ztcxr1001_1
+                                                                          i_datos_proxy     = es_product_weight
+                                                                        ).
+
+              o_monitor_integracion->main( i_datos_proxy = REF #( es_product_weight ) ).
+
+            CATCH zcxr1001_excepciones_monitor.
+          ENDTRY.
+        CATCH cx_ai_system_fault.
+      ENDTRY.
+    ENDIF.
+
+*...Categoria de materiales - Catalogue_categories
+    IF i_categoria_productos = abap_true.
+
+      DATA(es_categoria) = generar_categoria_productos( i_r_ean         = i_r_ean
+                                                        i_r_vkorg       = i_r_vkorg
+                                                        i_r_vtweg       = i_r_vtweg  ).
+
+      IF es_categoria-categorias-detalle IS NOT INITIAL.
+
+        es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'CATEGORIAS_RECIBIR'
+                                                      ob_name   = 'CATEGORIAS_ENVIAR'
+                                                      adminuser = sy-uname ).
+        TRY.
+            o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                        i_es_info_mensaje = es_ztcxr1001_1
+                                                                        i_datos_proxy     = es_categoria
+                                                                      ).
+
+            o_monitor_integracion->main( i_datos_proxy = REF #( es_categoria ) ).
+
+          CATCH zcxr1001_excepciones_monitor.
+        ENDTRY.
+      ENDIF.
+    ENDIF.
+
+*...Catalogue_products_tax
+    IF i_impuesto_material = abap_true.
+
+      DATA(es_impuesto_material) = generar_impuestos_maeteriales( i_r_ean         = i_r_ean
+                                                                  i_r_vkorg       = i_r_vkorg
+                                                                  i_r_vtweg       = i_r_vtweg
+                                                                  i_fecha_precio  = i_fecha_precio  ).
+
+      es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'IMPUESTO_MATERIAL_RECIBIR'
+                                                    ob_name   = 'IMPUESTO_MATERIAL_ENVIAR'
+                                                    adminuser = sy-uname ).
+      TRY.
+          o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                      i_es_info_mensaje = es_ztcxr1001_1
+                                                                      i_datos_proxy     = es_impuesto_material
+                                                                    ).
+
+          o_monitor_integracion->main( i_datos_proxy = REF #( es_impuesto_material ) ).
+
+        CATCH zcxr1001_excepciones_monitor.
+      ENDTRY.
+    ENDIF.
+
+*...Diccionario de atributos - attribute_dictionary
+    IF i_diccionario_datos = abap_true.
+
+      DATA(es_diccionario_datos) = generar_diccionario( i_r_ean         = i_r_ean
+                                                        i_r_vkorg       = i_r_vkorg
+                                                        i_r_vtweg       = i_r_vtweg  ).
+
+      es_ztcxr1001_1 = VALUE #( BASE es_ztcxr1001_1 ib_name   = 'DICCIONARIO_RECIBIR'
+                                                    ob_name   = 'DICCIONARIO_ENVIAR'
+                                                    adminuser = sy-uname ).
+
+      TRY.
+          o_monitor_integracion = NEW zclcxr1001_monitor_integracion( i_ricefw          = gc_ricefw
+                                                                      i_es_info_mensaje = es_ztcxr1001_1
+                                                                      i_datos_proxy     = es_diccionario_datos
+                                                                    ).
+
+          o_monitor_integracion->main( i_datos_proxy = REF #( es_diccionario_datos ) ).
+
+        CATCH zcxr1001_excepciones_monitor.
+      ENDTRY.
+    ENDIF.
+    e_datos_transferidos = abap_true.
+  ENDMETHOD.
+
+
+  METHOD enviar_maestros_ecommerce.
+
+    DATA: o_async_messaging       TYPE REF TO if_wsprotocol_async_messaging,
+          o_enviar_categorias     TYPE REF TO zpxco_categorias_out,
+          o_enviar_diccionario    TYPE REF TO zpxco_diccionario_enviar_out,
+          o_productos_tax_enviar  TYPE REF TO zpxco_product_tax_enviar_out,
+          o_productos_enviar      TYPE REF TO zpxco_productos_enviar_out,
+          o_product_weight_enviar TYPE REF TO zpxco_product_weight_enviar_ou,
+          o_enviar_atributos      TYPE REF TO zpxco_atributos_enviar_out.
+
+    TRY.
+
+        ASSIGN i_datos_proxy->* TO FIELD-SYMBOL(<fs_datos_proxy>).
+
+        CASE ges_info_mensaje-ob_name.
+          WHEN 'DICCIONARIO_ENVIAR'.
+            o_enviar_diccionario = NEW zpxco_diccionario_enviar_out( ).
+            o_async_messaging ?= o_enviar_diccionario->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_D_EO| ).
+
+            o_enviar_diccionario->diccionario_enviar_async( output = <fs_datos_proxy> ).
+          WHEN 'IMPUESTO_MATERIAL_ENVIAR'.
+            o_productos_tax_enviar = NEW zpxco_product_tax_enviar_out( ).
+            o_async_messaging ?= o_productos_tax_enviar->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_I_EO| ).
+
+            o_productos_tax_enviar->product_tax_enviar_async( output = <fs_datos_proxy> ).
+          WHEN 'PRODUCTOS_E_ITEMS_W_ENVIAR'.
+            o_product_weight_enviar = NEW zpxco_product_weight_enviar_ou( ).
+            o_async_messaging ?= o_product_weight_enviar->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_PW_EO| ).
+
+            o_product_weight_enviar->product_weight_enviar_async( output = <fs_datos_proxy> ).
+          WHEN 'PRODUCTOS_E_ITEMS_ENVIAR'.
+            o_productos_enviar = NEW zpxco_productos_enviar_out( ).
+            o_async_messaging ?= o_productos_enviar->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_P_EO| ).
+
+            o_productos_enviar->productos_enviar_async( output = <fs_datos_proxy> ).
+          WHEN 'CATEGORIAS_ENVIAR'.
+            o_enviar_categorias = NEW zpxco_categorias_out( ).
+            o_async_messaging ?= o_enviar_categorias->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_C_EO| ).
+
+            o_enviar_categorias->categorias_async( output = <fs_datos_proxy> ).
+          WHEN 'ATRIBUTOS_ENVIAR'.
+            o_enviar_atributos = NEW zpxco_atributos_enviar_out( ).
+            o_async_messaging ?= o_enviar_atributos->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_A_EO| ).
+
+            o_enviar_atributos->atributos_enviar_async( output = <fs_datos_proxy> ).
+            "{ Inicio SGR 02.05.2024 | Condicionar metodo para nuevo mapeo
+          WHEN 'ZPXCO_PRODUCTO_ATRIBUTOS_ENVIA'.
+            DATA(o_enviar_shopify) = NEW zpxco_producto_atributos_envia( ).
+            o_async_messaging ?= o_enviar_shopify->get_protocol( if_wsprotocol=>async_messaging ).
+            o_async_messaging->set_serialization_context( |{ gc_ricefw }_S_EO| ).
+
+            o_enviar_shopify->producto_atributos_enviar_asyn( output = <fs_datos_proxy> ).
+            "{ Fin SGR 02.05.2024
+        ENDCASE.
+
+        COMMIT WORK AND WAIT.
+
+        go_log->set_es_log( i_es = VALUE #( type = 'S' id = 'ZCX01' number  = '037'  ) ).
+
+        e_ti_return = CORRESPONDING #( go_log->get_log( ) ).
+
+      CATCH cx_ai_system_fault.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD consulta_param_tipo_material.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Consulta de parámetros para validación de
+*                       tipo de material
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    DATA:
+      ".Definición de tablas.
+      ti_comodin TYPE RANGE OF char100.
+*--------------------------------------------------------------------*
+    CONSTANTS:
+      c_tp_talla TYPE zzedidparam VALUE 'TP_TALLA',
+      c_tp_color TYPE zzedidparam VALUE 'TP_COLOR',
+      c_tipo_mat TYPE zzedidparam VALUE 'TIPO_MATER'.
+*--------------------------------------------------------------------*
+    ".Instancia Constructor.
+    DATA(o_parametros) = NEW zclcxr1000_parametros( i_modulo  = gc_modulo
+                                                    i_ricefw  = gc_ricefw ).
+
+    ".Consultar: talla para diferentes de ZMOD
+    o_parametros->get_parametro(  EXPORTING   i_idparam     = c_tp_talla
+                                  IMPORTING   e_ti_valrango = ti_comodin
+                                  EXCEPTIONS  parametro_no_encontrado = 1 ).
+    "__Validar si se ha encontrado el parametro.
+    IF line_exists( ti_comodin[ 1 ] ).
+      ".Asignar parametro.
+      es_param-tp_talla = ti_comodin[ 1 ]-low.
+    ENDIF.
+
+    ".Consultar: Color para diferentes de ZMOD
+    o_parametros->get_parametro(  EXPORTING   i_idparam     = c_tp_color
+                                  IMPORTING   e_ti_valrango = ti_comodin
+                                  EXCEPTIONS  parametro_no_encontrado = 1 ).
+    "__Validar si se ha encontrado el parametro.
+    IF line_exists( ti_comodin[ 1 ] ).
+      ".Asignar parametro.
+      es_param-tp_color = ti_comodin[ 1 ]-low.
+    ENDIF.
+
+    ".Consultar: Color para diferentes de ZMOD
+    o_parametros->get_parametro(  EXPORTING   i_idparam     = c_tipo_mat
+                                  IMPORTING   e_ti_valrango = ti_comodin
+                                  EXCEPTIONS  parametro_no_encontrado = 1 ).
+    "__Validar si se ha encontrado el parametro.
+    IF line_exists( ti_comodin[ 1 ] ).
+
+      es_param-tipo_mat =
+      VALUE #( FOR <fs_comodin>
+               IN ti_comodin (  option  = <fs_comodin>-option
+                                sign    = <fs_comodin>-sign
+                                low     = <fs_comodin>-low ) ) .
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD consulta_talla_color.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Consulta de talla y color
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    DATA:
+      lv_flag TYPE xfeld.
+*--------------------------------------------------------------------*
+
+    "__Validar EAN.
+    CHECK c_r_ean IS NOT INITIAL.
+
+    ".Consultar Materiales asociados a los EAN.
+    SELECT  matnr, mtart, ean11, color, size1
+      FROM  mara
+      INTO  TABLE @DATA(t_mara)
+      WHERE ean11 IN @c_r_ean.
+
+    LOOP AT c_r_ean INTO DATA(es_ean).
+
+      CLEAR lv_flag.
+      READ TABLE t_mara INTO DATA(es_mara)
+        WITH KEY ean11 = es_ean-low.
+
+      IF sy-subrc <> 0.
+        agregar_mensaje( TEXT-e01 ).   "Código EAN desconocido
+        lv_flag = abap_true.
+      ELSE.
+
+        IF es_mara-mtart IN i_es_param-tipo_mat.
+          IF es_mara-color IS INITIAL.
+            agregar_mensaje( TEXT-e02 ). "Código EAN sin color matriculado
+            lv_flag = abap_true.
+          ENDIF.
+          IF es_mara-size1 IS INITIAL.
+            agregar_mensaje( TEXT-e03 ). "Código EAN sin talla matriculada
+            lv_flag = abap_true.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      IF lv_flag = abap_true.
+        e_v_flag = abap_true.
+        DELETE c_r_ean WHERE low = es_ean-low.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD agregar_mensaje.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Adicionar mensaje de error
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    CALL FUNCTION 'BAL_LOG_MSG_ADD_FREE_TEXT'
+      EXPORTING
+        i_log_handle     = gv_log_handle
+        i_msgty          = 'E'
+        i_text           = i_v_mensaje
+      EXCEPTIONS
+        log_not_found    = 1
+        msg_inconsistent = 2
+        log_is_full      = 3
+        OTHERS           = 4.
+  ENDMETHOD.
+
+
+  METHOD crear_log.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Adicionar mensaje de error
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    DATA:
+      es_log_header         TYPE bal_s_log.
+*--------------------------------------------------------------------*
+
+    es_log_header-object    = gc_object.
+    es_log_header-subobject = gc_subobject.
+
+    CALL FUNCTION 'BAL_LOG_CREATE'
+      EXPORTING
+        i_s_log                 = es_log_header
+      IMPORTING
+        e_log_handle            = gv_log_handle
+      EXCEPTIONS
+        log_header_inconsistent = 1
+        OTHERS                  = 2.
+  ENDMETHOD.
+
+
+  METHOD grabar_log.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+*& Programa             ZSDI1116_1
+*& RICEFW               I1116
+*& Tipo Objeto          Clase / Método
+*& Autor                James Duque JAMDUQUE
+*& Descripción          Adicionar mensaje de error
+*& Fecha                07.05.2022
+*&---------------------------------------------------------------------*
+*& Control de Modificaciones
+*&---------------------------------------------------------------------*
+*& Fecha       OT          Autor              Solicitud
+*&------------ ----------- -----------------  -------------------------*
+*& 07.05.2022  S4DK906384  jamduque           Creacion
+*& DD.MM.AAAA  S4DKxxxxxx  <USSER_ID>         Mod @xxxx
+*&---------------------------------------------------------------------*
+
+    CALL FUNCTION 'BAL_DB_SAVE'
+      EXPORTING
+        i_save_all       = 'X'
+      EXCEPTIONS
+        log_not_found    = 1
+        save_not_allowed = 2
+        numbering_error  = 3
+        OTHERS           = 4.
+
+    CALL FUNCTION 'BAL_DSP_LOG_DISPLAY'
+      EXCEPTIONS
+        OTHERS = 1.
+  ENDMETHOD.
+ENDCLASS.

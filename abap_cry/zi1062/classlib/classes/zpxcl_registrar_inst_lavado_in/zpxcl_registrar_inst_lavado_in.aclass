@@ -1,0 +1,44 @@
+CLASS zpxcl_registrar_inst_lavado_in DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES zpxii_registrar_inst_lavado_in .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zpxcl_registrar_inst_lavado_in IMPLEMENTATION.
+
+
+  METHOD zpxii_registrar_inst_lavado_in~registrar_inst_lavado_async.
+
+    zclmmi1062_instruccion_lavado=>actualizar_instlavado( EXPORTING i_ti_px_instlavado = input-registrar_inst_lavado-row ).
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zpxcl_registrar_inst_lavado_in DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES zpxii_registrar_inst_lavado_in .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zpxcl_registrar_inst_lavado_in IMPLEMENTATION.
+
+
+  METHOD zpxii_registrar_inst_lavado_in~registrar_inst_lavado_async.
+
+    zclmmi1062_instruccion_lavado=>actualizar_instlavado( EXPORTING i_ti_px_instlavado = input-registrar_inst_lavado-row ).
+
+  ENDMETHOD.
+ENDCLASS.

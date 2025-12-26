@@ -1,0 +1,174 @@
+FUNCTION z_cx_get_package_objects
+  IMPORTING
+    VALUE(iv_package_name) TYPE devclass
+    VALUE(iv_object_types) TYPE string OPTIONAL
+    VALUE(iv_author) TYPE as4user OPTIONAL
+    VALUE(iv_created_from) TYPE datum OPTIONAL
+    VALUE(iv_created_to) TYPE datum OPTIONAL
+    VALUE(iv_max_rows) TYPE i DEFAULT 100
+    VALUE(iv_offset) TYPE i DEFAULT 0
+  EXPORTING
+    VALUE(ev_success) TYPE char1
+    VALUE(ev_message) TYPE string
+    VALUE(ev_objects_json) TYPE string
+    VALUE(ev_total_count) TYPE i
+    VALUE(ev_has_more) TYPE char1.
+
+
+
+  TYPES: BEGIN OF ty_tadir,
+           pgmid      TYPE pgmid,
+           object     TYPE trobjtype,
+           obj_name   TYPE sobj_name,
+           srcsystem  TYPE srcsystem,
+           author     TYPE responsibl,
+           devclass   TYPE devclass,
+           created_on TYPE creationdt,
+         END OF ty_tadir,
+         gty_cproject TYPE RANGE OF cproject.
+
+  DATA: lt_tadir        TYPE STANDARD TABLE OF ty_tadir,
+        lt_tadir_page   TYPE STANDARD TABLE OF ty_tadir,
+        lt_tadir_filt   TYPE STANDARD TABLE OF ty_tadir,
+        lv_check        TYPE devclass,
+        lv_count        TYPE i,
+        lv_total        TYPE i,
+        lv_start        TYPE i,
+        lv_end          TYPE i,
+        lr_object       TYPE RANGE OF trobjtype,
+        ls_object_range LIKE LINE OF lr_object,
+        lv_has_filter   TYPE abap_bool.
+
+  CLEAR: ev_success, ev_message, ev_objects_json, ev_total_count, ev_has_more.
+
+  " Validate package name
+  IF iv_package_name IS INITIAL.
+    ev_success = ''.
+    ev_message = 'Package name is required'.
+    ev_objects_json = '{"success":false,"error":"Package name is required"}'.
+    RETURN.
+  ENDIF.
+
+  " Verify package exists
+  SELECT SINGLE devclass
+    FROM tdevc
+    INTO @lv_check
+    WHERE devclass = @iv_package_name.
+
+  IF sy-subrc <> 0.
+    ev_success = ''.
+    ev_message = |Package { iv_package_name } not found|.
+    ev_objects_json = '{"success":false,"error":"Package not found"}'.
+    RETURN.
+  ENDIF.
+
+  " Parse object types filter (comma-separated)
+  IF iv_object_types IS NOT INITIAL.
+    SPLIT iv_object_types AT ',' INTO TABLE DATA(lt_types_str).
+    LOOP AT lt_types_str INTO DATA(lv_type_str).
+      lv_type_str = to_upper( condense( lv_type_str ) ).
+      IF lv_type_str IS NOT INITIAL.
+        ls_object_range-sign = 'I'.
+        ls_object_range-option = 'EQ'.
+        ls_object_range-low = lv_type_str.
+        APPEND ls_object_range TO lr_object.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+  lv_has_filter = xsdbool( lr_object IS NOT INITIAL ).
+  DATA(lr_exclude_type) = VALUE gty_cproject( ( sign = 'E' option = 'EQ' low = 'L' ) ).
+
+  " Execute SELECT - basic query first
+  IF lv_has_filter = abap_true.
+    SELECT pgmid, object, obj_name, srcsystem, author, devclass, created_on
+      FROM tadir
+      INTO TABLE @lt_tadir
+      WHERE devclass = @iv_package_name
+        AND object IN @lr_object
+        AND delflag = @abap_false
+        AND cproject in @lr_exclude_type.
+  ELSE.
+    SELECT pgmid, object, obj_name, srcsystem, author, devclass, created_on
+      FROM tadir
+      INTO TABLE @lt_tadir
+      WHERE devclass = @iv_package_name
+      AND delflag = @abap_false
+      AND cproject in @lr_exclude_type.
+  ENDIF.
+
+  " Apply additional filters in ABAP (author, dates)
+  IF iv_author IS NOT INITIAL OR iv_created_from IS NOT INITIAL OR iv_created_to IS NOT INITIAL.
+    LOOP AT lt_tadir INTO DATA(ls_row).
+      " Author filter
+      IF iv_author IS NOT INITIAL AND ls_row-author <> iv_author.
+        CONTINUE.
+      ENDIF.
+      " Date from filter
+      IF iv_created_from IS NOT INITIAL AND ls_row-created_on < iv_created_from.
+        CONTINUE.
+      ENDIF.
+      " Date to filter
+      IF iv_created_to IS NOT INITIAL AND ls_row-created_on > iv_created_to.
+        CONTINUE.
+      ENDIF.
+      APPEND ls_row TO lt_tadir_filt.
+    ENDLOOP.
+    lt_tadir = lt_tadir_filt.
+  ENDIF.
+
+  " Sort results
+  SORT lt_tadir BY object obj_name.
+
+  " Apply pagination in ABAP
+  lv_total = lines( lt_tadir ).
+  lv_start = iv_offset + 1.
+  lv_end = iv_offset + iv_max_rows.
+
+  IF lv_end > lv_total.
+    lv_end = lv_total.
+  ENDIF.
+
+  " Check if there are more rows
+  IF lv_total > lv_end.
+    ev_has_more = 'X'.
+  ENDIF.
+
+  " Extract page
+  IF lv_start <= lv_total.
+    LOOP AT lt_tadir INTO DATA(ls_tadir) FROM lv_start TO lv_end.
+      APPEND ls_tadir TO lt_tadir_page.
+    ENDLOOP.
+  ENDIF.
+
+  lv_count = lines( lt_tadir_page ).
+  ev_total_count = lv_count.
+
+  " Build JSON using /ui2/cl_json
+  DATA: BEGIN OF ls_result,
+          success       TYPE abap_bool,
+          package_name  TYPE devclass,
+          total_objects TYPE i,
+          has_more      TYPE abap_bool,
+          offset        TYPE i,
+          max_rows      TYPE i,
+          objects       TYPE STANDARD TABLE OF ty_tadir WITH DEFAULT KEY,
+        END OF ls_result.
+
+  ls_result-success = abap_true.
+  ls_result-package_name = iv_package_name.
+  ls_result-total_objects = lv_count.
+  ls_result-has_more = COND #( WHEN ev_has_more = 'X' THEN abap_true ELSE abap_false ).
+  ls_result-offset = iv_offset.
+  ls_result-max_rows = iv_max_rows.
+  ls_result-objects = lt_tadir_page.
+
+  " Serialize to JSON
+  ev_objects_json = /ui2/cl_json=>serialize(
+    data        = ls_result
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+  ev_success = 'X'.
+  ev_message = |Retrieved { lv_count } objects from package { iv_package_name }|.
+
+ENDFUNCTION.

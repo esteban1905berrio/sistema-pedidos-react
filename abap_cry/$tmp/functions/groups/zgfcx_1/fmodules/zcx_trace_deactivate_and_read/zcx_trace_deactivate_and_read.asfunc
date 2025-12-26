@@ -1,0 +1,107 @@
+FUNCTION zcx_trace_deactivate_and_read
+  IMPORTING
+    VALUE(iv_trace_user) TYPE syuname DEFAULT sy-uname
+    VALUE(iv_max_records) TYPE i DEFAULT 500
+  EXPORTING
+    VALUE(ev_detailed_json) TYPE string
+    VALUE(ev_call_stack_json) TYPE string
+    VALUE(ev_table_access_json) TYPE string
+    VALUE(ev_error_message) TYPE string.
+
+
+
+  DATA: ls_api_trace_types TYPE st05_api_trace_types,
+        ls_trace_types     TYPE st05_trace_types,
+        ls_interval        TYPE st05_trace_interval,
+        lt_detailed        TYPE st05_detailed_record_table,
+        lt_call_stack      TYPE st05_kernel_call_stack,
+        lt_table_access    TYPE st05_table_access_record_table,
+        lv_records_count   TYPE i.
+
+  " Configure trace types for DEACTIVATE (ST05_API_TRACE_TYPES - 8 fields)
+  ls_api_trace_types-sql_on = 'X'.
+  ls_api_trace_types-buf_on = 'X'.
+  ls_api_trace_types-enq_on = 'X'.
+
+  " Configure trace types for GET_TRACE_TABLES (ST05_TRACE_TYPES - 9 fields)
+  ls_trace_types-sql_on = 'X'.
+  ls_trace_types-buf_on = 'X'.
+  ls_trace_types-enq_on = 'X'.
+
+  " Deactivate trace
+  CALL FUNCTION 'ST05_DEACTIVATE_TRACE'
+    EXPORTING
+      trace_types  = ls_api_trace_types
+    EXCEPTIONS
+      no_authority       = 1
+      missing_trace_type = 2
+      deactivation_error = 3
+      no_server_list     = 4
+      internal_error     = 5
+      OTHERS             = 6.
+
+  IF sy-subrc <> 0.
+    ev_error_message = |Trace deactivation failed: sy-subrc={ sy-subrc }|.
+    RETURN.
+  ENDIF.
+
+  " Set interval (last hour to capture recent trace)
+  ls_interval-start_date = sy-datum.
+  ls_interval-start_time = sy-uzeit - 3600.
+  IF ls_interval-start_time < 0.
+    ls_interval-start_date = ls_interval-start_date - 1.
+    ls_interval-start_time = ls_interval-start_time + 86400.
+  ENDIF.
+  ls_interval-end_date = sy-datum.
+  ls_interval-end_time = sy-uzeit.
+
+  " Read trace tables with properly filled ls_trace_types
+  CALL FUNCTION 'ST05_GET_TRACE_TABLES'
+    EXPORTING
+      trace_types               = ls_trace_types
+      trace_interval            = ls_interval
+      kind                      = 'DET+'
+    IMPORTING
+      detailed_record_table     = lt_detailed
+      kernel_call_stack         = lt_call_stack
+      table_access_record_table = lt_table_access
+    EXCEPTIONS
+      no_authority         = 1
+      missing_trace_type   = 2
+      invalid_trace_period = 3
+      internal_error       = 4
+      file_open_error      = 5
+      incomplete_trace     = 6
+      save_error           = 7
+      OTHERS               = 8.
+
+  IF sy-subrc <> 0.
+    ev_error_message = |Trace read failed: sy-subrc={ sy-subrc }|.
+    RETURN.
+  ENDIF.
+
+  " Post-filter by user (USER_NAME field in detailed records)
+  IF iv_trace_user IS NOT INITIAL.
+    DELETE lt_detailed WHERE user_name <> iv_trace_user.
+  ENDIF.
+
+  " Apply max records limit
+  lv_records_count = lines( lt_detailed ).
+  IF lv_records_count > iv_max_records.
+    DELETE lt_detailed FROM ( iv_max_records + 1 ).
+  ENDIF.
+
+  " Serialize to JSON
+  ev_detailed_json = /ui2/cl_json=>serialize(
+    data        = lt_detailed
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+  ev_call_stack_json = /ui2/cl_json=>serialize(
+    data        = lt_call_stack
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+  ev_table_access_json = /ui2/cl_json=>serialize(
+    data        = lt_table_access
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+ENDFUNCTION.

@@ -1,0 +1,1064 @@
+CLASS zcl_im_fi_ukm_fill_1 DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_ex_ukm_fill .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zcl_im_fi_ukm_fill_1 IMPLEMENTATION.
+
+
+
+
+  METHOD if_ex_ukm_fill~credit_check_convert_outbound.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_fill~fill_fields .
+    DATA: lo_exc        TYPE REF TO cx_root.
+
+* input -
+    DATA: ls_in LIKE LINE OF is_notification.
+    DATA: l_tot_amount LIKE ls_in-amount.
+* output struktur mit tabellen
+
+    DATA: ls_out TYPE ukmr3_commitment_notification.
+* payload
+    DATA: lt_data TYPE ukmr3_credit_commitment_tab.
+    DATA: ls_data       TYPE ukmr3_credit_commitment,
+          ls_data_clear LIKE ls_data.
+
+*
+    DATA: l_business(60).
+    DATA: l_false  TYPE boolean VALUE space.
+    DATA: l_active TYPE boolean.
+    DATA: l_bi TYPE flag,
+          l_bd TYPE flag.
+
+** begin of Central Finance(CFIN) with SAP Credit Management(FSCM), note 2839326
+*  DATA: lv_cfin_flag          TYPE          boolean.
+*  DATA: lo_instance           TYPE REF TO   if_fin_cfin_with_fscm.
+** end of Central Finance(CFIN) with SAP Credit Management(FSCM), note 2839326
+
+    STATICS: g_bound.
+
+* begin of note 2246117
+    DATA: l_true  TYPE boolean VALUE 'X'.
+    DATA: lo_badi_activate TYPE REF TO if_ex_ukm_r3_activate.
+    DATA: l_logsys TYPE tbdls-logsys.
+    DATA: l_no_sld TYPE flag.
+    .
+    CALL METHOD cl_exithandler=>get_instance
+      EXPORTING
+        exit_name              = 'UKM_R3_ACTIVATE'
+        null_instance_accepted = l_true
+      IMPORTING
+        act_imp_existing       = l_active
+      CHANGING
+        instance               = lo_badi_activate
+      EXCEPTIONS
+        OTHERS                 = 9.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE 'A' NUMBER sy-msgno
+                 WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    IF lo_badi_activate IS BOUND.
+      CALL METHOD lo_badi_activate->no_sld
+        CHANGING
+          e_no_sld = l_no_sld.
+    ENDIF.
+
+    IF l_no_sld = space.
+      CALL FUNCTION 'LCR_GET_OWN_BUSINESS_SYSTEM'
+        IMPORTING
+          bs_key_name = l_business.
+    ELSE.
+      CALL FUNCTION 'OWN_LOGICAL_SYSTEM_GET'
+        IMPORTING
+          own_logical_system = l_logsys
+        EXCEPTIONS
+          OTHERS             = 8.
+      IF sy-subrc = 0.
+        l_business = l_logsys.
+      ENDIF.
+    ENDIF.
+* end of note 2246117
+
+    CLEAR: ls_data, ls_data_clear.
+
+    LOOP AT is_notification INTO ls_in.
+      ls_data = ls_data_clear.
+
+**----------begin of Central Finance(CFIN) with SAP Credit Management(FSCM)， note 2839326----------*
+**     this block of codes is used in Central Finance with Credit Management scenario,
+**     to avoid the duplicated updating about "Open Invoice" of credit exposure,
+**     please de-comments the codes or add the filter logic into your codes.
+
+**     type 200 is the "Open Invoice" of credit exposure, which can be changed by customizing.
+**     please change it if it is necessary.
+*    IF ls_in-comm_typ = '200'.
+*      lo_instance = cl_fin_cfin_with_fscm=>get_instance( ).
+**      check if the company code active CFIN or not, note 2833145
+*      lv_cfin_flag = lo_instance->is_cfin_with_fscm( EXPORTING iv_company_code = ls_in-objkey+0(4) is_in = ls_in ).
+*      IF lv_cfin_flag = 'X'.
+*        CONTINUE.
+*      ENDIF.
+*    ENDIF.
+**----------end of Central Finance(cFin) with SAP Credit Management(FSCM)， note 2839326----------*
+
+      ls_data-debtor_party-internal_id-value = ls_in-partner.
+      IF ls_data-debtor_party-internal_id-value IS INITIAL.
+        ls_data-debtor_party-internal_id-value = ls_in-kunnr.
+      ENDIF.
+
+      ls_data-debtor_party-internal_id-scheme_agency_id =
+      l_business.
+*     es ist keine Guid
+      ls_data-debtor_party-internal_id-scheme_id = 'PartyID'.
+*     call badi for conversion debtor - business partner
+*      ls_data-debtor_party-internal_id-value
+*             = convert_guid_to_number( ls_data-debtor_party-internal_id ).
+
+      ls_data-credit_segment_internal_id = ls_in-credit_sgmnt.
+
+      ls_data-type_code = ls_in-comm_typ.
+
+      IF NOT ls_in-currency  IS INITIAL.
+        TRY.
+            CALL METHOD cl_gdt_conversion=>amount_outbound
+              EXPORTING
+                im_value         = ls_in-amount
+                im_currency_code = ls_in-currency
+              IMPORTING
+                ex_value         = ls_data-unsecured_amount-value
+                ex_currency_code = ls_data-unsecured_amount-currency_code.
+
+
+            CALL METHOD cl_gdt_conversion=>amount_outbound
+              EXPORTING
+                im_value         = ls_in-amount_sec
+                im_currency_code = ls_in-currency
+              IMPORTING
+                ex_value         = ls_data-secured_amount-value
+                ex_currency_code = ls_data-secured_amount-currency_code.
+*           Gesamtbetrag
+            l_tot_amount = ls_in-amount + ls_in-amount_sec.
+            CALL METHOD cl_gdt_conversion=>amount_outbound
+              EXPORTING
+                im_value         = l_tot_amount
+                im_currency_code = ls_in-currency
+              IMPORTING
+                ex_value         = ls_data-amount-value
+                ex_currency_code = ls_data-amount-currency_code.
+
+          CATCH cx_gdt_conversion.
+            MESSAGE e012(ukm_pi) WITH ls_in-currency.
+        ENDTRY.
+
+      ENDIF.
+*   1   Absolutbetrag EP gemeldet
+*   2   Deltabetrag EP gemeldet
+*   3   Absolutbetrag Summe gemeldet
+*   4   Deltabetrag Summe gemeldet
+      l_bi = l_bd = space.
+      CASE ls_in-sum_typ.
+        WHEN '1'. l_bi = space . l_bd = space.
+        WHEN '2'. l_bi = space . l_bd = 'X'.
+        WHEN '3'. l_bi = 'X'   . l_bd = space.
+        WHEN '4'. l_bi = 'X'   . l_bd = 'X'.
+      ENDCASE.
+
+*    immer Absolutbetrag EP gemeldet SUM_TYP
+      CALL METHOD cl_gdt_conversion=>indicator_outbound
+        EXPORTING
+          im_value = l_bi
+        IMPORTING
+          ex_value = ls_data-amount_balance_indicator.
+
+      CALL METHOD cl_gdt_conversion=>indicator_outbound
+        EXPORTING
+          im_value = l_bd
+        IMPORTING
+          ex_value = ls_data-amount_difference_indicator.
+*
+      IF NOT ls_in-pmkey IS INITIAL.
+        MOVE: ls_in-pmkey  TO ls_data-pending_commitment-group_id.
+        CASE ls_in-pmtyp.
+          WHEN '1'.
+            ls_in-pmtyp = ' '.
+          WHEN '2'.
+            ls_in-pmtyp = 'X'.
+        ENDCASE.
+        CALL METHOD cl_gdt_conversion=>indicator_outbound
+          EXPORTING
+            im_value = ls_in-pmtyp
+          IMPORTING
+            ex_value = ls_data-pending_commitment-completed_indicator.
+
+      ENDIF.
+
+      DATA: ls_document LIKE ls_data-accounting_document_reference-id,
+            ls_previous TYPE ukmr3_business_transaction_doc-id.
+      .
+      MOVE:
+          ls_in-date TO ls_data-validity_date.
+*    abhängig vom com typ references setzen
+      MOVE:
+          ls_in-logsys  TO ls_document-scheme_agency_id,
+          ls_in-objtype TO ls_document-scheme_id,
+          ls_in-objkey  TO ls_document-value.
+*     determine previos document
+*
+
+      MOVE:
+          ls_in-prec_logsys   TO ls_previous-scheme_agency_id,
+          ls_in-prec_objtype  TO ls_previous-scheme_id,
+          ls_in-prec_objkey   TO ls_previous-value.
+
+      CASE: ls_in-comm_typ.
+*       order value
+        WHEN '100'.
+          ls_data-sales_order_reference-id = ls_document.
+*        Trading Kontrakt
+        WHEN '150'.
+          ls_data-sales_order_reference-id = ls_document.
+*       open item
+        WHEN '200'.
+          ls_data-accounting_document_reference-id = ls_document.
+*       open item (special )
+        WHEN '300'.
+          ls_data-accounting_document_reference-id = ls_document.
+*       delivery
+        WHEN '400'.
+          ls_data-outbound_delivery_reference-id = ls_document.
+          CLEAR ls_data-sales_order_reference.
+*       billing - Faktura
+        WHEN '500'.
+          ls_data-invoice_reference-id = ls_document.
+          CLEAR ls_data-outbound_delivery_reference.
+*       Agenturbelege
+        WHEN '550'.
+          ls_data-invoice_reference-id = ls_document.
+
+        WHEN OTHERS.
+          ls_data-accounting_document_reference-id = ls_document.
+
+      ENDCASE.
+**    previos document---
+      CASE: ls_previous-scheme_id.
+*       order value
+        WHEN 'VBAK'.
+          ls_data-predecessor_reference-sales_order_reference-id = ls_previous.
+*       open item
+        WHEN 'BSEG'.
+          ls_data-predecessor_reference-accounting_document_reference-id = ls_previous.
+*       open item (special )
+        WHEN 'BKPF'.
+          ls_data-predecessor_reference-accounting_document_reference-id = ls_previous.
+*       delivery
+        WHEN 'LIKP'.
+          ls_data-predecessor_reference-outbound_delivery_reference-id = ls_previous.
+*       billing - Faktura
+        WHEN 'VBRK'.
+          ls_data-predecessor_reference-invoice_reference-id = ls_previous.
+      ENDCASE.
+
+      APPEND ls_data TO lt_data.
+
+
+    ENDLOOP.
+
+    et_xi_msg = lt_data.
+
+*   for reporting purposes you can return the (changed) table
+    EXPORT ukm_item = is_notification TO MEMORY ID 'UKM_ITEM'.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_fill~fill_fields_reconcile.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_fill~fill_vector .
+* this is the badi implementation for ERP2005 "1075689
+    BREAK seblondo.
+    DATA: ls_in LIKE LINE OF is_notification.
+    DATA: l_tz   TYPE ttzz-tzone.
+
+    DATA: ls_out TYPE ukmr3_cpbs_notification.
+
+* payload
+    DATA: lt_data TYPE ukmr3_cpbs_tab.
+    DATA: ls_data TYPE ukmr3_cpb_summary.
+
+    DATA: _business_system(60).
+
+** begin of Central Finance(CFIN) with SAP Credit Management(FSCM), note 2839326
+*  DATA: lv_cfin_flag          TYPE          boolean.
+*  DATA: lo_instance           TYPE REF TO   if_fin_cfin_with_fscm.
+*  DATA: lv_company_code       TYPE          bukrs.
+** end of Central Finance(CFIN) with SAP Credit Management(FSCM), note 2839326
+
+* begin of note 2246117
+    DATA: l_true  TYPE boolean VALUE 'X'.
+    DATA: l_active TYPE boolean.
+    DATA: lo_badi_activate TYPE REF TO if_ex_ukm_r3_activate.
+    DATA: l_logsys TYPE tbdls-logsys.
+    DATA: l_no_sld TYPE flag.
+    .
+    CALL METHOD cl_exithandler=>get_instance
+      EXPORTING
+        exit_name              = 'UKM_R3_ACTIVATE'
+        null_instance_accepted = l_true
+      IMPORTING
+        act_imp_existing       = l_active
+      CHANGING
+        instance               = lo_badi_activate
+      EXCEPTIONS
+        OTHERS                 = 9.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE 'A' NUMBER sy-msgno
+                 WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    IF lo_badi_activate IS BOUND.
+      CALL METHOD lo_badi_activate->no_sld
+        CHANGING
+          e_no_sld = l_no_sld.
+    ENDIF.
+
+    IF l_no_sld = space.
+      CALL FUNCTION 'LCR_GET_OWN_BUSINESS_SYSTEM'
+        IMPORTING
+          bs_key_name = _business_system.
+    ELSE.
+      CALL FUNCTION 'OWN_LOGICAL_SYSTEM_GET'
+        IMPORTING
+          own_logical_system = l_logsys
+        EXCEPTIONS
+          OTHERS             = 8.
+      IF sy-subrc = 0.
+        _business_system = l_logsys.
+      ENDIF.
+    ENDIF.
+* end of note 2246117
+
+    LOOP AT is_notification INTO ls_in.
+      CLEAR ls_data.                                        "SG 1587731
+
+**----------begin of Central Finance(CFIN) with SAP Credit Management(FSCM)， note 2839326----------*
+**      this block of codes is used in Central Finance with Credit Management scenario,
+**      to avoid the duplicated updating about "Open Invoice" of credit exposure,
+**      please de-comments the codes or add the filter logic into your codes.
+*
+*      lo_instance = cl_fin_cfin_with_fscm=>get_instance( ).
+**      fetch the company code
+*      IF ls_in-dunn_objkey+0(4) <> ' '.
+*        lv_company_code = ls_in-dunn_objkey+0(4).
+*      ELSEIF ls_in-ovdue_objkey+0(4) <> ' '.
+*        lv_company_code = ls_in-ovdue_objkey+0(4).
+*      ELSEIF ls_in-paymnt_objkey+0(4) <> ' '.
+*        lv_company_code = ls_in-paymnt_objkey+0(4).
+*      ENDIF.
+**      check if the company code active CFIN or not, note 2833145
+*      lv_cfin_flag = lo_instance->is_cfin_with_fscm( EXPORTING iv_company_code = lv_company_code is_in = ls_in ).
+*      IF lv_cfin_flag = 'X'.
+*        CONTINUE.
+*      ENDIF.
+*
+**----------end of Central Finance(cFin) with SAP Credit Management(FSCM)， note 2839326----------*
+
+      MOVE-CORRESPONDING ls_in TO ls_data.
+
+*   GENERAL
+      ls_data-debtor_party-internal_id-value = ls_in-partner.
+      IF ls_data-debtor_party-internal_id-value IS INITIAL.
+        ls_data-debtor_party-internal_id-value = ls_in-kunnr.
+      ENDIF.
+
+*     logisches system
+      ls_data-debtor_party-internal_id-scheme_agency_id = _business_system.
+*     es ist keine Guid
+      ls_data-debtor_party-internal_id-scheme_id = 'PartyID'.
+*     call badi for conversion debtor - business partner
+      ls_data-debtor_party-internal_id-value = ls_data-debtor_party-internal_id-value.
+
+      MOVE ls_in-credit_sgmnt TO ls_data-credit_segment_internal_id.
+*
+*   DUNNING
+      MOVE:
+          ls_in-dunn_logsys        TO ls_data-maximum_level_dunned_open_item-accounting_document_id-scheme_agency_id,
+          ls_in-dunn_objtype       TO ls_data-maximum_level_dunned_open_item-accounting_document_id-scheme_id,
+          ls_in-dunn_objkey(35)    TO ls_data-maximum_level_dunned_open_item-accounting_document_id-value,
+          ls_in-dunn_objkey+35(10) TO ls_data-maximum_level_dunned_open_item-accounting_document_item_id.
+
+      MOVE: ls_in-dunn_max_lv TO ls_data-maximum_level_dunned_open_item-dunning_level_value.
+      MOVE: ls_in-dunn_counter TO ls_data-dunning_counter_value. "1798002
+
+
+      IF NOT ls_in-dunn_curr  IS INITIAL.
+        CALL METHOD cl_gdt_conversion=>amount_outbound
+          EXPORTING
+            im_value         = ls_in-dunn_amount
+            im_currency_code = ls_in-dunn_curr
+          IMPORTING
+            ex_value         = ls_data-maximum_level_dunned_open_item-amount-value
+            ex_currency_code = ls_data-maximum_level_dunned_open_item-amount-currency_code.
+
+
+      ENDIF.
+
+      ls_data-maximum_level_dunned_open_item-maximum_level_dunning_date = ls_in-dunn_date. "1798002
+
+
+*   OVERDUE ITEM
+      MOVE:
+          ls_in-ovdue_logsys        TO ls_data-oldest_open_item-accounting_document_id-scheme_agency_id,
+          ls_in-ovdue_objtype       TO ls_data-oldest_open_item-accounting_document_id-scheme_id,
+          ls_in-ovdue_objkey(35)    TO ls_data-oldest_open_item-accounting_document_id-value,
+          ls_in-ovdue_objkey+35(10) TO ls_data-oldest_open_item-accounting_document_item_id.
+
+      MOVE: ls_in-ovdue_net_date TO ls_data-oldest_open_item-overdue_net_date.
+
+      IF NOT ls_in-ovdue_curr  IS INITIAL.
+        CALL METHOD cl_gdt_conversion=>amount_outbound
+          EXPORTING
+            im_value         = ls_in-ovdue_amount
+            im_currency_code = ls_in-ovdue_curr
+          IMPORTING
+            ex_value         = ls_data-oldest_open_item-amount-value
+            ex_currency_code = ls_data-oldest_open_item-amount-currency_code.
+      ENDIF.
+
+
+*   LAST PAYMENT
+      MOVE:
+          ls_in-paymnt_logsys  TO ls_data-last_payment-id-scheme_agency_id,
+          ls_in-paymnt_objtype TO ls_data-last_payment-id-scheme_id,
+          ls_in-paymnt_objkey  TO ls_data-last_payment-id-value.
+
+      MOVE: ls_in-paymnt_date TO ls_data-last_payment-date.
+
+      IF NOT ls_in-paymnt_curr IS INITIAL.
+        CALL METHOD cl_gdt_conversion=>amount_outbound
+          EXPORTING
+            im_value         = ls_in-paymnt_amount
+            im_currency_code = ls_in-paymnt_curr
+          IMPORTING
+            ex_value         = ls_data-last_payment-amount-value
+            ex_currency_code = ls_data-last_payment-amount-currency_code.
+      ENDIF.
+
+
+*   INDEX FIGURES
+      MOVE ls_in-idx_figure TO ls_data-dso_duration.
+
+      IF NOT ls_in-idx_curr IS INITIAL.
+        IF NOT ls_in-idx_amount IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-idx_amount
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-cumulated_receivables_amount-value
+              ex_currency_code = ls_data-cumulated_receivables_amount-currency_code.
+        ENDIF.
+
+        IF NOT ls_in-sl_arr_wo_amount IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-sl_arr_wo_amount
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-without_discount_payments-current_year_total_amount-value
+              ex_currency_code = ls_data-without_discount_payments-current_year_total_amount-currency_code.
+          MOVE ls_in-sl_arr_wo TO ls_data-without_discount_payments-average_arrears_duration.
+        ENDIF.
+
+        IF NOT ls_in-sl_arr_w_amount IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-sl_arr_w_amount
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-with_discount_payments-current_year_total_amount-value
+              ex_currency_code = ls_data-with_discount_payments-current_year_total_amount-currency_code.
+          MOVE ls_in-sl_slarr_w TO ls_data-with_discount_payments-average_arrears_duration.
+        ENDIF.
+
+        IF NOT ls_in-sales_vol IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-sales_vol
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-last_12_months_sales_volume-value
+              ex_currency_code = ls_data-last_12_months_sales_volume-currency_code.
+        ENDIF.
+
+        IF NOT ls_in-sales_max IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-sales_max
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-last_12_months_max_exposure-value
+              ex_currency_code = ls_data-last_12_months_max_exposure-currency_code.
+        ENDIF.
+      ENDIF.
+
+
+      APPEND ls_data TO lt_data.
+
+    ENDLOOP.
+    et_xi_msg  = lt_data.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_fill~get_rfcdest .
+    BREAK seblondo.
+    e_rfcdest = 'ECCQ_S4H_XFER'.
+  ENDMETHOD.
+ENDCLASS.
+CLASS zcl_im_fi_ukm_fill_1 DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_ex_ukm_fill .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zcl_im_fi_ukm_fill_1 IMPLEMENTATION.
+
+
+
+
+  METHOD if_ex_ukm_fill~credit_check_convert_outbound.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_fill~fill_fields .
+    DATA: lo_exc        TYPE REF TO cx_root.
+
+* input -
+    DATA: ls_in LIKE LINE OF is_notification.
+    DATA: l_tot_amount LIKE ls_in-amount.
+* output struktur mit tabellen
+
+    DATA: ls_out TYPE ukmr3_commitment_notification.
+* payload
+    DATA: lt_data TYPE ukmr3_credit_commitment_tab.
+    DATA: ls_data       TYPE ukmr3_credit_commitment,
+          ls_data_clear LIKE ls_data.
+
+*
+    DATA: l_business(60).
+    DATA: l_false  TYPE boolean VALUE space.
+    DATA: l_active TYPE boolean.
+    DATA: l_bi TYPE flag,
+          l_bd TYPE flag.
+
+** begin of Central Finance(CFIN) with SAP Credit Management(FSCM), note 2839326
+*  DATA: lv_cfin_flag          TYPE          boolean.
+*  DATA: lo_instance           TYPE REF TO   if_fin_cfin_with_fscm.
+** end of Central Finance(CFIN) with SAP Credit Management(FSCM), note 2839326
+
+    STATICS: g_bound.
+
+* begin of note 2246117
+    DATA: l_true  TYPE boolean VALUE 'X'.
+    DATA: lo_badi_activate TYPE REF TO if_ex_ukm_r3_activate.
+    DATA: l_logsys TYPE tbdls-logsys.
+    DATA: l_no_sld TYPE flag.
+    .
+    CALL METHOD cl_exithandler=>get_instance
+      EXPORTING
+        exit_name              = 'UKM_R3_ACTIVATE'
+        null_instance_accepted = l_true
+      IMPORTING
+        act_imp_existing       = l_active
+      CHANGING
+        instance               = lo_badi_activate
+      EXCEPTIONS
+        OTHERS                 = 9.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE 'A' NUMBER sy-msgno
+                 WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    IF lo_badi_activate IS BOUND.
+      CALL METHOD lo_badi_activate->no_sld
+        CHANGING
+          e_no_sld = l_no_sld.
+    ENDIF.
+
+    IF l_no_sld = space.
+      CALL FUNCTION 'LCR_GET_OWN_BUSINESS_SYSTEM'
+        IMPORTING
+          bs_key_name = l_business.
+    ELSE.
+      CALL FUNCTION 'OWN_LOGICAL_SYSTEM_GET'
+        IMPORTING
+          own_logical_system = l_logsys
+        EXCEPTIONS
+          OTHERS             = 8.
+      IF sy-subrc = 0.
+        l_business = l_logsys.
+      ENDIF.
+    ENDIF.
+* end of note 2246117
+
+    CLEAR: ls_data, ls_data_clear.
+
+    LOOP AT is_notification INTO ls_in.
+      ls_data = ls_data_clear.
+
+**----------begin of Central Finance(CFIN) with SAP Credit Management(FSCM)， note 2839326----------*
+**     this block of codes is used in Central Finance with Credit Management scenario,
+**     to avoid the duplicated updating about "Open Invoice" of credit exposure,
+**     please de-comments the codes or add the filter logic into your codes.
+
+**     type 200 is the "Open Invoice" of credit exposure, which can be changed by customizing.
+**     please change it if it is necessary.
+*    IF ls_in-comm_typ = '200'.
+*      lo_instance = cl_fin_cfin_with_fscm=>get_instance( ).
+**      check if the company code active CFIN or not, note 2833145
+*      lv_cfin_flag = lo_instance->is_cfin_with_fscm( EXPORTING iv_company_code = ls_in-objkey+0(4) is_in = ls_in ).
+*      IF lv_cfin_flag = 'X'.
+*        CONTINUE.
+*      ENDIF.
+*    ENDIF.
+**----------end of Central Finance(cFin) with SAP Credit Management(FSCM)， note 2839326----------*
+
+      ls_data-debtor_party-internal_id-value = ls_in-partner.
+      IF ls_data-debtor_party-internal_id-value IS INITIAL.
+        ls_data-debtor_party-internal_id-value = ls_in-kunnr.
+      ENDIF.
+
+      ls_data-debtor_party-internal_id-scheme_agency_id =
+      l_business.
+*     es ist keine Guid
+      ls_data-debtor_party-internal_id-scheme_id = 'PartyID'.
+*     call badi for conversion debtor - business partner
+*      ls_data-debtor_party-internal_id-value
+*             = convert_guid_to_number( ls_data-debtor_party-internal_id ).
+
+      ls_data-credit_segment_internal_id = ls_in-credit_sgmnt.
+
+      ls_data-type_code = ls_in-comm_typ.
+
+      IF NOT ls_in-currency  IS INITIAL.
+        TRY.
+            CALL METHOD cl_gdt_conversion=>amount_outbound
+              EXPORTING
+                im_value         = ls_in-amount
+                im_currency_code = ls_in-currency
+              IMPORTING
+                ex_value         = ls_data-unsecured_amount-value
+                ex_currency_code = ls_data-unsecured_amount-currency_code.
+
+
+            CALL METHOD cl_gdt_conversion=>amount_outbound
+              EXPORTING
+                im_value         = ls_in-amount_sec
+                im_currency_code = ls_in-currency
+              IMPORTING
+                ex_value         = ls_data-secured_amount-value
+                ex_currency_code = ls_data-secured_amount-currency_code.
+*           Gesamtbetrag
+            l_tot_amount = ls_in-amount + ls_in-amount_sec.
+            CALL METHOD cl_gdt_conversion=>amount_outbound
+              EXPORTING
+                im_value         = l_tot_amount
+                im_currency_code = ls_in-currency
+              IMPORTING
+                ex_value         = ls_data-amount-value
+                ex_currency_code = ls_data-amount-currency_code.
+
+          CATCH cx_gdt_conversion.
+            MESSAGE e012(ukm_pi) WITH ls_in-currency.
+        ENDTRY.
+
+      ENDIF.
+*   1   Absolutbetrag EP gemeldet
+*   2   Deltabetrag EP gemeldet
+*   3   Absolutbetrag Summe gemeldet
+*   4   Deltabetrag Summe gemeldet
+      l_bi = l_bd = space.
+      CASE ls_in-sum_typ.
+        WHEN '1'. l_bi = space . l_bd = space.
+        WHEN '2'. l_bi = space . l_bd = 'X'.
+        WHEN '3'. l_bi = 'X'   . l_bd = space.
+        WHEN '4'. l_bi = 'X'   . l_bd = 'X'.
+      ENDCASE.
+
+*    immer Absolutbetrag EP gemeldet SUM_TYP
+      CALL METHOD cl_gdt_conversion=>indicator_outbound
+        EXPORTING
+          im_value = l_bi
+        IMPORTING
+          ex_value = ls_data-amount_balance_indicator.
+
+      CALL METHOD cl_gdt_conversion=>indicator_outbound
+        EXPORTING
+          im_value = l_bd
+        IMPORTING
+          ex_value = ls_data-amount_difference_indicator.
+*
+      IF NOT ls_in-pmkey IS INITIAL.
+        MOVE: ls_in-pmkey  TO ls_data-pending_commitment-group_id.
+        CASE ls_in-pmtyp.
+          WHEN '1'.
+            ls_in-pmtyp = ' '.
+          WHEN '2'.
+            ls_in-pmtyp = 'X'.
+        ENDCASE.
+        CALL METHOD cl_gdt_conversion=>indicator_outbound
+          EXPORTING
+            im_value = ls_in-pmtyp
+          IMPORTING
+            ex_value = ls_data-pending_commitment-completed_indicator.
+
+      ENDIF.
+
+      DATA: ls_document LIKE ls_data-accounting_document_reference-id,
+            ls_previous TYPE ukmr3_business_transaction_doc-id.
+      .
+      MOVE:
+          ls_in-date TO ls_data-validity_date.
+*    abhängig vom com typ references setzen
+      MOVE:
+          ls_in-logsys  TO ls_document-scheme_agency_id,
+          ls_in-objtype TO ls_document-scheme_id,
+          ls_in-objkey  TO ls_document-value.
+*     determine previos document
+*
+
+      MOVE:
+          ls_in-prec_logsys   TO ls_previous-scheme_agency_id,
+          ls_in-prec_objtype  TO ls_previous-scheme_id,
+          ls_in-prec_objkey   TO ls_previous-value.
+
+      CASE: ls_in-comm_typ.
+*       order value
+        WHEN '100'.
+          ls_data-sales_order_reference-id = ls_document.
+*        Trading Kontrakt
+        WHEN '150'.
+          ls_data-sales_order_reference-id = ls_document.
+*       open item
+        WHEN '200'.
+          ls_data-accounting_document_reference-id = ls_document.
+*       open item (special )
+        WHEN '300'.
+          ls_data-accounting_document_reference-id = ls_document.
+*       delivery
+        WHEN '400'.
+          ls_data-outbound_delivery_reference-id = ls_document.
+          CLEAR ls_data-sales_order_reference.
+*       billing - Faktura
+        WHEN '500'.
+          ls_data-invoice_reference-id = ls_document.
+          CLEAR ls_data-outbound_delivery_reference.
+*       Agenturbelege
+        WHEN '550'.
+          ls_data-invoice_reference-id = ls_document.
+
+        WHEN OTHERS.
+          ls_data-accounting_document_reference-id = ls_document.
+
+      ENDCASE.
+**    previos document---
+      CASE: ls_previous-scheme_id.
+*       order value
+        WHEN 'VBAK'.
+          ls_data-predecessor_reference-sales_order_reference-id = ls_previous.
+*       open item
+        WHEN 'BSEG'.
+          ls_data-predecessor_reference-accounting_document_reference-id = ls_previous.
+*       open item (special )
+        WHEN 'BKPF'.
+          ls_data-predecessor_reference-accounting_document_reference-id = ls_previous.
+*       delivery
+        WHEN 'LIKP'.
+          ls_data-predecessor_reference-outbound_delivery_reference-id = ls_previous.
+*       billing - Faktura
+        WHEN 'VBRK'.
+          ls_data-predecessor_reference-invoice_reference-id = ls_previous.
+      ENDCASE.
+
+      APPEND ls_data TO lt_data.
+
+
+    ENDLOOP.
+
+    et_xi_msg = lt_data.
+
+*   for reporting purposes you can return the (changed) table
+    EXPORT ukm_item = is_notification TO MEMORY ID 'UKM_ITEM'.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_fill~fill_fields_reconcile.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_fill~fill_vector .
+* this is the badi implementation for ERP2005 "1075689
+    BREAK seblondo.
+    DATA: ls_in LIKE LINE OF is_notification.
+    DATA: l_tz   TYPE ttzz-tzone.
+
+    DATA: ls_out TYPE ukmr3_cpbs_notification.
+
+* payload
+    DATA: lt_data TYPE ukmr3_cpbs_tab.
+    DATA: ls_data TYPE ukmr3_cpb_summary.
+
+    DATA: _business_system(60).
+
+** begin of Central Finance(CFIN) with SAP Credit Management(FSCM), note 2839326
+*  DATA: lv_cfin_flag          TYPE          boolean.
+*  DATA: lo_instance           TYPE REF TO   if_fin_cfin_with_fscm.
+*  DATA: lv_company_code       TYPE          bukrs.
+** end of Central Finance(CFIN) with SAP Credit Management(FSCM), note 2839326
+
+* begin of note 2246117
+    DATA: l_true  TYPE boolean VALUE 'X'.
+    DATA: l_active TYPE boolean.
+    DATA: lo_badi_activate TYPE REF TO if_ex_ukm_r3_activate.
+    DATA: l_logsys TYPE tbdls-logsys.
+    DATA: l_no_sld TYPE flag.
+    .
+    CALL METHOD cl_exithandler=>get_instance
+      EXPORTING
+        exit_name              = 'UKM_R3_ACTIVATE'
+        null_instance_accepted = l_true
+      IMPORTING
+        act_imp_existing       = l_active
+      CHANGING
+        instance               = lo_badi_activate
+      EXCEPTIONS
+        OTHERS                 = 9.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE 'A' NUMBER sy-msgno
+                 WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    IF lo_badi_activate IS BOUND.
+      CALL METHOD lo_badi_activate->no_sld
+        CHANGING
+          e_no_sld = l_no_sld.
+    ENDIF.
+
+    IF l_no_sld = space.
+      CALL FUNCTION 'LCR_GET_OWN_BUSINESS_SYSTEM'
+        IMPORTING
+          bs_key_name = _business_system.
+    ELSE.
+      CALL FUNCTION 'OWN_LOGICAL_SYSTEM_GET'
+        IMPORTING
+          own_logical_system = l_logsys
+        EXCEPTIONS
+          OTHERS             = 8.
+      IF sy-subrc = 0.
+        _business_system = l_logsys.
+      ENDIF.
+    ENDIF.
+* end of note 2246117
+
+    LOOP AT is_notification INTO ls_in.
+      CLEAR ls_data.                                        "SG 1587731
+
+**----------begin of Central Finance(CFIN) with SAP Credit Management(FSCM)， note 2839326----------*
+**      this block of codes is used in Central Finance with Credit Management scenario,
+**      to avoid the duplicated updating about "Open Invoice" of credit exposure,
+**      please de-comments the codes or add the filter logic into your codes.
+*
+*      lo_instance = cl_fin_cfin_with_fscm=>get_instance( ).
+**      fetch the company code
+*      IF ls_in-dunn_objkey+0(4) <> ' '.
+*        lv_company_code = ls_in-dunn_objkey+0(4).
+*      ELSEIF ls_in-ovdue_objkey+0(4) <> ' '.
+*        lv_company_code = ls_in-ovdue_objkey+0(4).
+*      ELSEIF ls_in-paymnt_objkey+0(4) <> ' '.
+*        lv_company_code = ls_in-paymnt_objkey+0(4).
+*      ENDIF.
+**      check if the company code active CFIN or not, note 2833145
+*      lv_cfin_flag = lo_instance->is_cfin_with_fscm( EXPORTING iv_company_code = lv_company_code is_in = ls_in ).
+*      IF lv_cfin_flag = 'X'.
+*        CONTINUE.
+*      ENDIF.
+*
+**----------end of Central Finance(cFin) with SAP Credit Management(FSCM)， note 2839326----------*
+
+      MOVE-CORRESPONDING ls_in TO ls_data.
+
+*   GENERAL
+      ls_data-debtor_party-internal_id-value = ls_in-partner.
+      IF ls_data-debtor_party-internal_id-value IS INITIAL.
+        ls_data-debtor_party-internal_id-value = ls_in-kunnr.
+      ENDIF.
+
+*     logisches system
+      ls_data-debtor_party-internal_id-scheme_agency_id = _business_system.
+*     es ist keine Guid
+      ls_data-debtor_party-internal_id-scheme_id = 'PartyID'.
+*     call badi for conversion debtor - business partner
+      ls_data-debtor_party-internal_id-value = ls_data-debtor_party-internal_id-value.
+
+      MOVE ls_in-credit_sgmnt TO ls_data-credit_segment_internal_id.
+*
+*   DUNNING
+      MOVE:
+          ls_in-dunn_logsys        TO ls_data-maximum_level_dunned_open_item-accounting_document_id-scheme_agency_id,
+          ls_in-dunn_objtype       TO ls_data-maximum_level_dunned_open_item-accounting_document_id-scheme_id,
+          ls_in-dunn_objkey(35)    TO ls_data-maximum_level_dunned_open_item-accounting_document_id-value,
+          ls_in-dunn_objkey+35(10) TO ls_data-maximum_level_dunned_open_item-accounting_document_item_id.
+
+      MOVE: ls_in-dunn_max_lv TO ls_data-maximum_level_dunned_open_item-dunning_level_value.
+      MOVE: ls_in-dunn_counter TO ls_data-dunning_counter_value. "1798002
+
+
+      IF NOT ls_in-dunn_curr  IS INITIAL.
+        CALL METHOD cl_gdt_conversion=>amount_outbound
+          EXPORTING
+            im_value         = ls_in-dunn_amount
+            im_currency_code = ls_in-dunn_curr
+          IMPORTING
+            ex_value         = ls_data-maximum_level_dunned_open_item-amount-value
+            ex_currency_code = ls_data-maximum_level_dunned_open_item-amount-currency_code.
+
+
+      ENDIF.
+
+      ls_data-maximum_level_dunned_open_item-maximum_level_dunning_date = ls_in-dunn_date. "1798002
+
+
+*   OVERDUE ITEM
+      MOVE:
+          ls_in-ovdue_logsys        TO ls_data-oldest_open_item-accounting_document_id-scheme_agency_id,
+          ls_in-ovdue_objtype       TO ls_data-oldest_open_item-accounting_document_id-scheme_id,
+          ls_in-ovdue_objkey(35)    TO ls_data-oldest_open_item-accounting_document_id-value,
+          ls_in-ovdue_objkey+35(10) TO ls_data-oldest_open_item-accounting_document_item_id.
+
+      MOVE: ls_in-ovdue_net_date TO ls_data-oldest_open_item-overdue_net_date.
+
+      IF NOT ls_in-ovdue_curr  IS INITIAL.
+        CALL METHOD cl_gdt_conversion=>amount_outbound
+          EXPORTING
+            im_value         = ls_in-ovdue_amount
+            im_currency_code = ls_in-ovdue_curr
+          IMPORTING
+            ex_value         = ls_data-oldest_open_item-amount-value
+            ex_currency_code = ls_data-oldest_open_item-amount-currency_code.
+      ENDIF.
+
+
+*   LAST PAYMENT
+      MOVE:
+          ls_in-paymnt_logsys  TO ls_data-last_payment-id-scheme_agency_id,
+          ls_in-paymnt_objtype TO ls_data-last_payment-id-scheme_id,
+          ls_in-paymnt_objkey  TO ls_data-last_payment-id-value.
+
+      MOVE: ls_in-paymnt_date TO ls_data-last_payment-date.
+
+      IF NOT ls_in-paymnt_curr IS INITIAL.
+        CALL METHOD cl_gdt_conversion=>amount_outbound
+          EXPORTING
+            im_value         = ls_in-paymnt_amount
+            im_currency_code = ls_in-paymnt_curr
+          IMPORTING
+            ex_value         = ls_data-last_payment-amount-value
+            ex_currency_code = ls_data-last_payment-amount-currency_code.
+      ENDIF.
+
+
+*   INDEX FIGURES
+      MOVE ls_in-idx_figure TO ls_data-dso_duration.
+
+      IF NOT ls_in-idx_curr IS INITIAL.
+        IF NOT ls_in-idx_amount IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-idx_amount
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-cumulated_receivables_amount-value
+              ex_currency_code = ls_data-cumulated_receivables_amount-currency_code.
+        ENDIF.
+
+        IF NOT ls_in-sl_arr_wo_amount IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-sl_arr_wo_amount
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-without_discount_payments-current_year_total_amount-value
+              ex_currency_code = ls_data-without_discount_payments-current_year_total_amount-currency_code.
+          MOVE ls_in-sl_arr_wo TO ls_data-without_discount_payments-average_arrears_duration.
+        ENDIF.
+
+        IF NOT ls_in-sl_arr_w_amount IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-sl_arr_w_amount
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-with_discount_payments-current_year_total_amount-value
+              ex_currency_code = ls_data-with_discount_payments-current_year_total_amount-currency_code.
+          MOVE ls_in-sl_slarr_w TO ls_data-with_discount_payments-average_arrears_duration.
+        ENDIF.
+
+        IF NOT ls_in-sales_vol IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-sales_vol
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-last_12_months_sales_volume-value
+              ex_currency_code = ls_data-last_12_months_sales_volume-currency_code.
+        ENDIF.
+
+        IF NOT ls_in-sales_max IS INITIAL.
+          CALL METHOD cl_gdt_conversion=>amount_outbound
+            EXPORTING
+              im_value         = ls_in-sales_max
+              im_currency_code = ls_in-idx_curr
+            IMPORTING
+              ex_value         = ls_data-last_12_months_max_exposure-value
+              ex_currency_code = ls_data-last_12_months_max_exposure-currency_code.
+        ENDIF.
+      ENDIF.
+
+
+      APPEND ls_data TO lt_data.
+
+    ENDLOOP.
+    et_xi_msg  = lt_data.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_fill~get_rfcdest .
+    BREAK seblondo.
+    e_rfcdest = 'ECCQ_S4H_XFER'.
+  ENDMETHOD.
+ENDCLASS.

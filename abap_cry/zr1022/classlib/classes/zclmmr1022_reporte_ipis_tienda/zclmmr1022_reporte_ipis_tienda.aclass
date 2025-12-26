@@ -1,0 +1,650 @@
+CLASS zclmmr1022_reporte_ipis_tienda DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    TYPES: BEGIN OF gtp_es_inventario,
+             iblnr                         TYPE ikpf-iblnr,
+             gjahr                         TYPE ikpf-gjahr,
+             bldat                         TYPE ikpf-bldat,
+             werks                         TYPE iseg-werks,
+             lgort                         TYPE iseg-lgort,
+             matnr                         TYPE iseg-matnr,
+             maktx                         TYPE makt-maktx,
+             charg                         TYPE iseg-charg,
+             talla                         TYPE mara-size1,
+             denominacion_talla            TYPE wrf_charvalt-atwtb,
+             color                         TYPE mara-color,
+             denominacion_color            TYPE wrf_charvalt-atwtb,
+             ean11                         TYPE mean-ean11,
+             cantidad_teorica              TYPE iseg-buchm,
+             cantidad_fisica               TYPE iseg-menge,
+             recuento_cero                 TYPE iseg-xnull,
+             meins                         TYPE iseg-meins,
+             diferencia                    TYPE zed_diferencia,
+             valor_recuento                TYPE iseg-wrtzl,
+             valor_cantidad_teorica        TYPE iseg-wrtbm,
+             diferencia_inventario_entrada TYPE iseg-dmbtr,
+             indice_precision              TYPE zed_indice_precision,
+             fecha_contabilizacion         TYPE iseg-budat,
+             marca                         TYPE mara-brand_id,
+             descripcion_marca             TYPE wrf_brands_t-brand_descr,
+             genero                        TYPE wrf_charvalt-atwtb,
+             departamento                  TYPE wrf_charvalt-atwtb,
+             currency                      TYPE vbrk-waerk,
+           END OF gtp_es_inventario.
+
+    TYPES: gtp_ti_inventario TYPE STANDARD TABLE OF gtp_es_inventario WITH NON-UNIQUE KEY iblnr gjahr werks.
+
+    DATA: gti_inventario TYPE gtp_ti_inventario.
+
+    METHODS:
+
+      iniciar_seleccion_de_datos
+        IMPORTING
+          VALUE(i_r_documento_inventario) TYPE STANDARD TABLE
+          VALUE(i_r_ejercicio)            TYPE STANDARD TABLE
+          VALUE(i_r_centro)               TYPE STANDARD TABLE
+          VALUE(i_r_almacen)              TYPE STANDARD TABLE
+          VALUE(i_r_material)             TYPE STANDARD TABLE
+          VALUE(i_r_fecha_documento)      TYPE STANDARD TABLE,
+
+      consultar_inventario
+        IMPORTING
+          VALUE(i_r_filtros)     TYPE string
+        EXPORTING
+          VALUE(e_ti_inventario) TYPE gtp_ti_inventario,
+      visualizar_inventario_ipis
+        IMPORTING
+          i_layout     TYPE slis_vari
+          i_id_reporte TYPE syrepid
+        RAISING
+          cx_t100_msg,
+      calcular_indice_precision
+        CHANGING
+          c_ti_inventario TYPE zclmmr1022_reporte_ipis_tienda=>gtp_ti_inventario.
+
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS modificar_catalogo
+      CHANGING
+        c_ti_catalogo TYPE lvc_t_fcat.
+ENDCLASS.
+
+
+
+CLASS zclmmr1022_reporte_ipis_tienda IMPLEMENTATION.
+
+  METHOD iniciar_seleccion_de_datos.
+
+    CLEAR: gti_inventario.
+
+    TRY.
+        consultar_inventario( EXPORTING
+                                i_r_filtros = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'IBLNR' dref = REF #( i_r_documento_inventario ) )
+                                                                                                         ( name = 'GJAHR' dref = REF #( i_r_ejercicio ) )
+                                                                                                         ( name = 'WERKS' dref = REF #( i_r_centro ) )
+                                                                                                         ( name = 'LGORT' dref = REF #( i_r_almacen ) )
+                                                                                                         ( name = 'BLDAT' dref = REF #( i_r_fecha_documento ) )
+                                                                                                         ( name = 'MATNR' dref = REF #( i_r_material ) )
+                                                                                                       )
+
+                                                                              )
+                             IMPORTING
+                                e_ti_inventario = gti_inventario
+                            ).
+
+        calcular_indice_precision( CHANGING c_ti_inventario = gti_inventario ).
+
+      CATCH cx_shdb_exception.
+        "handle exception
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+
+  METHOD consultar_inventario BY DATABASE PROCEDURE FOR HDB
+                              LANGUAGE SQLSCRIPT
+                              OPTIONS READ-ONLY
+                              USING ikpf iseg makt mara mean wrf_charvalt wrf_brands_t inob ausp.
+
+    DECLARE mandante varchar(3) := session_context ('CLIENT');
+    DECLARE lenguaje_sistema varchar(2) := session_context ('LOCALE_SAP');
+
+    --Inventario generarl
+    ti_inventario_completo =
+    SELECT
+    _cabecera_inventario.mandt,
+    _cabecera_inventario.iblnr,
+    _cabecera_inventario.gjahr,
+    _cabecera_inventario.bldat,
+    _posicion_inventario.werks,
+    _posicion_inventario.lgort,
+    _posicion_inventario.matnr,
+    _posicion_inventario.charg,
+    _posicion_inventario.buchm  as cantidad_teorica,
+    _posicion_inventario.menge  as cantidad_fisica,
+    _posicion_inventario.xnull  as recuento_cero,
+    _posicion_inventario.meins,
+    ( _posicion_inventario.menge - _posicion_inventario.buchm ) as diferencia,
+    _posicion_inventario.wrtzl  as valor_recuento,
+    _posicion_inventario.wrtbm  as valor_cantidad_teorica,
+    ( _posicion_inventario.wrtzl - _posicion_inventario.wrtbm )  as diferencia_inventario_entrada,
+    _posicion_inventario.budat  as fecha_contabilizacion,
+    _posicion_inventario.waers  as currency
+    FROM ikpf AS _cabecera_inventario
+    INNER JOIN iseg AS _posicion_inventario
+    ON  _posicion_inventario.mandt = _cabecera_inventario.mandt
+    AND _posicion_inventario.iblnr = _cabecera_inventario.iblnr
+    WHERE _cabecera_inventario.mandt = :mandante;
+
+    ti_inventario_completo = APPLY_FILTER ( :ti_inventario_completo, :i_r_filtros );
+
+    --Consultamos las caracteristicas MM_MAT_DEPARTAMENTO y MM_MAT_GENERO
+    ti_caracteristicas_mm =
+    SELECT
+    _inventario.matnr,
+    _valor_caracteristicas.atinn,
+    _valor_caracteristicas.atwrt,
+    _caracteristica_mm.atwtb
+    FROM :ti_inventario_completo AS _inventario
+    INNER JOIN inob AS _asignacion_nro_interno ON
+    _asignacion_nro_interno.mandt = _inventario.mandt AND
+    _asignacion_nro_interno.objek = _inventario.matnr
+    INNER JOIN ausp AS _valor_caracteristicas ON
+    _valor_caracteristicas.mandt = _asignacion_nro_interno.mandt AND
+    _valor_caracteristicas.objek = _asignacion_nro_interno.cuobj
+    INNER JOIN wrf_charvalt AS _caracteristica_mm ON
+    _caracteristica_mm.mandt = _valor_caracteristicas.mandt AND
+    _caracteristica_mm.atinn = _valor_caracteristicas.atinn AND
+    _caracteristica_mm.atwrt = _valor_caracteristicas.atwrt
+    WHERE ( _valor_caracteristicas.atinn = '0000000829' --MM_MAT_GENERO
+            OR
+            _valor_caracteristicas.atinn = '0000000830' --MM_MAT_DEPARTAMENTO
+          )
+       AND _caracteristica_mm.spras = :lenguaje_sistema;
+
+    -- inventario especifico
+    e_ti_inventario =
+    SELECT
+    _inventario.iblnr,
+    _inventario.gjahr,
+    _inventario.bldat,
+    _inventario.werks,
+    _inventario.lgort,
+    _inventario.matnr,
+    _texto_material.maktx,
+    _inventario.charg,
+    _material.size1 as talla,
+    _caracteristica_talla.atwtb as denominacion_talla,
+    _material.color,
+    _caracteristica_color.atwtb as  denominacion_color,
+    _ean.ean11,
+    _inventario.cantidad_teorica,
+    _inventario.cantidad_fisica,
+    _inventario.recuento_cero,
+    _inventario.meins,
+    _inventario.diferencia,
+    _inventario.valor_recuento,
+    _inventario.valor_cantidad_teorica,
+    _inventario.diferencia_inventario_entrada,
+    0 as indice_precision,
+    _inventario.fecha_contabilizacion,
+    _material.brand_id   as marca,
+    _marca_descripcion.brand_descr as descripcion_marca,
+    _mm_mat_genero.atwtb as genero,
+    _mm_mat_departamento.atwtb as departamento,
+    _inventario.currency
+    FROM :ti_inventario_completo as _inventario
+    INNER JOIN mara as _material ON
+    _material.mandt = _inventario.mandt AND
+    _material.matnr = _inventario.matnr
+    INNER JOIN makt as _texto_material ON
+    _texto_material.mandt = _material.mandt AND
+    _texto_material.matnr = _material.matnr AND
+    _texto_material.spras = :lenguaje_sistema
+    LEFT OUTER JOIN wrf_charvalt  AS _caracteristica_color ON
+    _material.color_atinn = _caracteristica_color.atinn and
+    _material.color       = _caracteristica_color.atwrt and
+    _caracteristica_color.spras = :lenguaje_sistema
+    LEFT OUTER JOIN wrf_charvalt AS _caracteristica_talla ON
+    _material.size1_atinn  = _caracteristica_talla.atinn and
+    _material.size1        = _caracteristica_talla.atwrt and
+    _caracteristica_talla.spras = :lenguaje_sistema
+    LEFT JOIN
+    ( SELECT matnr, atinn, atwtb
+      FROM :ti_caracteristicas_mm WHERE atinn = '0000000829' ) AS _mm_mat_genero ON
+    _mm_mat_genero.matnr = _material.matnr
+    LEFT JOIN
+    ( SELECT matnr, atinn, atwtb
+      FROM :ti_caracteristicas_mm WHERE atinn = '0000000830' ) AS _mm_mat_departamento ON
+    _mm_mat_departamento.matnr = _material.matnr
+    LEFT JOIN mean AS _ean ON
+    _ean.mandt = _material.mandt AND
+    _ean.matnr = _material.matnr
+    LEFT JOIN wrf_brands_t as _marca_descripcion ON
+    _marca_descripcion.mandt = _material.mandt AND
+    _marca_descripcion.brand_id = _material.brand_id
+    WHERE _inventario.mandt = :mandante
+    WITH HINT ( IGNORE_PLAN_CACHE );
+
+
+  ENDMETHOD.
+
+
+  METHOD visualizar_inventario_ipis.
+
+    IF gti_inventario IS NOT INITIAL.
+
+      TRY.
+          DATA(ti_catalogo) = zclcxr1002_util=>construir_catalogo( i_ti = gti_inventario  ).
+          modificar_catalogo( CHANGING c_ti_catalogo = ti_catalogo ).
+        CATCH cx_dynamic_check cx_static_check.
+          "handle exception
+      ENDTRY.
+
+      CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+        EXPORTING
+          i_ti_datos    = REF #( gti_inventario )
+          i_ti_catalogo = ti_catalogo
+          i_titulo      = |{ TEXT-tlt } (#{ lines( gti_inventario ) })|
+          i_es_variante = VALUE disvariant( variant = i_layout report = i_id_reporte username = sy-uname ).
+    ELSE.
+
+      RAISE EXCEPTION TYPE cx_t100_msg EXPORTING t100_msgid = 'WUSL' t100_msgno = '002'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_catalogo.
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+      <fs_es_catalogo>-col_opt = abap_true.
+
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'DENOMINACION_TALLA'.
+          <fs_es_catalogo>-coltext = TEXT-dtl.
+        WHEN 'DENOMINACION_COLOR'.
+          <fs_es_catalogo>-coltext = TEXT-dco.
+        WHEN 'GENERO'.
+          <fs_es_catalogo>-coltext = TEXT-dge.
+        WHEN 'DEPARTAMENTO'.
+          <fs_es_catalogo>-coltext = TEXT-dde.
+          "Por solicitud de negocio se cambian los textos de las siguientes columnas{
+        WHEN 'DIFERENCIA_INVENTARIO_ENTRADA'.
+          <fs_es_catalogo>-col_opt = abap_false.
+          <fs_es_catalogo>-outputlen = 15.
+          <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+        WHEN 'CANTIDAD_FISICA'."Cantidad fisica
+          <fs_es_catalogo>-coltext = TEXT-ctf.
+          "}
+        WHEN 'VALOR_RECUENTO'.
+            <fs_es_catalogo>-coltext = TEXT-vlf.
+            <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+        WHEN 'VALOR_CANTIDAD_TEORICA'.
+            <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+      ENDCASE.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD calcular_indice_precision.
+
+    DATA: indice_precision TYPE zed_indice_precision.
+
+    DATA(ti_inventario_sin_diferencia) = c_ti_inventario.
+
+    DELETE ti_inventario_sin_diferencia WHERE diferencia IS NOT INITIAL.
+
+    DATA(lineas_invent_sin_diferencia) = lines( ti_inventario_sin_diferencia ).
+
+    indice_precision = lineas_invent_sin_diferencia / lines( c_ti_inventario ).
+
+    indice_precision = indice_precision * 100.
+
+    LOOP AT c_ti_inventario ASSIGNING FIELD-SYMBOL(<fs_es_inventario>).
+
+      IF <fs_es_inventario>-diferencia IS INITIAL.
+        <fs_es_inventario>-indice_precision = indice_precision / lineas_invent_sin_diferencia.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclmmr1022_reporte_ipis_tienda DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    TYPES: BEGIN OF gtp_es_inventario,
+             iblnr                         TYPE ikpf-iblnr,
+             gjahr                         TYPE ikpf-gjahr,
+             bldat                         TYPE ikpf-bldat,
+             werks                         TYPE iseg-werks,
+             lgort                         TYPE iseg-lgort,
+             matnr                         TYPE iseg-matnr,
+             maktx                         TYPE makt-maktx,
+             charg                         TYPE iseg-charg,
+             talla                         TYPE mara-size1,
+             denominacion_talla            TYPE wrf_charvalt-atwtb,
+             color                         TYPE mara-color,
+             denominacion_color            TYPE wrf_charvalt-atwtb,
+             ean11                         TYPE mean-ean11,
+             cantidad_teorica              TYPE iseg-buchm,
+             cantidad_fisica               TYPE iseg-menge,
+             recuento_cero                 TYPE iseg-xnull,
+             meins                         TYPE iseg-meins,
+             diferencia                    TYPE zed_diferencia,
+             valor_recuento                TYPE iseg-wrtzl,
+             valor_cantidad_teorica        TYPE iseg-wrtbm,
+             diferencia_inventario_entrada TYPE iseg-dmbtr,
+             indice_precision              TYPE zed_indice_precision,
+             fecha_contabilizacion         TYPE iseg-budat,
+             marca                         TYPE mara-brand_id,
+             descripcion_marca             TYPE wrf_brands_t-brand_descr,
+             genero                        TYPE wrf_charvalt-atwtb,
+             departamento                  TYPE wrf_charvalt-atwtb,
+             currency                      TYPE vbrk-waerk,
+           END OF gtp_es_inventario.
+
+    TYPES: gtp_ti_inventario TYPE STANDARD TABLE OF gtp_es_inventario WITH NON-UNIQUE KEY iblnr gjahr werks.
+
+    DATA: gti_inventario TYPE gtp_ti_inventario.
+
+    METHODS:
+
+      iniciar_seleccion_de_datos
+        IMPORTING
+          VALUE(i_r_documento_inventario) TYPE STANDARD TABLE
+          VALUE(i_r_ejercicio)            TYPE STANDARD TABLE
+          VALUE(i_r_centro)               TYPE STANDARD TABLE
+          VALUE(i_r_almacen)              TYPE STANDARD TABLE
+          VALUE(i_r_material)             TYPE STANDARD TABLE
+          VALUE(i_r_fecha_documento)      TYPE STANDARD TABLE,
+
+      consultar_inventario
+        IMPORTING
+          VALUE(i_r_filtros)     TYPE string
+        EXPORTING
+          VALUE(e_ti_inventario) TYPE gtp_ti_inventario,
+      visualizar_inventario_ipis
+        IMPORTING
+          i_layout     TYPE slis_vari
+          i_id_reporte TYPE syrepid
+        RAISING
+          cx_t100_msg,
+      calcular_indice_precision
+        CHANGING
+          c_ti_inventario TYPE zclmmr1022_reporte_ipis_tienda=>gtp_ti_inventario.
+
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS modificar_catalogo
+      CHANGING
+        c_ti_catalogo TYPE lvc_t_fcat.
+ENDCLASS.
+
+
+
+CLASS zclmmr1022_reporte_ipis_tienda IMPLEMENTATION.
+
+  METHOD iniciar_seleccion_de_datos.
+
+    CLEAR: gti_inventario.
+
+    TRY.
+        consultar_inventario( EXPORTING
+                                i_r_filtros = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'IBLNR' dref = REF #( i_r_documento_inventario ) )
+                                                                                                         ( name = 'GJAHR' dref = REF #( i_r_ejercicio ) )
+                                                                                                         ( name = 'WERKS' dref = REF #( i_r_centro ) )
+                                                                                                         ( name = 'LGORT' dref = REF #( i_r_almacen ) )
+                                                                                                         ( name = 'BLDAT' dref = REF #( i_r_fecha_documento ) )
+                                                                                                         ( name = 'MATNR' dref = REF #( i_r_material ) )
+                                                                                                       )
+
+                                                                              )
+                             IMPORTING
+                                e_ti_inventario = gti_inventario
+                            ).
+
+        calcular_indice_precision( CHANGING c_ti_inventario = gti_inventario ).
+
+      CATCH cx_shdb_exception.
+        "handle exception
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+
+  METHOD consultar_inventario BY DATABASE PROCEDURE FOR HDB
+                              LANGUAGE SQLSCRIPT
+                              OPTIONS READ-ONLY
+                              USING ikpf iseg makt mara mean wrf_charvalt wrf_brands_t inob ausp.
+
+    DECLARE mandante varchar(3) := session_context ('CLIENT');
+    DECLARE lenguaje_sistema varchar(2) := session_context ('LOCALE_SAP');
+
+    --Inventario generarl
+    ti_inventario_completo =
+    SELECT
+    _cabecera_inventario.mandt,
+    _cabecera_inventario.iblnr,
+    _cabecera_inventario.gjahr,
+    _cabecera_inventario.bldat,
+    _posicion_inventario.werks,
+    _posicion_inventario.lgort,
+    _posicion_inventario.matnr,
+    _posicion_inventario.charg,
+    _posicion_inventario.buchm  as cantidad_teorica,
+    _posicion_inventario.menge  as cantidad_fisica,
+    _posicion_inventario.xnull  as recuento_cero,
+    _posicion_inventario.meins,
+    ( _posicion_inventario.menge - _posicion_inventario.buchm ) as diferencia,
+    _posicion_inventario.wrtzl  as valor_recuento,
+    _posicion_inventario.wrtbm  as valor_cantidad_teorica,
+    ( _posicion_inventario.wrtzl - _posicion_inventario.wrtbm )  as diferencia_inventario_entrada,
+    _posicion_inventario.budat  as fecha_contabilizacion,
+    _posicion_inventario.waers  as currency
+    FROM ikpf AS _cabecera_inventario
+    INNER JOIN iseg AS _posicion_inventario
+    ON  _posicion_inventario.mandt = _cabecera_inventario.mandt
+    AND _posicion_inventario.iblnr = _cabecera_inventario.iblnr
+    WHERE _cabecera_inventario.mandt = :mandante;
+
+    ti_inventario_completo = APPLY_FILTER ( :ti_inventario_completo, :i_r_filtros );
+
+    --Consultamos las caracteristicas MM_MAT_DEPARTAMENTO y MM_MAT_GENERO
+    ti_caracteristicas_mm =
+    SELECT
+    _inventario.matnr,
+    _valor_caracteristicas.atinn,
+    _valor_caracteristicas.atwrt,
+    _caracteristica_mm.atwtb
+    FROM :ti_inventario_completo AS _inventario
+    INNER JOIN inob AS _asignacion_nro_interno ON
+    _asignacion_nro_interno.mandt = _inventario.mandt AND
+    _asignacion_nro_interno.objek = _inventario.matnr
+    INNER JOIN ausp AS _valor_caracteristicas ON
+    _valor_caracteristicas.mandt = _asignacion_nro_interno.mandt AND
+    _valor_caracteristicas.objek = _asignacion_nro_interno.cuobj
+    INNER JOIN wrf_charvalt AS _caracteristica_mm ON
+    _caracteristica_mm.mandt = _valor_caracteristicas.mandt AND
+    _caracteristica_mm.atinn = _valor_caracteristicas.atinn AND
+    _caracteristica_mm.atwrt = _valor_caracteristicas.atwrt
+    WHERE ( _valor_caracteristicas.atinn = '0000000829' --MM_MAT_GENERO
+            OR
+            _valor_caracteristicas.atinn = '0000000830' --MM_MAT_DEPARTAMENTO
+          )
+       AND _caracteristica_mm.spras = :lenguaje_sistema;
+
+    -- inventario especifico
+    e_ti_inventario =
+    SELECT
+    _inventario.iblnr,
+    _inventario.gjahr,
+    _inventario.bldat,
+    _inventario.werks,
+    _inventario.lgort,
+    _inventario.matnr,
+    _texto_material.maktx,
+    _inventario.charg,
+    _material.size1 as talla,
+    _caracteristica_talla.atwtb as denominacion_talla,
+    _material.color,
+    _caracteristica_color.atwtb as  denominacion_color,
+    _ean.ean11,
+    _inventario.cantidad_teorica,
+    _inventario.cantidad_fisica,
+    _inventario.recuento_cero,
+    _inventario.meins,
+    _inventario.diferencia,
+    _inventario.valor_recuento,
+    _inventario.valor_cantidad_teorica,
+    _inventario.diferencia_inventario_entrada,
+    0 as indice_precision,
+    _inventario.fecha_contabilizacion,
+    _material.brand_id   as marca,
+    _marca_descripcion.brand_descr as descripcion_marca,
+    _mm_mat_genero.atwtb as genero,
+    _mm_mat_departamento.atwtb as departamento,
+    _inventario.currency
+    FROM :ti_inventario_completo as _inventario
+    INNER JOIN mara as _material ON
+    _material.mandt = _inventario.mandt AND
+    _material.matnr = _inventario.matnr
+    INNER JOIN makt as _texto_material ON
+    _texto_material.mandt = _material.mandt AND
+    _texto_material.matnr = _material.matnr AND
+    _texto_material.spras = :lenguaje_sistema
+    LEFT OUTER JOIN wrf_charvalt  AS _caracteristica_color ON
+    _material.color_atinn = _caracteristica_color.atinn and
+    _material.color       = _caracteristica_color.atwrt and
+    _caracteristica_color.spras = :lenguaje_sistema
+    LEFT OUTER JOIN wrf_charvalt AS _caracteristica_talla ON
+    _material.size1_atinn  = _caracteristica_talla.atinn and
+    _material.size1        = _caracteristica_talla.atwrt and
+    _caracteristica_talla.spras = :lenguaje_sistema
+    LEFT JOIN
+    ( SELECT matnr, atinn, atwtb
+      FROM :ti_caracteristicas_mm WHERE atinn = '0000000829' ) AS _mm_mat_genero ON
+    _mm_mat_genero.matnr = _material.matnr
+    LEFT JOIN
+    ( SELECT matnr, atinn, atwtb
+      FROM :ti_caracteristicas_mm WHERE atinn = '0000000830' ) AS _mm_mat_departamento ON
+    _mm_mat_departamento.matnr = _material.matnr
+    LEFT JOIN mean AS _ean ON
+    _ean.mandt = _material.mandt AND
+    _ean.matnr = _material.matnr
+    LEFT JOIN wrf_brands_t as _marca_descripcion ON
+    _marca_descripcion.mandt = _material.mandt AND
+    _marca_descripcion.brand_id = _material.brand_id
+    WHERE _inventario.mandt = :mandante
+    WITH HINT ( IGNORE_PLAN_CACHE );
+
+
+  ENDMETHOD.
+
+
+  METHOD visualizar_inventario_ipis.
+
+    IF gti_inventario IS NOT INITIAL.
+
+      TRY.
+          DATA(ti_catalogo) = zclcxr1002_util=>construir_catalogo( i_ti = gti_inventario  ).
+          modificar_catalogo( CHANGING c_ti_catalogo = ti_catalogo ).
+        CATCH cx_dynamic_check cx_static_check.
+          "handle exception
+      ENDTRY.
+
+      CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+        EXPORTING
+          i_ti_datos    = REF #( gti_inventario )
+          i_ti_catalogo = ti_catalogo
+          i_titulo      = |{ TEXT-tlt } (#{ lines( gti_inventario ) })|
+          i_es_variante = VALUE disvariant( variant = i_layout report = i_id_reporte username = sy-uname ).
+    ELSE.
+
+      RAISE EXCEPTION TYPE cx_t100_msg EXPORTING t100_msgid = 'WUSL' t100_msgno = '002'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_catalogo.
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+      <fs_es_catalogo>-col_opt = abap_true.
+
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'DENOMINACION_TALLA'.
+          <fs_es_catalogo>-coltext = TEXT-dtl.
+        WHEN 'DENOMINACION_COLOR'.
+          <fs_es_catalogo>-coltext = TEXT-dco.
+        WHEN 'GENERO'.
+          <fs_es_catalogo>-coltext = TEXT-dge.
+        WHEN 'DEPARTAMENTO'.
+          <fs_es_catalogo>-coltext = TEXT-dde.
+          "Por solicitud de negocio se cambian los textos de las siguientes columnas{
+        WHEN 'DIFERENCIA_INVENTARIO_ENTRADA'.
+          <fs_es_catalogo>-col_opt = abap_false.
+          <fs_es_catalogo>-outputlen = 15.
+          <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+        WHEN 'CANTIDAD_FISICA'."Cantidad fisica
+          <fs_es_catalogo>-coltext = TEXT-ctf.
+          "}
+        WHEN 'VALOR_RECUENTO'.
+            <fs_es_catalogo>-coltext = TEXT-vlf.
+            <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+        WHEN 'VALOR_CANTIDAD_TEORICA'.
+            <fs_es_catalogo>-cfieldname = 'CURRENCY'.
+      ENDCASE.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD calcular_indice_precision.
+
+    DATA: indice_precision TYPE zed_indice_precision.
+
+    DATA(ti_inventario_sin_diferencia) = c_ti_inventario.
+
+    DELETE ti_inventario_sin_diferencia WHERE diferencia IS NOT INITIAL.
+
+    DATA(lineas_invent_sin_diferencia) = lines( ti_inventario_sin_diferencia ).
+
+    indice_precision = lineas_invent_sin_diferencia / lines( c_ti_inventario ).
+
+    indice_precision = indice_precision * 100.
+
+    LOOP AT c_ti_inventario ASSIGNING FIELD-SYMBOL(<fs_es_inventario>).
+
+      IF <fs_es_inventario>-diferencia IS INITIAL.
+        <fs_es_inventario>-indice_precision = indice_precision / lineas_invent_sin_diferencia.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.

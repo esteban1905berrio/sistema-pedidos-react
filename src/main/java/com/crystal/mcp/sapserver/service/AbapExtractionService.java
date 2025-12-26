@@ -137,7 +137,10 @@ public class AbapExtractionService {
             String uri = "/sap/bc/adt/repository/informationsystem/search";
             Map<String, String> params = new HashMap<>();
             params.put("operation", "quickSearch");
-            params.put("query", "*"); // Wildcard to get all objects
+            params.put("query", "Z*"); // Wildcard to get all objects
+            params.put("maxResults", "1000");
+            params.put("objectType", "VIEW%2FDV");
+            params.put("useSearchProvider", "X");
 
             if (username != null) {
                 params.put("userName", username);

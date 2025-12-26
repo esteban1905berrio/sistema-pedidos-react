@@ -1,0 +1,1634 @@
+CLASS zclmmi1082_modifica_reposicion DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES: zifcxr1002_alvgrid.
+
+    TYPES: BEGIN OF gtp_es_calendario,
+             ident                   TYPE scal-fcalid,
+             descripcion_calendario  TYPE tfact-ltext,
+             fecha                   TYPE casdayattr-date,
+             dia_no_laboral          TYPE casdayattr-freeday,
+             dia_festivo             TYPE casdayattr-holiday,
+             descripcion_dia_festivo TYPE casdayattr-txt_long,
+             dia_nro                 TYPE casdayattr-weekday,
+             dia_de_la_semana        TYPE casdayattr-weekday_l,
+             descripcion_fecha       TYPE casdayattr-day_string,
+           END OF gtp_es_calendario.
+
+    TYPES: gtp_ti_maestro_reposiciones TYPE STANDARD TABLE OF ztmmi1082_1 WITH KEY localizacion,
+           gtp_ti_calendario           TYPE STANDARD TABLE OF gtp_es_calendario WITH EMPTY KEY.
+
+    TYPES: gtp_r_localizacion      TYPE RANGE OF ztmmi1082_1-localizacion,
+           gtp_r_dias_semana       TYPE RANGE OF /sapapo/ev_usr-m_wday,
+           gtp_r_calendario        TYPE RANGE OF ztmmi1082_1-calendario,
+           gtp_r_fecha             TYPE RANGE OF scal-date,
+           gtp_r_tipo_localizacion TYPE RANGE OF ztmmi1082_1-tipo_localizacion.
+
+    DATA: gti_maestro_reposiciones   TYPE gtp_ti_maestro_reposiciones,
+          go_parametros              TYPE REF TO zclcxr1000_parametros,
+          gti_planificacion_symphony TYPE STANDARD TABLE OF ztmmi1045_1.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      visualizar_reposiciones
+        IMPORTING
+          VALUE(i_r_localizacion) TYPE gtp_r_localizacion
+          i_r_dias_semana         TYPE gtp_r_dias_semana
+          i_r_calendario          TYPE gtp_r_calendario
+          i_r_tipo_localizacion   TYPE gtp_r_tipo_localizacion,
+      consultar_calendario
+        IMPORTING
+          i_r_calendario   TYPE gtp_r_calendario
+          VALUE(i_r_fecha) TYPE gtp_r_fecha,
+      cargar_archivo
+        IMPORTING
+          i_nombre_archivo TYPE localfile,
+      consultar_reposiciones
+        IMPORTING
+          VALUE(i_r_localizacion)          TYPE gtp_r_localizacion OPTIONAL
+          i_r_dias_semana                  TYPE gtp_r_dias_semana OPTIONAL
+          i_r_calendario                   TYPE gtp_r_calendario OPTIONAL
+          i_r_tipo_localizacion            TYPE gtp_r_tipo_localizacion OPTIONAL
+        RETURNING
+          VALUE(r_ti_maestro_reposiciones) TYPE gtp_ti_maestro_reposiciones,
+      preparar_env_reposicion_manual
+        IMPORTING
+          i_r_tipo_localizacion   TYPE gtp_r_tipo_localizacion
+          VALUE(i_r_localizacion) TYPE gtp_r_localizacion
+          i_reponer               TYPE flag,
+      enviar_reposicion_onebeat
+        EXPORTING
+          e_ti_return   TYPE bapiret2_t
+        CHANGING
+          i_datos_proxy TYPE REF TO data,
+      enviar_reposicion_job.
+
+    CLASS-METHODS:
+      f4_tipo_localizacion
+        CHANGING
+          c_tipo_localizacion TYPE ztmmi1082_1-tipo_localizacion,
+      f4_localizacion
+        CHANGING
+          c_localizacion TYPE ztmmi1082_1-localizacion.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+    METHODS completar_dato_x_planificacion
+      IMPORTING
+        i_reponer                 TYPE flag OPTIONAL
+        i_avoid_replenishment     TYPE flag OPTIONAL
+      CHANGING
+        c_ti_maestro_reposiciones TYPE gtp_ti_maestro_reposiciones
+        c_es_datos_reposicion     TYPE zpxreposicion_enviar.
+    METHODS consumir_proxy
+      CHANGING
+        c_es_datos_reposicion TYPE zpxreposicion_enviar.
+
+ENDCLASS.
+
+
+
+CLASS zclmmi1082_modifica_reposicion IMPLEMENTATION.
+
+  METHOD consultar_reposiciones.
+
+    DATA: indicador_borrado TYPE flag.
+
+    "Verifica autorización para importar
+    AUTHORITY-CHECK OBJECT 'ZI1082_1'
+        ID 'ACTVT' FIELD '02'.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e267(wtaddi).
+    ENDIF.
+
+    LOOP AT i_r_localizacion ASSIGNING FIELD-SYMBOL(<fs_es_localizacion>).
+      <fs_es_localizacion>-low = |{ <fs_es_localizacion>-low ALPHA = IN }|.
+      <fs_es_localizacion>-high = |{ <fs_es_localizacion>-high ALPHA = IN }|.
+    ENDLOOP.
+
+    SELECT *
+    FROM
+    ztmmi1082_1
+    WHERE localizacion IN @i_r_localizacion
+    AND calendario IN @i_r_calendario
+    AND tipo_localizacion IN @i_r_tipo_localizacion
+    INTO TABLE @r_ti_maestro_reposiciones.
+
+    "Eliminar posiciones que no cumplan con los dias filtrados
+    CHECK i_r_dias_semana IS NOT INITIAL.
+    LOOP AT r_ti_maestro_reposiciones ASSIGNING FIELD-SYMBOL(<fs_es_maestro_reposiciones>).
+
+      indicador_borrado = COND #(  WHEN <fs_es_maestro_reposiciones>-lunes = space AND '1' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-martes = space AND '2' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-miercoles = space AND '3' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-jueves = space AND '4' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-viernes = space AND '5' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-sabado = space AND '6' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-domingo = space AND '7' IN i_r_dias_semana THEN
+                                      abap_true
+                                   ELSE
+                                      abap_false
+                                  ).
+
+
+      IF indicador_borrado = abap_true.
+        DELETE TABLE r_ti_maestro_reposiciones FROM <fs_es_maestro_reposiciones>.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD visualizar_reposiciones.
+
+    DATA: ti_catalogo TYPE lvc_t_fcat.
+
+    gti_maestro_reposiciones = consultar_reposiciones(  i_r_localizacion          = i_r_localizacion
+                                                        i_r_dias_semana           = i_r_dias_semana
+                                                        i_r_calendario            = i_r_calendario
+                                                        i_r_tipo_localizacion     = i_r_tipo_localizacion  ).
+
+    ti_catalogo = zclcxr1002_util=>construir_catalogo( i_ti = gti_maestro_reposiciones  i_optimizar_columnas = abap_true ).
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos    = REF #( gti_maestro_reposiciones )
+        i_ti_catalogo = ti_catalogo.
+
+  ENDMETHOD.
+
+  METHOD cargar_archivo.
+
+    DATA: ti_maestro_reposiciones TYPE STANDARD TABLE OF ztmmi1082_1,
+          valor_celda             TYPE string,
+          cantidad_columnas       TYPE i,
+          indice_fila             TYPE i,
+          indice_columna          TYPE i.
+
+    FIELD-SYMBOLS: <fs_es_maestro_reposiciones> LIKE LINE OF ti_maestro_reposiciones,
+                   <fs_valor_columna>           TYPE any.
+
+    "Verifica autorización para importar
+    AUTHORITY-CHECK OBJECT 'ZI1082_3'
+        ID 'ACTVT' FIELD '60'.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e167(/accgo/uis_msg).
+    ENDIF.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+    go_log->remover_mensage(  ).
+
+    TRY.
+        DATA(ti_datos_archivo) =  zclcxr1002_cargar_archivo=>cargar_excel_multiples_hojas( i_filename  = i_nombre_archivo i_n_hojas    = 1 ).
+
+        cantidad_columnas = REDUCE i( INIT x = 0
+                                      FOR es_linea IN ti_datos_archivo WHERE ( row = 1 )
+                                      NEXT x = x + 1
+                                    ).
+      CATCH cx_t100_msg.
+        "handle exception
+    ENDTRY.
+
+    IF cantidad_columnas = 10.
+      DATA(ti_maestro_reposiciones_bd) = consultar_reposiciones( ).
+      "Consultar calendarios
+      SELECT *
+      FROM tfacd
+      INTO TABLE @DATA(ti_calendarios).
+
+      LOOP AT ti_datos_archivo ASSIGNING FIELD-SYMBOL(<fs_es_dato_archivo>) WHERE row > 1.
+
+        indice_fila = <fs_es_dato_archivo>-row.
+
+        AT NEW row.
+          APPEND INITIAL LINE TO ti_maestro_reposiciones ASSIGNING <fs_es_maestro_reposiciones>.
+        ENDAT.
+
+        DO.
+          indice_columna = sy-index.
+          CHECK indice_columna > 1.
+          "Solo hasta columna "Tipo Localizacion"
+          IF indice_columna = 12.
+            EXIT.
+          ENDIF.
+
+          ASSIGN COMPONENT indice_columna OF STRUCTURE <fs_es_maestro_reposiciones>
+          TO <fs_valor_columna>.
+          "Se omite columna mandante
+          TRY.
+              indice_columna     = indice_columna - 1.
+              <fs_valor_columna> = ti_datos_archivo[ row = indice_fila col = indice_columna ]-value.
+              "Columna localizacion
+              IF indice_columna = 1.
+                <fs_valor_columna> = |{ <fs_valor_columna> ALPHA = IN }|.
+              ENDIF.
+              "Columnas dias
+              IF indice_columna >= 2 AND indice_columna <= 8.
+                <fs_valor_columna> = to_upper( <fs_valor_columna> ).
+                CONDENSE <fs_valor_columna> NO-GAPS.
+                IF  <fs_valor_columna> NE 'X' AND <fs_valor_columna> NE space.
+                  go_log->set_es_log( i_es = VALUE #( id = 'ZPP01' number = '043' type = 'E'
+                                                      message_v1 = shift_left( val = CONV string( indice_fila ) ) )  ).
+                ENDIF.
+              ENDIF.
+
+              valor_celda = <fs_valor_columna>.
+              CONDENSE valor_celda NO-GAPS.
+
+              "Columna Calendario
+              "Calendario valido
+              IF indice_columna = 9 AND NOT line_exists( ti_calendarios[ ident = valor_celda ] ).
+                go_log->set_es_log( i_es = VALUE #( id = '/PF1/MSG_RP' number = '638' type = 'E'
+                                                    message_v1 = valor_celda message_v2 = valor_celda )    ).
+              ENDIF.
+
+              "Validar que las ultimas dos columnas no esten vacias
+              IF ( indice_columna = 9 OR indice_columna = 10 ) AND valor_celda IS INITIAL.
+                go_log->set_es_log( i_es = VALUE #( id = 'ZPP01' number = '021' type = 'E'
+                                                    message_v1 = 'Calendario' message_v2 = 'Tp. Localizacion' )    ).
+                EXIT.
+              ENDIF.
+
+            CATCH cx_sy_itab_line_not_found.
+          ENDTRY.
+
+        ENDDO.
+
+        IF go_log->get_errores( ) IS NOT INITIAL.
+          go_log->mostrar_log( i_ventana_emergente = abap_true ).
+          EXIT.
+        ENDIF.
+
+        TRY.
+
+            DATA(es_maestro_reposiciones_bd) = ti_maestro_reposiciones_bd[ localizacion = <fs_es_maestro_reposiciones>-localizacion ].
+
+            <fs_es_maestro_reposiciones>-fechacrea            = es_maestro_reposiciones_bd-fechacrea.
+            <fs_es_maestro_reposiciones>-horacrea             = es_maestro_reposiciones_bd-horacrea.
+            <fs_es_maestro_reposiciones>-usuariocrea          = es_maestro_reposiciones_bd-usuariocrea.
+            <fs_es_maestro_reposiciones>-ejecucion_reposicion = es_maestro_reposiciones_bd-ejecucion_reposicion.
+
+            <fs_es_maestro_reposiciones>-fechaactualiza       = sy-datum.
+            <fs_es_maestro_reposiciones>-horaactualiza        = sy-uzeit.
+            <fs_es_maestro_reposiciones>-usuariomodifica      = sy-uname.
+          CATCH cx_sy_itab_line_not_found.
+            <fs_es_maestro_reposiciones>-fechacrea            = sy-datum.
+            <fs_es_maestro_reposiciones>-horacrea             = sy-uzeit.
+            <fs_es_maestro_reposiciones>-usuariocrea          = sy-uname.
+        ENDTRY.
+
+      ENDLOOP.
+
+      IF ti_maestro_reposiciones IS NOT INITIAL AND go_log->get_errores( ) IS INITIAL.
+
+        MODIFY ztmmi1082_1 FROM TABLE ti_maestro_reposiciones.
+
+        IF sy-subrc IS INITIAL.
+          MESSAGE i066(rscrt).
+        ENDIF.
+      ELSE.
+        MESSAGE i047(gho_alloc_measpoint).
+      ENDIF.
+
+    ELSE.
+      MESSAGE i059(/accgo/cak_pfm).
+    ENDIF.
+
+
+  ENDMETHOD.
+
+  METHOD f4_localizacion.
+    DATA: ti_valores_retornados TYPE STANDARD TABLE OF ddshretval.
+
+    SELECT DISTINCT localizacion AS localizacion
+      FROM ztmmi1082_1
+      INTO TABLE @DATA(ti_valores).
+
+    CHECK sy-subrc IS INITIAL.
+
+    CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+      EXPORTING
+        retfield        = 'LOCALIZACION'    " Name of field in VALUE_TAB
+        value_org       = 'S'        " Value return: C: cell by cell, S: structured
+      TABLES
+        value_tab       = ti_valores  " Table of values: entries cell by cell
+        return_tab      = ti_valores_retornados  " Return the selected value
+      EXCEPTIONS
+        parameter_error = 1          " Incorrect parameter
+        no_values_found = 2          " No values found
+        OTHERS          = 3.
+
+    CHECK sy-subrc IS INITIAL.
+
+    c_localizacion = VALUE #( ti_valores_retornados[ 1 ]-fieldval OPTIONAL ).
+  ENDMETHOD.
+
+  METHOD f4_tipo_localizacion.
+    DATA: ti_valores_retornados TYPE STANDARD TABLE OF ddshretval.
+
+    SELECT DISTINCT tipo_localizacion AS tipo_localizacion
+      FROM ztmmi1082_1
+      INTO TABLE @DATA(ti_valores).
+
+    CHECK sy-subrc IS INITIAL.
+
+    CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+      EXPORTING
+        retfield        = 'TIPO_LOCALIZACION'    " Name of field in VALUE_TAB
+        value_org       = 'S'        " Value return: C: cell by cell, S: structured
+      TABLES
+        value_tab       = ti_valores  " Table of values: entries cell by cell
+        return_tab      = ti_valores_retornados  " Return the selected value
+      EXCEPTIONS
+        parameter_error = 1          " Incorrect parameter
+        no_values_found = 2          " No values found
+        OTHERS          = 3.
+
+    CHECK sy-subrc IS INITIAL.
+
+    c_tipo_localizacion = VALUE #( ti_valores_retornados[ 1 ]-fieldval OPTIONAL ).
+  ENDMETHOD.
+
+  METHOD enviar_reposicion_onebeat.
+    DATA: o_proxy           TYPE REF TO zpxco_reposicion_enviar_out,
+          localizacion      TYPE ztmmi1082_1-localizacion,
+          o_async_messaging TYPE REF TO if_wsprotocol_async_messaging.
+
+    FIELD-SYMBOLS: <fs_datos_reposicion> TYPE zpxreposicion_enviar-reposicion_enviar-datos.
+
+    ASSIGN i_datos_proxy->* TO FIELD-SYMBOL(<fs_datos_proxy>).
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    TRY.
+        o_proxy = NEW zpxco_reposicion_enviar_out(  ).
+
+        o_async_messaging ?= o_proxy->get_protocol( if_wsprotocol=>async_messaging ).
+        o_async_messaging->set_serialization_context('I1082_EOIO').
+
+        o_proxy->reposicion_enviar_async( output = <fs_datos_proxy> ).
+        "Actualizar fecha de reposicon
+        ASSIGN COMPONENT 'REPOSICION_ENVIAR-DATOS' OF STRUCTURE <fs_datos_proxy>
+        TO <fs_datos_reposicion>.
+
+        LOOP AT <fs_datos_reposicion> INTO DATA(es_dato_proxy).
+
+          IF es_dato_proxy-stock_location CS '-'.
+            es_dato_proxy-stock_location = es_dato_proxy-stock_location(4).
+          ENDIF.
+
+          localizacion = |{ es_dato_proxy-stock_location ALPHA = IN }|.
+
+          UPDATE ztmmi1082_1 SET ejecucion_reposicion = sy-datum
+          WHERE localizacion = localizacion.
+        ENDLOOP.
+
+        COMMIT WORK AND WAIT.
+
+        "Retornar mensaje de envio correcto
+        go_log->set_es_log( i_es = VALUE #( type = 'S' id = 'ZCX01' number = '037'  ) ).
+
+      CATCH cx_ai_system_fault INTO DATA(o_cx).
+        go_log->set_o_cx_log( o_cx ).
+    ENDTRY.
+
+    APPEND LINES OF CORRESPONDING bapiret2_t( go_log->get_log( ) )  TO e_ti_return.
+
+  ENDMETHOD.
+
+  METHOD preparar_env_reposicion_manual.
+
+    DATA: ti_maestro_reposiciones TYPE gtp_ti_maestro_reposiciones,
+          es_datos_reposicion     TYPE zpxreposicion_enviar.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    "Verifica autorización para importar
+    AUTHORITY-CHECK OBJECT 'ZI1082_2'
+        ID 'ACTVT' FIELD '16'.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e212(proj_billg_elmnt).
+    ENDIF.
+    "Por lo menos un valor para filtrar debe ser ingresado
+    IF i_r_localizacion IS INITIAL AND i_r_tipo_localizacion IS INITIAL.
+      MESSAGE e110(zmm01).
+    ENDIF.
+
+    LOOP AT i_r_localizacion ASSIGNING FIELD-SYMBOL(<fs_es_localizacion>).
+      <fs_es_localizacion>-low = |{ <fs_es_localizacion>-low ALPHA = IN }|.
+      <fs_es_localizacion>-high = |{ <fs_es_localizacion>-high ALPHA = IN }|.
+    ENDLOOP.
+
+    SELECT *
+    FROM ztmmi1082_1
+    WHERE localizacion IN @i_r_localizacion
+    AND   tipo_localizacion IN @i_r_tipo_localizacion
+    INTO TABLE @ti_maestro_reposiciones.
+
+    IF ti_maestro_reposiciones IS NOT INITIAL.
+      completar_dato_x_planificacion( EXPORTING i_reponer = i_reponer
+                                       CHANGING c_ti_maestro_reposiciones = ti_maestro_reposiciones
+                                                c_es_datos_reposicion     = es_datos_reposicion ).
+
+
+      consumir_proxy( CHANGING c_es_datos_reposicion = es_datos_reposicion ).
+    ELSE.
+      MESSAGE i274(zmm01).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD enviar_reposicion_job.
+
+    DATA: dia_siguiente            TYPE d,
+          dia_semana               TYPE cind,
+          texto_dia_semana         TYPE string,
+          es_datos_reposicion      TYPE zpxreposicion_enviar,
+          _ti_maestro_reposiciones TYPE gtp_ti_maestro_reposiciones,
+          atributo_dias            TYPE STANDARD TABLE OF casdayattr.
+
+    CHECK sy-batch = abap_true.
+
+    SELECT *
+    FROM ztmmi1082_1
+    WHERE ejecucion_reposicion IS INITIAL
+    OR ejecucion_reposicion < @sy-datum
+    INTO TABLE @DATA(ti_maestro_reposiciones).
+
+    dia_siguiente = sy-datum + 1.
+
+    LOOP AT ti_maestro_reposiciones ASSIGNING FIELD-SYMBOL(<fs_es_maestro_reposiciones>).
+
+      CLEAR: atributo_dias, _ti_maestro_reposiciones.
+
+      APPEND <fs_es_maestro_reposiciones> TO _ti_maestro_reposiciones.
+
+      CALL FUNCTION 'DAY_ATTRIBUTES_GET'
+        EXPORTING
+          factory_calendar           = <fs_es_maestro_reposiciones>-calendario
+          date_from                  = dia_siguiente
+          date_to                    = dia_siguiente
+        TABLES
+          day_attributes             = atributo_dias
+        EXCEPTIONS
+          factory_calendar_not_found = 1
+          holiday_calendar_not_found = 2
+          date_has_invalid_format    = 3
+          date_inconsistency         = 4
+          OTHERS                     = 5.
+
+      "Si el día siguiente a la ejecución, corresponde a un día festivo, entonces
+      IF sy-subrc IS INITIAL.
+        IF atributo_dias[ 1 ]-freeday = abap_true.
+
+          completar_dato_x_planificacion( EXPORTING
+                                              i_avoid_replenishment = '1'
+                                           CHANGING
+                                              c_ti_maestro_reposiciones = _ti_maestro_reposiciones
+                                              c_es_datos_reposicion     = es_datos_reposicion ).
+        ELSE."Si el día siguiente a la ejecución, corresponde a un día NO festivo, entonces
+
+          CALL FUNCTION 'DATE_COMPUTE_DAY'
+            EXPORTING
+              date = dia_siguiente
+            IMPORTING
+              day  = dia_semana.
+
+          texto_dia_semana = SWITCH string( dia_semana WHEN 1 THEN 'LUNES' WHEN 2 THEN 'MARTES' WHEN 3 THEN 'MIERCOLES' WHEN 4 THEN 'JUEVES'
+                                                       WHEN 5 THEN 'VIERNES' WHEN 6 THEN 'SABADO' WHEN 7 THEN 'DOMINGO' ).
+          ASSIGN COMPONENT texto_dia_semana OF STRUCTURE <fs_es_maestro_reposiciones> TO FIELD-SYMBOL(<fs_dia_semana>).
+
+          CHECK sy-subrc IS INITIAL.
+          "Validar si el día siguiente a la ejecución es un día activo de la semana para reposición
+          completar_dato_x_planificacion( EXPORTING                          "Si es un día activo de la semana para reposición
+                                              i_avoid_replenishment = COND #( WHEN <fs_dia_semana> = abap_true THEN
+                                                                                  '0'
+                                                                              ELSE "Si es un día NO activo de la semana para reposición
+                                                                                  '1' )
+                                          CHANGING
+                                              c_ti_maestro_reposiciones = _ti_maestro_reposiciones
+                                              c_es_datos_reposicion     = es_datos_reposicion ).
+
+        ENDIF.
+
+      ELSE.
+        MESSAGE e638(/pf1/msg_rp) WITH <fs_es_maestro_reposiciones>-calendario <fs_es_maestro_reposiciones>-calendario.
+      ENDIF.
+    ENDLOOP.
+
+    consumir_proxy( CHANGING c_es_datos_reposicion = es_datos_reposicion ).
+
+  ENDMETHOD.
+
+
+  METHOD completar_dato_x_planificacion.
+
+    DATA: es_planificacion_symphony     LIKE LINE OF gti_planificacion_symphony,
+          filtro_planificacion_symphony TYPE string.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    "Consultar centros/clientes
+    IF gti_planificacion_symphony IS INITIAL.
+      SELECT *
+      FROM ztmmi1045_1
+      WHERE avoid_reabaste = '0'
+      AND   sustituto      = '0'
+      INTO TABLE @gti_planificacion_symphony.
+    ENDIF.
+
+    SORT c_ti_maestro_reposiciones BY localizacion.
+
+    LOOP AT c_ti_maestro_reposiciones INTO DATA(es_maestro_reposiciones).
+
+      CLEAR: filtro_planificacion_symphony.
+
+      es_maestro_reposiciones-localizacion = |{ es_maestro_reposiciones-localizacion ALPHA = OUT }|.
+
+      "Centro
+      IF strlen( es_maestro_reposiciones-localizacion ) = 4 AND
+         line_exists( gti_planificacion_symphony[ centro = es_maestro_reposiciones-localizacion ] ).
+        filtro_planificacion_symphony = |CENTRO = '{ es_maestro_reposiciones-localizacion }'|.
+        "Cliente
+      ELSEIF line_exists( gti_planificacion_symphony[ kunnr = |{ es_maestro_reposiciones-localizacion ALPHA = IN }| ] ).
+        es_maestro_reposiciones-localizacion = |{ es_maestro_reposiciones-localizacion ALPHA = IN }|.
+        filtro_planificacion_symphony = |KUNNR = '{ es_maestro_reposiciones-localizacion }'|.
+      ELSE.
+
+        go_log->set_es_log( i_es = VALUE #( id = 'ZMM01' number = '141' type = 'W'
+                                            message_v1 = es_maestro_reposiciones-localizacion  ) ).
+
+        CONTINUE.
+      ENDIF.
+
+      LOOP AT gti_planificacion_symphony INTO es_planificacion_symphony WHERE (filtro_planificacion_symphony).
+
+        APPEND INITIAL LINE TO c_es_datos_reposicion-reposicion_enviar-datos
+        ASSIGNING FIELD-SYMBOL(<fes_es_datos_reposicion>).
+
+        <fes_es_datos_reposicion>-stock_location = COND #( WHEN es_planificacion_symphony-centro IS NOT INITIAL THEN
+                                                              |{ es_planificacion_symphony-centro }-{ es_planificacion_symphony-almacen }|
+                                                           WHEN es_planificacion_symphony-kunnr IS NOT INITIAL THEN
+                                                              |{ es_planificacion_symphony-kunnr ALPHA = OUT }|
+                                                         ).
+        <fes_es_datos_reposicion>-sku = COND #( WHEN es_planificacion_symphony-ean_material IS NOT INITIAL THEN
+                                                  |{ es_planificacion_symphony-ean_material ALPHA = OUT }|
+                                                WHEN es_planificacion_symphony-material IS NOT INITIAL THEN
+                                                  |{ es_planificacion_symphony-material ALPHA = OUT }|
+                                              ).
+
+        CONDENSE <fes_es_datos_reposicion>-sku NO-GAPS.
+
+        <fes_es_datos_reposicion>-avoid_replenishment = COND #( WHEN i_avoid_replenishment IS SUPPLIED THEN
+                                                                  i_avoid_replenishment
+                                                                WHEN i_reponer IS SUPPLIED AND i_reponer = abap_true THEN
+                                                                  '0' "Reponer
+                                                                ELSE
+                                                                  '1' "No reporner
+                                                              ).
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD constructor.
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'I1082'  ).
+  ENDMETHOD.
+
+
+  METHOD consumir_proxy.
+
+    DATA: es_datos_reposicion_delta    LIKE c_es_datos_reposicion,
+          paquetes_enviados            TYPE i VALUE 1,
+          cantidad_registros_x_paquete TYPE i,
+          numero_iteracion             TYPE i,
+          cantidad_registros_en_tabla  TYPE i.
+
+    IF c_es_datos_reposicion IS NOT INITIAL.
+      "Parametros
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'I1082'  ).
+
+      cantidad_registros_x_paquete = VALUE #(  go_parametros->gti_parametros[ idparam = 'REG_ARCHIV' ]-low OPTIONAL ).
+
+      IF cantidad_registros_x_paquete IS INITIAL.
+        cantidad_registros_x_paquete = 50000.
+      ENDIF.
+
+      "Consultar la información técnica del proxy
+      SELECT SINGLE *
+        FROM sproxhdr
+       WHERE object =   'CLAS'
+         AND obj_name = 'ZPXCO_REPOSICION_ENVIAR_OUT'
+         AND inactive = @space
+        INTO @DATA(es_info_proxy).
+
+      cantidad_registros_en_tabla = lines( c_es_datos_reposicion-reposicion_enviar-datos ).
+
+      "Enviar por paquetes
+      LOOP AT c_es_datos_reposicion-reposicion_enviar-datos REFERENCE INTO DATA(r_es_reposicion).
+
+        ADD 1 TO numero_iteracion.
+
+        APPEND r_es_reposicion->*
+        TO es_datos_reposicion_delta-reposicion_enviar-datos.
+
+        IF cantidad_registros_x_paquete = ( numero_iteracion / paquetes_enviados ) OR
+           numero_iteracion  = cantidad_registros_en_tabla.
+
+          ADD 1 TO paquetes_enviados.
+
+          "Insertar encabezado
+          INSERT VALUE #( stock_location = 'Stock Location' sku = 'SKU' avoid_replenishment = 'Avoid Replenishment' )
+          INTO es_datos_reposicion_delta-reposicion_enviar-datos INDEX 1.
+
+          TRY.
+              "Inscribe en el monitor la información para el llamado del proxy
+              DATA(o_monitor) = NEW zclcxr1001_monitor_integracion(
+                                      i_ricefw = 'I1082'
+                                      i_es_info_mensaje = VALUE ztcxr1001_1(
+                                                                  pid       = 'SENDER'
+                                                                  fecha_ini = sy-datum
+                                                                  hora_ini  = sy-uzeit
+                                                                  hora_fin  = sy-uzeit
+                                                                  ob_system = 'SAP'
+                                                                  ob_ns     = es_info_proxy-ifr_nspce
+                                                                  ob_name   = es_info_proxy-ifr_name
+                                                                  ib_system = 'ONEBEAT'
+                                                                  tcode     = sy-tcode )
+                                      i_datos_proxy = es_datos_reposicion_delta
+                                      i_no_commit   = abap_true ).
+
+              o_monitor->main( i_datos_proxy = REF #( es_datos_reposicion_delta ) ).
+
+              MESSAGE s079(zcx01) WITH numero_iteracion cantidad_registros_en_tabla.
+
+            CATCH zcxr1001_excepciones_monitor.
+
+          ENDTRY.
+
+          CLEAR: es_datos_reposicion_delta.
+          FREE: o_monitor.
+
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      MESSAGE i028(vj).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD consultar_calendario.
+
+    DATA: ti_atributos_calendario TYPE STANDARD TABLE OF casdayattr,
+          es_fecha                LIKE LINE OF i_r_fecha,
+          ti_reporte_calendario   TYPE gtp_ti_calendario.
+
+    IF i_r_fecha IS INITIAL.
+      i_r_fecha = VALUE #( ( low = sy-datum high = sy-datum ) ).
+    ELSE.
+      es_fecha = i_r_fecha[ 1 ].
+
+      i_r_fecha[ 1 ]-high = COND #( WHEN es_fecha-low IS NOT INITIAL AND es_fecha-high IS INITIAL THEN
+                                      es_fecha-low
+                                    WHEN es_fecha-high IS INITIAL THEN
+                                      sy-datum
+                                    ELSE
+                                      es_fecha-high
+                                  ).
+
+      i_r_fecha[ 1 ]-low = COND #( WHEN es_fecha-low IS INITIAL AND es_fecha-high IS NOT INITIAL THEN
+                                    es_fecha-high
+                                   WHEN es_fecha-low IS NOT INITIAL THEN
+                                    es_fecha-low
+                                 ).
+
+    ENDIF.
+
+    SELECT c~ident, ltext
+    FROM tfacd AS c
+    INNER JOIN tfact AS t
+    ON c~ident = t~ident
+    AND t~spras = @sy-langu
+    WHERE c~ident IN @i_r_calendario
+    INTO TABLE @DATA(ti_id_calendario).
+
+    LOOP AT ti_id_calendario ASSIGNING FIELD-SYMBOL(<fs_es_id_calendario>).
+
+      CLEAR: ti_atributos_calendario.
+
+      CALL FUNCTION 'DAY_ATTRIBUTES_GET'
+        EXPORTING
+          factory_calendar           = <fs_es_id_calendario>-ident
+          date_from                  = i_r_fecha[ 1 ]-low
+          date_to                    = i_r_fecha[ 1 ]-high
+        TABLES
+          day_attributes             = ti_atributos_calendario
+        EXCEPTIONS
+          factory_calendar_not_found = 1
+          holiday_calendar_not_found = 2
+          date_has_invalid_format    = 3
+          date_inconsistency         = 4
+          OTHERS                     = 5.
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE 'I' NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ELSE.
+        LOOP AT ti_atributos_calendario ASSIGNING FIELD-SYMBOL(<fs_es_atributos_calendario>).
+
+          ti_reporte_calendario = VALUE #( BASE ti_reporte_calendario
+                                          (  ident = <fs_es_id_calendario>-ident
+                                             descripcion_calendario = <fs_es_id_calendario>-ltext
+                                             fecha = <fs_es_atributos_calendario>-date
+                                             dia_no_laboral = <fs_es_atributos_calendario>-freeday
+                                             dia_festivo = <fs_es_atributos_calendario>-holiday
+                                             descripcion_dia_festivo = <fs_es_atributos_calendario>-txt_long
+                                             dia_nro = <fs_es_atributos_calendario>-weekday
+                                             dia_de_la_semana = <fs_es_atributos_calendario>-weekday_l
+                                             descripcion_fecha = <fs_es_atributos_calendario>-day_string
+                                          )
+                                         ).
+
+        ENDLOOP.
+      ENDIF.
+
+    ENDLOOP.
+
+    IF ti_reporte_calendario IS NOT INITIAL.
+
+      CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+        EXPORTING
+          i_ti_datos      = REF #( ti_reporte_calendario )
+*         i_ti_catalogo   =
+*         i_status_gui    =
+*         i_statusgui_programa =
+          i_titulo        = TEXT-001
+          i_o_ctr_alvgrid = me.
+
+    ELSE.
+      MESSAGE s002(wusl) DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~modificar_catalogo.
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'DIA_NRO'.
+          <fs_es_catalogo>-outputlen = '10'.
+        WHEN 'FECHA'.
+          <fs_es_catalogo>-col_opt = abap_true.
+        WHEN 'DESCRIPCION_CALENDARIO'.
+          <fs_es_catalogo>-coltext = TEXT-004.
+          <fs_es_catalogo>-col_opt = abap_true.
+        WHEN 'DIA_NO_LABORAL'.
+          <fs_es_catalogo>-coltext = TEXT-002.
+          <fs_es_catalogo>-outputlen = '11'.
+        WHEN 'DIA_FESTIVO'.
+          <fs_es_catalogo>-coltext = TEXT-003.
+          <fs_es_catalogo>-outputlen = '11'.
+      ENDCASE.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~registrar_evento_alv.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclmmi1082_modifica_reposicion DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES: zifcxr1002_alvgrid.
+
+    TYPES: BEGIN OF gtp_es_calendario,
+             ident                   TYPE scal-fcalid,
+             descripcion_calendario  TYPE tfact-ltext,
+             fecha                   TYPE casdayattr-date,
+             dia_no_laboral          TYPE casdayattr-freeday,
+             dia_festivo             TYPE casdayattr-holiday,
+             descripcion_dia_festivo TYPE casdayattr-txt_long,
+             dia_nro                 TYPE casdayattr-weekday,
+             dia_de_la_semana        TYPE casdayattr-weekday_l,
+             descripcion_fecha       TYPE casdayattr-day_string,
+           END OF gtp_es_calendario.
+
+    TYPES: gtp_ti_maestro_reposiciones TYPE STANDARD TABLE OF ztmmi1082_1 WITH KEY localizacion,
+           gtp_ti_calendario           TYPE STANDARD TABLE OF gtp_es_calendario WITH EMPTY KEY.
+
+    TYPES: gtp_r_localizacion      TYPE RANGE OF ztmmi1082_1-localizacion,
+           gtp_r_dias_semana       TYPE RANGE OF /sapapo/ev_usr-m_wday,
+           gtp_r_calendario        TYPE RANGE OF ztmmi1082_1-calendario,
+           gtp_r_fecha             TYPE RANGE OF scal-date,
+           gtp_r_tipo_localizacion TYPE RANGE OF ztmmi1082_1-tipo_localizacion.
+
+    DATA: gti_maestro_reposiciones   TYPE gtp_ti_maestro_reposiciones,
+          go_parametros              TYPE REF TO zclcxr1000_parametros,
+          gti_planificacion_symphony TYPE STANDARD TABLE OF ztmmi1045_1.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      visualizar_reposiciones
+        IMPORTING
+          VALUE(i_r_localizacion) TYPE gtp_r_localizacion
+          i_r_dias_semana         TYPE gtp_r_dias_semana
+          i_r_calendario          TYPE gtp_r_calendario
+          i_r_tipo_localizacion   TYPE gtp_r_tipo_localizacion,
+      consultar_calendario
+        IMPORTING
+          i_r_calendario   TYPE gtp_r_calendario
+          VALUE(i_r_fecha) TYPE gtp_r_fecha,
+      cargar_archivo
+        IMPORTING
+          i_nombre_archivo TYPE localfile,
+      consultar_reposiciones
+        IMPORTING
+          VALUE(i_r_localizacion)          TYPE gtp_r_localizacion OPTIONAL
+          i_r_dias_semana                  TYPE gtp_r_dias_semana OPTIONAL
+          i_r_calendario                   TYPE gtp_r_calendario OPTIONAL
+          i_r_tipo_localizacion            TYPE gtp_r_tipo_localizacion OPTIONAL
+        RETURNING
+          VALUE(r_ti_maestro_reposiciones) TYPE gtp_ti_maestro_reposiciones,
+      preparar_env_reposicion_manual
+        IMPORTING
+          i_r_tipo_localizacion   TYPE gtp_r_tipo_localizacion
+          VALUE(i_r_localizacion) TYPE gtp_r_localizacion
+          i_reponer               TYPE flag,
+      enviar_reposicion_onebeat
+        EXPORTING
+          e_ti_return   TYPE bapiret2_t
+        CHANGING
+          i_datos_proxy TYPE REF TO data,
+      enviar_reposicion_job.
+
+    CLASS-METHODS:
+      f4_tipo_localizacion
+        CHANGING
+          c_tipo_localizacion TYPE ztmmi1082_1-tipo_localizacion,
+      f4_localizacion
+        CHANGING
+          c_localizacion TYPE ztmmi1082_1-localizacion.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+    METHODS completar_dato_x_planificacion
+      IMPORTING
+        i_reponer                 TYPE flag OPTIONAL
+        i_avoid_replenishment     TYPE flag OPTIONAL
+      CHANGING
+        c_ti_maestro_reposiciones TYPE gtp_ti_maestro_reposiciones
+        c_es_datos_reposicion     TYPE zpxreposicion_enviar.
+    METHODS consumir_proxy
+      CHANGING
+        c_es_datos_reposicion TYPE zpxreposicion_enviar.
+
+ENDCLASS.
+
+
+
+CLASS zclmmi1082_modifica_reposicion IMPLEMENTATION.
+
+  METHOD consultar_reposiciones.
+
+    DATA: indicador_borrado TYPE flag.
+
+    "Verifica autorización para importar
+    AUTHORITY-CHECK OBJECT 'ZI1082_1'
+        ID 'ACTVT' FIELD '02'.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e267(wtaddi).
+    ENDIF.
+
+    LOOP AT i_r_localizacion ASSIGNING FIELD-SYMBOL(<fs_es_localizacion>).
+      <fs_es_localizacion>-low = |{ <fs_es_localizacion>-low ALPHA = IN }|.
+      <fs_es_localizacion>-high = |{ <fs_es_localizacion>-high ALPHA = IN }|.
+    ENDLOOP.
+
+    SELECT *
+    FROM
+    ztmmi1082_1
+    WHERE localizacion IN @i_r_localizacion
+    AND calendario IN @i_r_calendario
+    AND tipo_localizacion IN @i_r_tipo_localizacion
+    INTO TABLE @r_ti_maestro_reposiciones.
+
+    "Eliminar posiciones que no cumplan con los dias filtrados
+    CHECK i_r_dias_semana IS NOT INITIAL.
+    LOOP AT r_ti_maestro_reposiciones ASSIGNING FIELD-SYMBOL(<fs_es_maestro_reposiciones>).
+
+      indicador_borrado = COND #(  WHEN <fs_es_maestro_reposiciones>-lunes = space AND '1' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-martes = space AND '2' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-miercoles = space AND '3' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-jueves = space AND '4' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-viernes = space AND '5' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-sabado = space AND '6' IN i_r_dias_semana THEN
+                                      abap_true
+                                   WHEN <fs_es_maestro_reposiciones>-domingo = space AND '7' IN i_r_dias_semana THEN
+                                      abap_true
+                                   ELSE
+                                      abap_false
+                                  ).
+
+
+      IF indicador_borrado = abap_true.
+        DELETE TABLE r_ti_maestro_reposiciones FROM <fs_es_maestro_reposiciones>.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD visualizar_reposiciones.
+
+    DATA: ti_catalogo TYPE lvc_t_fcat.
+
+    gti_maestro_reposiciones = consultar_reposiciones(  i_r_localizacion          = i_r_localizacion
+                                                        i_r_dias_semana           = i_r_dias_semana
+                                                        i_r_calendario            = i_r_calendario
+                                                        i_r_tipo_localizacion     = i_r_tipo_localizacion  ).
+
+    ti_catalogo = zclcxr1002_util=>construir_catalogo( i_ti = gti_maestro_reposiciones  i_optimizar_columnas = abap_true ).
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos    = REF #( gti_maestro_reposiciones )
+        i_ti_catalogo = ti_catalogo.
+
+  ENDMETHOD.
+
+  METHOD cargar_archivo.
+
+    DATA: ti_maestro_reposiciones TYPE STANDARD TABLE OF ztmmi1082_1,
+          valor_celda             TYPE string,
+          cantidad_columnas       TYPE i,
+          indice_fila             TYPE i,
+          indice_columna          TYPE i.
+
+    FIELD-SYMBOLS: <fs_es_maestro_reposiciones> LIKE LINE OF ti_maestro_reposiciones,
+                   <fs_valor_columna>           TYPE any.
+
+    "Verifica autorización para importar
+    AUTHORITY-CHECK OBJECT 'ZI1082_3'
+        ID 'ACTVT' FIELD '60'.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e167(/accgo/uis_msg).
+    ENDIF.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+    go_log->remover_mensage(  ).
+
+    TRY.
+        DATA(ti_datos_archivo) =  zclcxr1002_cargar_archivo=>cargar_excel_multiples_hojas( i_filename  = i_nombre_archivo i_n_hojas    = 1 ).
+
+        cantidad_columnas = REDUCE i( INIT x = 0
+                                      FOR es_linea IN ti_datos_archivo WHERE ( row = 1 )
+                                      NEXT x = x + 1
+                                    ).
+      CATCH cx_t100_msg.
+        "handle exception
+    ENDTRY.
+
+    IF cantidad_columnas = 10.
+      DATA(ti_maestro_reposiciones_bd) = consultar_reposiciones( ).
+      "Consultar calendarios
+      SELECT *
+      FROM tfacd
+      INTO TABLE @DATA(ti_calendarios).
+
+      LOOP AT ti_datos_archivo ASSIGNING FIELD-SYMBOL(<fs_es_dato_archivo>) WHERE row > 1.
+
+        indice_fila = <fs_es_dato_archivo>-row.
+
+        AT NEW row.
+          APPEND INITIAL LINE TO ti_maestro_reposiciones ASSIGNING <fs_es_maestro_reposiciones>.
+        ENDAT.
+
+        DO.
+          indice_columna = sy-index.
+          CHECK indice_columna > 1.
+          "Solo hasta columna "Tipo Localizacion"
+          IF indice_columna = 12.
+            EXIT.
+          ENDIF.
+
+          ASSIGN COMPONENT indice_columna OF STRUCTURE <fs_es_maestro_reposiciones>
+          TO <fs_valor_columna>.
+          "Se omite columna mandante
+          TRY.
+              indice_columna     = indice_columna - 1.
+              <fs_valor_columna> = ti_datos_archivo[ row = indice_fila col = indice_columna ]-value.
+              "Columna localizacion
+              IF indice_columna = 1.
+                <fs_valor_columna> = |{ <fs_valor_columna> ALPHA = IN }|.
+              ENDIF.
+              "Columnas dias
+              IF indice_columna >= 2 AND indice_columna <= 8.
+                <fs_valor_columna> = to_upper( <fs_valor_columna> ).
+                CONDENSE <fs_valor_columna> NO-GAPS.
+                IF  <fs_valor_columna> NE 'X' AND <fs_valor_columna> NE space.
+                  go_log->set_es_log( i_es = VALUE #( id = 'ZPP01' number = '043' type = 'E'
+                                                      message_v1 = shift_left( val = CONV string( indice_fila ) ) )  ).
+                ENDIF.
+              ENDIF.
+
+              valor_celda = <fs_valor_columna>.
+              CONDENSE valor_celda NO-GAPS.
+
+              "Columna Calendario
+              "Calendario valido
+              IF indice_columna = 9 AND NOT line_exists( ti_calendarios[ ident = valor_celda ] ).
+                go_log->set_es_log( i_es = VALUE #( id = '/PF1/MSG_RP' number = '638' type = 'E'
+                                                    message_v1 = valor_celda message_v2 = valor_celda )    ).
+              ENDIF.
+
+              "Validar que las ultimas dos columnas no esten vacias
+              IF ( indice_columna = 9 OR indice_columna = 10 ) AND valor_celda IS INITIAL.
+                go_log->set_es_log( i_es = VALUE #( id = 'ZPP01' number = '021' type = 'E'
+                                                    message_v1 = 'Calendario' message_v2 = 'Tp. Localizacion' )    ).
+                EXIT.
+              ENDIF.
+
+            CATCH cx_sy_itab_line_not_found.
+          ENDTRY.
+
+        ENDDO.
+
+        IF go_log->get_errores( ) IS NOT INITIAL.
+          go_log->mostrar_log( i_ventana_emergente = abap_true ).
+          EXIT.
+        ENDIF.
+
+        TRY.
+
+            DATA(es_maestro_reposiciones_bd) = ti_maestro_reposiciones_bd[ localizacion = <fs_es_maestro_reposiciones>-localizacion ].
+
+            <fs_es_maestro_reposiciones>-fechacrea            = es_maestro_reposiciones_bd-fechacrea.
+            <fs_es_maestro_reposiciones>-horacrea             = es_maestro_reposiciones_bd-horacrea.
+            <fs_es_maestro_reposiciones>-usuariocrea          = es_maestro_reposiciones_bd-usuariocrea.
+            <fs_es_maestro_reposiciones>-ejecucion_reposicion = es_maestro_reposiciones_bd-ejecucion_reposicion.
+
+            <fs_es_maestro_reposiciones>-fechaactualiza       = sy-datum.
+            <fs_es_maestro_reposiciones>-horaactualiza        = sy-uzeit.
+            <fs_es_maestro_reposiciones>-usuariomodifica      = sy-uname.
+          CATCH cx_sy_itab_line_not_found.
+            <fs_es_maestro_reposiciones>-fechacrea            = sy-datum.
+            <fs_es_maestro_reposiciones>-horacrea             = sy-uzeit.
+            <fs_es_maestro_reposiciones>-usuariocrea          = sy-uname.
+        ENDTRY.
+
+      ENDLOOP.
+
+      IF ti_maestro_reposiciones IS NOT INITIAL AND go_log->get_errores( ) IS INITIAL.
+
+        MODIFY ztmmi1082_1 FROM TABLE ti_maestro_reposiciones.
+
+        IF sy-subrc IS INITIAL.
+          MESSAGE i066(rscrt).
+        ENDIF.
+      ELSE.
+        MESSAGE i047(gho_alloc_measpoint).
+      ENDIF.
+
+    ELSE.
+      MESSAGE i059(/accgo/cak_pfm).
+    ENDIF.
+
+
+  ENDMETHOD.
+
+  METHOD f4_localizacion.
+    DATA: ti_valores_retornados TYPE STANDARD TABLE OF ddshretval.
+
+    SELECT DISTINCT localizacion AS localizacion
+      FROM ztmmi1082_1
+      INTO TABLE @DATA(ti_valores).
+
+    CHECK sy-subrc IS INITIAL.
+
+    CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+      EXPORTING
+        retfield        = 'LOCALIZACION'    " Name of field in VALUE_TAB
+        value_org       = 'S'        " Value return: C: cell by cell, S: structured
+      TABLES
+        value_tab       = ti_valores  " Table of values: entries cell by cell
+        return_tab      = ti_valores_retornados  " Return the selected value
+      EXCEPTIONS
+        parameter_error = 1          " Incorrect parameter
+        no_values_found = 2          " No values found
+        OTHERS          = 3.
+
+    CHECK sy-subrc IS INITIAL.
+
+    c_localizacion = VALUE #( ti_valores_retornados[ 1 ]-fieldval OPTIONAL ).
+  ENDMETHOD.
+
+  METHOD f4_tipo_localizacion.
+    DATA: ti_valores_retornados TYPE STANDARD TABLE OF ddshretval.
+
+    SELECT DISTINCT tipo_localizacion AS tipo_localizacion
+      FROM ztmmi1082_1
+      INTO TABLE @DATA(ti_valores).
+
+    CHECK sy-subrc IS INITIAL.
+
+    CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+      EXPORTING
+        retfield        = 'TIPO_LOCALIZACION'    " Name of field in VALUE_TAB
+        value_org       = 'S'        " Value return: C: cell by cell, S: structured
+      TABLES
+        value_tab       = ti_valores  " Table of values: entries cell by cell
+        return_tab      = ti_valores_retornados  " Return the selected value
+      EXCEPTIONS
+        parameter_error = 1          " Incorrect parameter
+        no_values_found = 2          " No values found
+        OTHERS          = 3.
+
+    CHECK sy-subrc IS INITIAL.
+
+    c_tipo_localizacion = VALUE #( ti_valores_retornados[ 1 ]-fieldval OPTIONAL ).
+  ENDMETHOD.
+
+  METHOD enviar_reposicion_onebeat.
+    DATA: o_proxy           TYPE REF TO zpxco_reposicion_enviar_out,
+          localizacion      TYPE ztmmi1082_1-localizacion,
+          o_async_messaging TYPE REF TO if_wsprotocol_async_messaging.
+
+    FIELD-SYMBOLS: <fs_datos_reposicion> TYPE zpxreposicion_enviar-reposicion_enviar-datos.
+
+    ASSIGN i_datos_proxy->* TO FIELD-SYMBOL(<fs_datos_proxy>).
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    TRY.
+        o_proxy = NEW zpxco_reposicion_enviar_out(  ).
+
+        o_async_messaging ?= o_proxy->get_protocol( if_wsprotocol=>async_messaging ).
+        o_async_messaging->set_serialization_context('I1082_EOIO').
+
+        o_proxy->reposicion_enviar_async( output = <fs_datos_proxy> ).
+        "Actualizar fecha de reposicon
+        ASSIGN COMPONENT 'REPOSICION_ENVIAR-DATOS' OF STRUCTURE <fs_datos_proxy>
+        TO <fs_datos_reposicion>.
+
+        LOOP AT <fs_datos_reposicion> INTO DATA(es_dato_proxy).
+
+          IF es_dato_proxy-stock_location CS '-'.
+            es_dato_proxy-stock_location = es_dato_proxy-stock_location(4).
+          ENDIF.
+
+          localizacion = |{ es_dato_proxy-stock_location ALPHA = IN }|.
+
+          UPDATE ztmmi1082_1 SET ejecucion_reposicion = sy-datum
+          WHERE localizacion = localizacion.
+        ENDLOOP.
+
+        COMMIT WORK AND WAIT.
+
+        "Retornar mensaje de envio correcto
+        go_log->set_es_log( i_es = VALUE #( type = 'S' id = 'ZCX01' number = '037'  ) ).
+
+      CATCH cx_ai_system_fault INTO DATA(o_cx).
+        go_log->set_o_cx_log( o_cx ).
+    ENDTRY.
+
+    APPEND LINES OF CORRESPONDING bapiret2_t( go_log->get_log( ) )  TO e_ti_return.
+
+  ENDMETHOD.
+
+  METHOD preparar_env_reposicion_manual.
+
+    DATA: ti_maestro_reposiciones TYPE gtp_ti_maestro_reposiciones,
+          es_datos_reposicion     TYPE zpxreposicion_enviar.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    "Verifica autorización para importar
+    AUTHORITY-CHECK OBJECT 'ZI1082_2'
+        ID 'ACTVT' FIELD '16'.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e212(proj_billg_elmnt).
+    ENDIF.
+    "Por lo menos un valor para filtrar debe ser ingresado
+    IF i_r_localizacion IS INITIAL AND i_r_tipo_localizacion IS INITIAL.
+      MESSAGE e110(zmm01).
+    ENDIF.
+
+    LOOP AT i_r_localizacion ASSIGNING FIELD-SYMBOL(<fs_es_localizacion>).
+      <fs_es_localizacion>-low = |{ <fs_es_localizacion>-low ALPHA = IN }|.
+      <fs_es_localizacion>-high = |{ <fs_es_localizacion>-high ALPHA = IN }|.
+    ENDLOOP.
+
+    SELECT *
+    FROM ztmmi1082_1
+    WHERE localizacion IN @i_r_localizacion
+    AND   tipo_localizacion IN @i_r_tipo_localizacion
+    INTO TABLE @ti_maestro_reposiciones.
+
+    IF ti_maestro_reposiciones IS NOT INITIAL.
+      completar_dato_x_planificacion( EXPORTING i_reponer = i_reponer
+                                       CHANGING c_ti_maestro_reposiciones = ti_maestro_reposiciones
+                                                c_es_datos_reposicion     = es_datos_reposicion ).
+
+
+      consumir_proxy( CHANGING c_es_datos_reposicion = es_datos_reposicion ).
+    ELSE.
+      MESSAGE i274(zmm01).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD enviar_reposicion_job.
+
+    DATA: dia_siguiente            TYPE d,
+          dia_semana               TYPE cind,
+          texto_dia_semana         TYPE string,
+          es_datos_reposicion      TYPE zpxreposicion_enviar,
+          _ti_maestro_reposiciones TYPE gtp_ti_maestro_reposiciones,
+          atributo_dias            TYPE STANDARD TABLE OF casdayattr.
+
+    CHECK sy-batch = abap_true.
+
+    SELECT *
+    FROM ztmmi1082_1
+    WHERE ejecucion_reposicion IS INITIAL
+    OR ejecucion_reposicion < @sy-datum
+    INTO TABLE @DATA(ti_maestro_reposiciones).
+
+    dia_siguiente = sy-datum + 1.
+
+    LOOP AT ti_maestro_reposiciones ASSIGNING FIELD-SYMBOL(<fs_es_maestro_reposiciones>).
+
+      CLEAR: atributo_dias, _ti_maestro_reposiciones.
+
+      APPEND <fs_es_maestro_reposiciones> TO _ti_maestro_reposiciones.
+
+      CALL FUNCTION 'DAY_ATTRIBUTES_GET'
+        EXPORTING
+          factory_calendar           = <fs_es_maestro_reposiciones>-calendario
+          date_from                  = dia_siguiente
+          date_to                    = dia_siguiente
+        TABLES
+          day_attributes             = atributo_dias
+        EXCEPTIONS
+          factory_calendar_not_found = 1
+          holiday_calendar_not_found = 2
+          date_has_invalid_format    = 3
+          date_inconsistency         = 4
+          OTHERS                     = 5.
+
+      "Si el día siguiente a la ejecución, corresponde a un día festivo, entonces
+      IF sy-subrc IS INITIAL.
+        IF atributo_dias[ 1 ]-freeday = abap_true.
+
+          completar_dato_x_planificacion( EXPORTING
+                                              i_avoid_replenishment = '1'
+                                           CHANGING
+                                              c_ti_maestro_reposiciones = _ti_maestro_reposiciones
+                                              c_es_datos_reposicion     = es_datos_reposicion ).
+        ELSE."Si el día siguiente a la ejecución, corresponde a un día NO festivo, entonces
+
+          CALL FUNCTION 'DATE_COMPUTE_DAY'
+            EXPORTING
+              date = dia_siguiente
+            IMPORTING
+              day  = dia_semana.
+
+          texto_dia_semana = SWITCH string( dia_semana WHEN 1 THEN 'LUNES' WHEN 2 THEN 'MARTES' WHEN 3 THEN 'MIERCOLES' WHEN 4 THEN 'JUEVES'
+                                                       WHEN 5 THEN 'VIERNES' WHEN 6 THEN 'SABADO' WHEN 7 THEN 'DOMINGO' ).
+          ASSIGN COMPONENT texto_dia_semana OF STRUCTURE <fs_es_maestro_reposiciones> TO FIELD-SYMBOL(<fs_dia_semana>).
+
+          CHECK sy-subrc IS INITIAL.
+          "Validar si el día siguiente a la ejecución es un día activo de la semana para reposición
+          completar_dato_x_planificacion( EXPORTING                          "Si es un día activo de la semana para reposición
+                                              i_avoid_replenishment = COND #( WHEN <fs_dia_semana> = abap_true THEN
+                                                                                  '0'
+                                                                              ELSE "Si es un día NO activo de la semana para reposición
+                                                                                  '1' )
+                                          CHANGING
+                                              c_ti_maestro_reposiciones = _ti_maestro_reposiciones
+                                              c_es_datos_reposicion     = es_datos_reposicion ).
+
+        ENDIF.
+
+      ELSE.
+        MESSAGE e638(/pf1/msg_rp) WITH <fs_es_maestro_reposiciones>-calendario <fs_es_maestro_reposiciones>-calendario.
+      ENDIF.
+    ENDLOOP.
+
+    consumir_proxy( CHANGING c_es_datos_reposicion = es_datos_reposicion ).
+
+  ENDMETHOD.
+
+
+  METHOD completar_dato_x_planificacion.
+
+    DATA: es_planificacion_symphony     LIKE LINE OF gti_planificacion_symphony,
+          filtro_planificacion_symphony TYPE string.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    "Consultar centros/clientes
+    IF gti_planificacion_symphony IS INITIAL.
+      SELECT *
+      FROM ztmmi1045_1
+      WHERE avoid_reabaste = '0'
+      AND   sustituto      = '0'
+      INTO TABLE @gti_planificacion_symphony.
+    ENDIF.
+
+    SORT c_ti_maestro_reposiciones BY localizacion.
+
+    LOOP AT c_ti_maestro_reposiciones INTO DATA(es_maestro_reposiciones).
+
+      CLEAR: filtro_planificacion_symphony.
+
+      es_maestro_reposiciones-localizacion = |{ es_maestro_reposiciones-localizacion ALPHA = OUT }|.
+
+      "Centro
+      IF strlen( es_maestro_reposiciones-localizacion ) = 4 AND
+         line_exists( gti_planificacion_symphony[ centro = es_maestro_reposiciones-localizacion ] ).
+        filtro_planificacion_symphony = |CENTRO = '{ es_maestro_reposiciones-localizacion }'|.
+        "Cliente
+      ELSEIF line_exists( gti_planificacion_symphony[ kunnr = |{ es_maestro_reposiciones-localizacion ALPHA = IN }| ] ).
+        es_maestro_reposiciones-localizacion = |{ es_maestro_reposiciones-localizacion ALPHA = IN }|.
+        filtro_planificacion_symphony = |KUNNR = '{ es_maestro_reposiciones-localizacion }'|.
+      ELSE.
+
+        go_log->set_es_log( i_es = VALUE #( id = 'ZMM01' number = '141' type = 'W'
+                                            message_v1 = es_maestro_reposiciones-localizacion  ) ).
+
+        CONTINUE.
+      ENDIF.
+
+      LOOP AT gti_planificacion_symphony INTO es_planificacion_symphony WHERE (filtro_planificacion_symphony).
+
+        APPEND INITIAL LINE TO c_es_datos_reposicion-reposicion_enviar-datos
+        ASSIGNING FIELD-SYMBOL(<fes_es_datos_reposicion>).
+
+        <fes_es_datos_reposicion>-stock_location = COND #( WHEN es_planificacion_symphony-centro IS NOT INITIAL THEN
+                                                              |{ es_planificacion_symphony-centro }-{ es_planificacion_symphony-almacen }|
+                                                           WHEN es_planificacion_symphony-kunnr IS NOT INITIAL THEN
+                                                              |{ es_planificacion_symphony-kunnr ALPHA = OUT }|
+                                                         ).
+        <fes_es_datos_reposicion>-sku = COND #( WHEN es_planificacion_symphony-ean_material IS NOT INITIAL THEN
+                                                  |{ es_planificacion_symphony-ean_material ALPHA = OUT }|
+                                                WHEN es_planificacion_symphony-material IS NOT INITIAL THEN
+                                                  |{ es_planificacion_symphony-material ALPHA = OUT }|
+                                              ).
+
+        CONDENSE <fes_es_datos_reposicion>-sku NO-GAPS.
+
+        <fes_es_datos_reposicion>-avoid_replenishment = COND #( WHEN i_avoid_replenishment IS SUPPLIED THEN
+                                                                  i_avoid_replenishment
+                                                                WHEN i_reponer IS SUPPLIED AND i_reponer = abap_true THEN
+                                                                  '0' "Reponer
+                                                                ELSE
+                                                                  '1' "No reporner
+                                                              ).
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD constructor.
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'I1082'  ).
+  ENDMETHOD.
+
+
+  METHOD consumir_proxy.
+
+    DATA: es_datos_reposicion_delta    LIKE c_es_datos_reposicion,
+          paquetes_enviados            TYPE i VALUE 1,
+          cantidad_registros_x_paquete TYPE i,
+          numero_iteracion             TYPE i,
+          cantidad_registros_en_tabla  TYPE i.
+
+    IF c_es_datos_reposicion IS NOT INITIAL.
+      "Parametros
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'I1082'  ).
+
+      cantidad_registros_x_paquete = VALUE #(  go_parametros->gti_parametros[ idparam = 'REG_ARCHIV' ]-low OPTIONAL ).
+
+      IF cantidad_registros_x_paquete IS INITIAL.
+        cantidad_registros_x_paquete = 50000.
+      ENDIF.
+
+      "Consultar la información técnica del proxy
+      SELECT SINGLE *
+        FROM sproxhdr
+       WHERE object =   'CLAS'
+         AND obj_name = 'ZPXCO_REPOSICION_ENVIAR_OUT'
+         AND inactive = @space
+        INTO @DATA(es_info_proxy).
+
+      cantidad_registros_en_tabla = lines( c_es_datos_reposicion-reposicion_enviar-datos ).
+
+      "Enviar por paquetes
+      LOOP AT c_es_datos_reposicion-reposicion_enviar-datos REFERENCE INTO DATA(r_es_reposicion).
+
+        ADD 1 TO numero_iteracion.
+
+        APPEND r_es_reposicion->*
+        TO es_datos_reposicion_delta-reposicion_enviar-datos.
+
+        IF cantidad_registros_x_paquete = ( numero_iteracion / paquetes_enviados ) OR
+           numero_iteracion  = cantidad_registros_en_tabla.
+
+          ADD 1 TO paquetes_enviados.
+
+          "Insertar encabezado
+          INSERT VALUE #( stock_location = 'Stock Location' sku = 'SKU' avoid_replenishment = 'Avoid Replenishment' )
+          INTO es_datos_reposicion_delta-reposicion_enviar-datos INDEX 1.
+
+          TRY.
+              "Inscribe en el monitor la información para el llamado del proxy
+              DATA(o_monitor) = NEW zclcxr1001_monitor_integracion(
+                                      i_ricefw = 'I1082'
+                                      i_es_info_mensaje = VALUE ztcxr1001_1(
+                                                                  pid       = 'SENDER'
+                                                                  fecha_ini = sy-datum
+                                                                  hora_ini  = sy-uzeit
+                                                                  hora_fin  = sy-uzeit
+                                                                  ob_system = 'SAP'
+                                                                  ob_ns     = es_info_proxy-ifr_nspce
+                                                                  ob_name   = es_info_proxy-ifr_name
+                                                                  ib_system = 'ONEBEAT'
+                                                                  tcode     = sy-tcode )
+                                      i_datos_proxy = es_datos_reposicion_delta
+                                      i_no_commit   = abap_true ).
+
+              o_monitor->main( i_datos_proxy = REF #( es_datos_reposicion_delta ) ).
+
+              MESSAGE s079(zcx01) WITH numero_iteracion cantidad_registros_en_tabla.
+
+            CATCH zcxr1001_excepciones_monitor.
+
+          ENDTRY.
+
+          CLEAR: es_datos_reposicion_delta.
+          FREE: o_monitor.
+
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      MESSAGE i028(vj).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD consultar_calendario.
+
+    DATA: ti_atributos_calendario TYPE STANDARD TABLE OF casdayattr,
+          es_fecha                LIKE LINE OF i_r_fecha,
+          ti_reporte_calendario   TYPE gtp_ti_calendario.
+
+    IF i_r_fecha IS INITIAL.
+      i_r_fecha = VALUE #( ( low = sy-datum high = sy-datum ) ).
+    ELSE.
+      es_fecha = i_r_fecha[ 1 ].
+
+      i_r_fecha[ 1 ]-high = COND #( WHEN es_fecha-low IS NOT INITIAL AND es_fecha-high IS INITIAL THEN
+                                      es_fecha-low
+                                    WHEN es_fecha-high IS INITIAL THEN
+                                      sy-datum
+                                    ELSE
+                                      es_fecha-high
+                                  ).
+
+      i_r_fecha[ 1 ]-low = COND #( WHEN es_fecha-low IS INITIAL AND es_fecha-high IS NOT INITIAL THEN
+                                    es_fecha-high
+                                   WHEN es_fecha-low IS NOT INITIAL THEN
+                                    es_fecha-low
+                                 ).
+
+    ENDIF.
+
+    SELECT c~ident, ltext
+    FROM tfacd AS c
+    INNER JOIN tfact AS t
+    ON c~ident = t~ident
+    AND t~spras = @sy-langu
+    WHERE c~ident IN @i_r_calendario
+    INTO TABLE @DATA(ti_id_calendario).
+
+    LOOP AT ti_id_calendario ASSIGNING FIELD-SYMBOL(<fs_es_id_calendario>).
+
+      CLEAR: ti_atributos_calendario.
+
+      CALL FUNCTION 'DAY_ATTRIBUTES_GET'
+        EXPORTING
+          factory_calendar           = <fs_es_id_calendario>-ident
+          date_from                  = i_r_fecha[ 1 ]-low
+          date_to                    = i_r_fecha[ 1 ]-high
+        TABLES
+          day_attributes             = ti_atributos_calendario
+        EXCEPTIONS
+          factory_calendar_not_found = 1
+          holiday_calendar_not_found = 2
+          date_has_invalid_format    = 3
+          date_inconsistency         = 4
+          OTHERS                     = 5.
+
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE 'I' NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ELSE.
+        LOOP AT ti_atributos_calendario ASSIGNING FIELD-SYMBOL(<fs_es_atributos_calendario>).
+
+          ti_reporte_calendario = VALUE #( BASE ti_reporte_calendario
+                                          (  ident = <fs_es_id_calendario>-ident
+                                             descripcion_calendario = <fs_es_id_calendario>-ltext
+                                             fecha = <fs_es_atributos_calendario>-date
+                                             dia_no_laboral = <fs_es_atributos_calendario>-freeday
+                                             dia_festivo = <fs_es_atributos_calendario>-holiday
+                                             descripcion_dia_festivo = <fs_es_atributos_calendario>-txt_long
+                                             dia_nro = <fs_es_atributos_calendario>-weekday
+                                             dia_de_la_semana = <fs_es_atributos_calendario>-weekday_l
+                                             descripcion_fecha = <fs_es_atributos_calendario>-day_string
+                                          )
+                                         ).
+
+        ENDLOOP.
+      ENDIF.
+
+    ENDLOOP.
+
+    IF ti_reporte_calendario IS NOT INITIAL.
+
+      CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+        EXPORTING
+          i_ti_datos      = REF #( ti_reporte_calendario )
+*         i_ti_catalogo   =
+*         i_status_gui    =
+*         i_statusgui_programa =
+          i_titulo        = TEXT-001
+          i_o_ctr_alvgrid = me.
+
+    ELSE.
+      MESSAGE s002(wusl) DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~modificar_catalogo.
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'DIA_NRO'.
+          <fs_es_catalogo>-outputlen = '10'.
+        WHEN 'FECHA'.
+          <fs_es_catalogo>-col_opt = abap_true.
+        WHEN 'DESCRIPCION_CALENDARIO'.
+          <fs_es_catalogo>-coltext = TEXT-004.
+          <fs_es_catalogo>-col_opt = abap_true.
+        WHEN 'DIA_NO_LABORAL'.
+          <fs_es_catalogo>-coltext = TEXT-002.
+          <fs_es_catalogo>-outputlen = '11'.
+        WHEN 'DIA_FESTIVO'.
+          <fs_es_catalogo>-coltext = TEXT-003.
+          <fs_es_catalogo>-outputlen = '11'.
+      ENDCASE.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~registrar_evento_alv.
+
+  ENDMETHOD.
+
+ENDCLASS.

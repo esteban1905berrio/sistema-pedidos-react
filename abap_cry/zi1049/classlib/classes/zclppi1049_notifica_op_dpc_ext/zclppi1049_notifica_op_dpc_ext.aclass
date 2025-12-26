@@ -1,0 +1,246 @@
+CLASS zclppi1049_notifica_op_dpc_ext DEFINITION
+  PUBLIC
+  INHERITING FROM zclppi1049_notifica_op_dpc
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    METHODS:
+      /iwbep/if_mgw_appl_srv_runtime~create_entity  REDEFINITION,
+      /iwbep/if_mgw_appl_srv_runtime~get_entity     REDEFINITION,
+      /iwbep/if_mgw_appl_srv_runtime~get_entityset  REDEFINITION,
+      /iwbep/if_mgw_appl_srv_runtime~create_deep_entity REDEFINITION.
+
+    METHODS:
+      notificar_orden
+        IMPORTING
+          iv_entity_name          TYPE      string
+          iv_entity_set_name      TYPE      string
+          iv_source_name          TYPE      string
+          it_key_tab              TYPE      /iwbep/t_mgw_name_value_pair
+          it_navigation_path      TYPE      /iwbep/t_mgw_navigation_path
+          io_expand               TYPE REF TO        /iwbep/if_mgw_odata_expand
+          io_tech_request_context TYPE REF TO        /iwbep/if_mgw_req_entity_c
+          io_data_provider        TYPE REF TO        /iwbep/if_mgw_entry_provider
+        EXPORTING
+          er_deep_entity          TYPE     zclppi1049_notifica_op_mpc_ext=>ts_deep_entity
+        RAISING
+          /iwbep/cx_mgw_busi_exception
+          /iwbep/cx_mgw_tech_exception.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclppi1049_notifica_op_dpc_ext IMPLEMENTATION.
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_entity.
+
+    io_data_provider->read_entry_data(  IMPORTING es_data = er_entity ).
+    BREAK seblondo.
+  ENDMETHOD.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_deep_entity.
+    DATA: ir_deep_entity  TYPE zclppi1049_notifica_op_mpc_ext=>ts_deep_entity.
+    CASE iv_entity_set_name.
+
+      WHEN 'OrdenNotificarSet'.
+
+        CALL METHOD me->notificar_orden
+          EXPORTING
+            iv_entity_name          = iv_entity_name
+            iv_entity_set_name      = iv_entity_set_name
+            iv_source_name          = iv_source_name
+            it_key_tab              = it_key_tab
+            it_navigation_path      = it_navigation_path
+            io_expand               = io_expand
+            io_tech_request_context = io_tech_request_context
+            io_data_provider        = io_data_provider
+          IMPORTING
+            er_deep_entity          = ir_deep_entity.
+
+        copy_data_to_ref(
+        EXPORTING
+         is_data = ir_deep_entity
+        CHANGING
+         cr_data = er_deep_entity
+        ).
+
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD notificar_orden.
+
+    DATA: ti_ordenes       TYPE zttppi1049_1,
+          o_contenedor_msg TYPE REF TO /iwbep/if_message_container,
+          ti_msg_retorno   TYPE bapiret2_t.
+
+    io_data_provider->read_entry_data( IMPORTING es_data = er_deep_entity ).
+
+    ti_ordenes = VALUE #( FOR es_datos_orden IN er_deep_entity-ordenset
+                            ( CORRESPONDING #( es_datos_orden ) )
+                        ).
+
+    NEW zclppi1049_notif_mvtos(  )->proce_notif(
+      IMPORTING
+        e_ti_retur = ti_msg_retorno
+      CHANGING
+        c_ti_taufk = ti_ordenes ).
+
+    IF line_exists( ti_msg_retorno[ type = 'E' ] ).
+      "Retornar mensaje de error
+      me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                          iv_entity_type = iv_entity_name
+                                                          it_return = ti_msg_retorno
+                                                          it_key_tab = it_key_tab ).
+    ELSE.
+      o_contenedor_msg = me->mo_context->get_message_container( ).
+      "Mensajes informativos y exitosos
+      LOOP AT ti_msg_retorno ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+        o_contenedor_msg->add_message( iv_msg_type = <fs_es_mensaje>-type
+                                       iv_msg_id   = <fs_es_mensaje>-id
+                                       iv_msg_number  = <fs_es_mensaje>-number
+                                       iv_msg_text    = <fs_es_mensaje>-message
+                                       iv_msg_v1      = <fs_es_mensaje>-message_v1
+                                       iv_msg_v2      = <fs_es_mensaje>-message_v2
+                                       iv_msg_v3      = <fs_es_mensaje>-message_v3
+                                       iv_msg_v4      = <fs_es_mensaje>-message_v4
+                                       iv_add_to_response_header = abap_true
+                                      ).
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entity.
+
+  ENDMETHOD.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entityset.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclppi1049_notifica_op_dpc_ext DEFINITION
+  PUBLIC
+  INHERITING FROM zclppi1049_notifica_op_dpc
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    METHODS:
+      /iwbep/if_mgw_appl_srv_runtime~create_entity  REDEFINITION,
+      /iwbep/if_mgw_appl_srv_runtime~get_entity     REDEFINITION,
+      /iwbep/if_mgw_appl_srv_runtime~get_entityset  REDEFINITION,
+      /iwbep/if_mgw_appl_srv_runtime~create_deep_entity REDEFINITION.
+
+    METHODS:
+      notificar_orden
+        IMPORTING
+          iv_entity_name          TYPE      string
+          iv_entity_set_name      TYPE      string
+          iv_source_name          TYPE      string
+          it_key_tab              TYPE      /iwbep/t_mgw_name_value_pair
+          it_navigation_path      TYPE      /iwbep/t_mgw_navigation_path
+          io_expand               TYPE REF TO        /iwbep/if_mgw_odata_expand
+          io_tech_request_context TYPE REF TO        /iwbep/if_mgw_req_entity_c
+          io_data_provider        TYPE REF TO        /iwbep/if_mgw_entry_provider
+        EXPORTING
+          er_deep_entity          TYPE     zclppi1049_notifica_op_mpc_ext=>ts_deep_entity
+        RAISING
+          /iwbep/cx_mgw_busi_exception
+          /iwbep/cx_mgw_tech_exception.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclppi1049_notifica_op_dpc_ext IMPLEMENTATION.
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_entity.
+
+    io_data_provider->read_entry_data(  IMPORTING es_data = er_entity ).
+    BREAK seblondo.
+  ENDMETHOD.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_deep_entity.
+    DATA: ir_deep_entity  TYPE zclppi1049_notifica_op_mpc_ext=>ts_deep_entity.
+    CASE iv_entity_set_name.
+
+      WHEN 'OrdenNotificarSet'.
+
+        CALL METHOD me->notificar_orden
+          EXPORTING
+            iv_entity_name          = iv_entity_name
+            iv_entity_set_name      = iv_entity_set_name
+            iv_source_name          = iv_source_name
+            it_key_tab              = it_key_tab
+            it_navigation_path      = it_navigation_path
+            io_expand               = io_expand
+            io_tech_request_context = io_tech_request_context
+            io_data_provider        = io_data_provider
+          IMPORTING
+            er_deep_entity          = ir_deep_entity.
+
+        copy_data_to_ref(
+        EXPORTING
+         is_data = ir_deep_entity
+        CHANGING
+         cr_data = er_deep_entity
+        ).
+
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD notificar_orden.
+
+    DATA: ti_ordenes       TYPE zttppi1049_1,
+          o_contenedor_msg TYPE REF TO /iwbep/if_message_container,
+          ti_msg_retorno   TYPE bapiret2_t.
+
+    io_data_provider->read_entry_data( IMPORTING es_data = er_deep_entity ).
+
+    ti_ordenes = VALUE #( FOR es_datos_orden IN er_deep_entity-ordenset
+                            ( CORRESPONDING #( es_datos_orden ) )
+                        ).
+
+    NEW zclppi1049_notif_mvtos(  )->proce_notif(
+      IMPORTING
+        e_ti_retur = ti_msg_retorno
+      CHANGING
+        c_ti_taufk = ti_ordenes ).
+
+    IF line_exists( ti_msg_retorno[ type = 'E' ] ).
+      "Retornar mensaje de error
+      me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                          iv_entity_type = iv_entity_name
+                                                          it_return = ti_msg_retorno
+                                                          it_key_tab = it_key_tab ).
+    ELSE.
+      o_contenedor_msg = me->mo_context->get_message_container( ).
+      "Mensajes informativos y exitosos
+      LOOP AT ti_msg_retorno ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+        o_contenedor_msg->add_message( iv_msg_type = <fs_es_mensaje>-type
+                                       iv_msg_id   = <fs_es_mensaje>-id
+                                       iv_msg_number  = <fs_es_mensaje>-number
+                                       iv_msg_text    = <fs_es_mensaje>-message
+                                       iv_msg_v1      = <fs_es_mensaje>-message_v1
+                                       iv_msg_v2      = <fs_es_mensaje>-message_v2
+                                       iv_msg_v3      = <fs_es_mensaje>-message_v3
+                                       iv_msg_v4      = <fs_es_mensaje>-message_v4
+                                       iv_add_to_response_header = abap_true
+                                      ).
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entity.
+
+  ENDMETHOD.
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entityset.
+
+  ENDMETHOD.
+
+ENDCLASS.

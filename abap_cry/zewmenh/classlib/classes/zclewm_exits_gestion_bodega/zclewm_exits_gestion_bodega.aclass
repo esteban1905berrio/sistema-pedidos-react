@@ -1,0 +1,104 @@
+CLASS zclewm_exits_gestion_bodega DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    TYPE-POOLS abap .
+
+    INTERFACES /scwm/if_ex_core_cons .
+    INTERFACES if_badi_interface .
+
+    METHODS:
+      constructor
+        IMPORTING
+          !io_data_access TYPE REF TO /scwm/if_cons_transpl_data OPTIONAL.
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA so_data_access TYPE REF TO /scwm/if_cons_transpl_data .
+    CLASS-DATA st_consgrp_erp TYPE lty_tt_tu_shipto_consgrp .
+    CLASS-DATA st_consgrp_tm TYPE lty_tt_docid_consgrp .
+
+ENDCLASS.
+
+
+
+CLASS zclewm_exits_gestion_bodega IMPLEMENTATION.
+
+  METHOD /scwm/if_ex_core_cons~dstgrp.
+
+    zclewmr1023_modgrupoconsolida=>modificar_grupo_consolidacion(
+                                            EXPORTING
+                                              i_es_param = is_param
+                                              i_es_tdstgrp = is_tdstgrp
+                                              i_es_tdstgrpno = is_tdstgrpno
+                                            CHANGING
+                                              c_dstgrp = cv_dstgrp ).
+  ENDMETHOD.
+
+
+  METHOD constructor.
+
+    IF io_data_access IS BOUND.
+      so_data_access = io_data_access.
+    ELSE.
+      CREATE OBJECT so_data_access
+        TYPE lcl_data_access.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclewm_exits_gestion_bodega DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    TYPE-POOLS abap .
+
+    INTERFACES /scwm/if_ex_core_cons .
+    INTERFACES if_badi_interface .
+
+    METHODS:
+      constructor
+        IMPORTING
+          !io_data_access TYPE REF TO /scwm/if_cons_transpl_data OPTIONAL.
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA so_data_access TYPE REF TO /scwm/if_cons_transpl_data .
+    CLASS-DATA st_consgrp_erp TYPE lty_tt_tu_shipto_consgrp .
+    CLASS-DATA st_consgrp_tm TYPE lty_tt_docid_consgrp .
+
+ENDCLASS.
+
+
+
+CLASS zclewm_exits_gestion_bodega IMPLEMENTATION.
+
+  METHOD /scwm/if_ex_core_cons~dstgrp.
+
+    zclewmr1023_modgrupoconsolida=>modificar_grupo_consolidacion(
+                                            EXPORTING
+                                              i_es_param = is_param
+                                              i_es_tdstgrp = is_tdstgrp
+                                              i_es_tdstgrpno = is_tdstgrpno
+                                            CHANGING
+                                              c_dstgrp = cv_dstgrp ).
+  ENDMETHOD.
+
+
+  METHOD constructor.
+
+    IF io_data_access IS BOUND.
+      so_data_access = io_data_access.
+    ELSE.
+      CREATE OBJECT so_data_access
+        TYPE lcl_data_access.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.

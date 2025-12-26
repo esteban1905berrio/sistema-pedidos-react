@@ -1,5 +1,27 @@
 {
   "mcpServers": {
+    "coronamcp": {
+      "command": "mvn",
+      "args": [
+        "spring-boot:run",
+        "-f",
+        "/Users/bastianroot/AIWorkspace/giralmcp/pom.xml",
+        "-Djava.library.path=/Users/bastianroot/AIWorkspace/giralmcp/lib"
+      ],
+      "env": {
+        "JAVA_HOME": "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home",
+        "SAP_ASHOST": "vhcraerdcs.hec.corona.com.co",
+        "SAP_SYSNR": "00",
+        "SAP_CLIENT": "100",
+        "SAP_USER": "JAGARCIAC",
+        "SAP_PASSWD": "Fou7^AHjcTZreL4",
+        "SAP_LANG": "ES",
+        "SAP_POOL_CAPACITY": "5",
+        "SAP_PEAK_LIMIT": "10",
+        "MAVEN_OPTS": "-Dcom.sun.net.ssl.checkRevocation=false -Djdk.tls.client.protocols=TLSv1.2 -Djavax.net.ssl.trustStoreType=NONE -Djdk.internal.httpclient.disableHostnameVerification=true",
+        "JCO_CLIENT_TLS_TRUST_ALL": "1"
+      }
+    },
     "giralmcp": {
       "command": "mvn",
       "args": [

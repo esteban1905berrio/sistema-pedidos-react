@@ -1,0 +1,264 @@
+CLASS zclsdi1201_gestion_entrega DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      modificar_segmento_z1edl44
+        IMPORTING
+          VALUE(i_control_record_out) TYPE edidc
+          VALUE(i_message_type)       TYPE edmsg-msgtyp
+          VALUE(i_segment_name)       TYPE edidd-segnam
+          i_data                      TYPE tr_idoc_shpmnt_indata
+          VALUE(i_tab_idoc_reduction) TYPE tr_tab_idoc_reduction
+        CHANGING
+          c_ti_datos_idoc             TYPE idoc_data,
+      modificar_segmento_z1edl20
+        IMPORTING
+          VALUE(i_control_record_out) TYPE edidc
+          VALUE(i_message_type)       TYPE edmsg-msgtyp
+          VALUE(i_segment_name)       TYPE edidd-segnam
+          i_data                      TYPE tr_idoc_shpmnt_indata
+          VALUE(i_tab_idoc_reduction) TYPE tr_tab_idoc_reduction
+        CHANGING
+          c_ti_datos_idoc             TYPE idoc_data.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclsdi1201_gestion_entrega IMPLEMENTATION.
+
+  METHOD modificar_segmento_z1edl44.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'I1201' ) = abap_true.
+
+    CHECK i_control_record_out-cimtyp = 'ZDELVRY03_1'
+        AND i_segment_name = 'E1EDL44'
+        AND line_exists( c_ti_datos_idoc[ segnam = 'E1EDL44' ] ).
+
+    DATA:
+      es_datos_idoc LIKE LINE OF c_ti_datos_idoc,
+      es_e1edl44    TYPE e1edl44,
+      es_z1edl44    TYPE z1edl44.
+
+    "Se recorre con iteración para traer siempre la ultima posicion
+    LOOP AT c_ti_datos_idoc TRANSPORTING NO FIELDS WHERE segnam = 'E1EDL37'.
+      DATA(indice_z) = sy-tabix.
+    ENDLOOP..
+
+    LOOP AT c_ti_datos_idoc ASSIGNING FIELD-SYMBOL(<fs_es_datos>)
+                            FROM indice_z
+                            WHERE segnam = 'E1EDL44'.
+
+      DATA(indice_z44) = sy-tabix.
+
+      AT LAST.
+
+        es_e1edl44 = <fs_es_datos>-sdata.
+
+        SELECT SINGLE
+        FROM mean
+        FIELDS ean11
+        WHERE matnr = @es_e1edl44-matnr
+        INTO @es_z1edl44-ean11.
+
+        es_datos_idoc = VALUE #( segnam = 'Z1EDL44' sdata = es_z1edl44 ).
+
+        INSERT es_datos_idoc INTO c_ti_datos_idoc INDEX ( indice_z44 + 1 ).
+
+      ENDAT.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD modificar_segmento_z1edl20.
+
+    DATA: es_e1adrm1       TYPE e1adrm1,
+          multiplicador    TYPE i,
+          suma_total       TYPE i,
+          modulo           TYPE i,
+          posicion_inicial TYPE i,
+          dig_verificador  TYPE i.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'I1201' ) = abap_true.
+
+    CHECK i_control_record_out-cimtyp = 'ZDELVRY03_1'
+      AND line_exists( c_ti_datos_idoc[ segnam = 'E1ADRM1' ] )
+      AND NOT line_exists( c_ti_datos_idoc[ segnam = 'Z1EDL20' ] ).
+
+    LOOP AT c_ti_datos_idoc ASSIGNING FIELD-SYMBOL(<fs_es_idoc>) WHERE segnam = 'E1ADRM1'.
+      es_e1adrm1 = <fs_es_idoc>-sdata.
+      IF es_e1adrm1-partner_q CS 'WE'.
+        EXIT.
+      ELSE.
+        CLEAR: es_e1adrm1.
+      ENDIF.
+    ENDLOOP.
+
+    IF es_e1adrm1 IS NOT INITIAL.
+
+*      DATA(bol) = CONV char16( |{ sy-datum+2 }{ condense( val = |{ es_e1adrm1-partner_id ALPHA = OUT }| ) }| ).
+*      bol = |{ bol ALPHA = IN }|.
+      es_e1adrm1-partner_id = |{ es_e1adrm1-partner_id ALPHA = IN }|.
+      DATA(bol) = CONV char16( |0804303{ sy-datum+2 }{ es_e1adrm1-partner_id+14 }| ).
+
+      DO 16 TIMES.
+        modulo = sy-index MOD 2.
+        IF modulo = 0.
+          multiplicador = 3.
+        ELSE.
+          multiplicador = 1.
+        ENDIF.
+        posicion_inicial = sy-index - 1.
+        suma_total = suma_total + ( bol+posicion_inicial(1) * multiplicador ).
+      ENDDO.
+
+      modulo = suma_total MOD 10.
+
+      dig_verificador = 10 - modulo.
+
+      DATA(es_datos_idoc) = VALUE edidd( segnam = 'Z1EDL20' sdata = VALUE z1edl20( bol = |{ bol }{ COND #( WHEN dig_verificador = 10 THEN 0 ELSE dig_verificador ) }| ) ).
+      INSERT es_datos_idoc INTO c_ti_datos_idoc INDEX 2.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclsdi1201_gestion_entrega DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      modificar_segmento_z1edl44
+        IMPORTING
+          VALUE(i_control_record_out) TYPE edidc
+          VALUE(i_message_type)       TYPE edmsg-msgtyp
+          VALUE(i_segment_name)       TYPE edidd-segnam
+          i_data                      TYPE tr_idoc_shpmnt_indata
+          VALUE(i_tab_idoc_reduction) TYPE tr_tab_idoc_reduction
+        CHANGING
+          c_ti_datos_idoc             TYPE idoc_data,
+      modificar_segmento_z1edl20
+        IMPORTING
+          VALUE(i_control_record_out) TYPE edidc
+          VALUE(i_message_type)       TYPE edmsg-msgtyp
+          VALUE(i_segment_name)       TYPE edidd-segnam
+          i_data                      TYPE tr_idoc_shpmnt_indata
+          VALUE(i_tab_idoc_reduction) TYPE tr_tab_idoc_reduction
+        CHANGING
+          c_ti_datos_idoc             TYPE idoc_data.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclsdi1201_gestion_entrega IMPLEMENTATION.
+
+  METHOD modificar_segmento_z1edl44.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'I1201' ) = abap_true.
+
+    CHECK i_control_record_out-cimtyp = 'ZDELVRY03_1'
+        AND i_segment_name = 'E1EDL44'
+        AND line_exists( c_ti_datos_idoc[ segnam = 'E1EDL44' ] ).
+
+    DATA:
+      es_datos_idoc LIKE LINE OF c_ti_datos_idoc,
+      es_e1edl44    TYPE e1edl44,
+      es_z1edl44    TYPE z1edl44.
+
+    "Se recorre con iteración para traer siempre la ultima posicion
+    LOOP AT c_ti_datos_idoc TRANSPORTING NO FIELDS WHERE segnam = 'E1EDL37'.
+      DATA(indice_z) = sy-tabix.
+    ENDLOOP..
+
+    LOOP AT c_ti_datos_idoc ASSIGNING FIELD-SYMBOL(<fs_es_datos>)
+                            FROM indice_z
+                            WHERE segnam = 'E1EDL44'.
+
+      DATA(indice_z44) = sy-tabix.
+
+      AT LAST.
+
+        es_e1edl44 = <fs_es_datos>-sdata.
+
+        SELECT SINGLE
+        FROM mean
+        FIELDS ean11
+        WHERE matnr = @es_e1edl44-matnr
+        INTO @es_z1edl44-ean11.
+
+        es_datos_idoc = VALUE #( segnam = 'Z1EDL44' sdata = es_z1edl44 ).
+
+        INSERT es_datos_idoc INTO c_ti_datos_idoc INDEX ( indice_z44 + 1 ).
+
+      ENDAT.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD modificar_segmento_z1edl20.
+
+    DATA: es_e1adrm1       TYPE e1adrm1,
+          multiplicador    TYPE i,
+          suma_total       TYPE i,
+          modulo           TYPE i,
+          posicion_inicial TYPE i,
+          dig_verificador  TYPE i.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'I1201' ) = abap_true.
+
+    CHECK i_control_record_out-cimtyp = 'ZDELVRY03_1'
+      AND line_exists( c_ti_datos_idoc[ segnam = 'E1ADRM1' ] )
+      AND NOT line_exists( c_ti_datos_idoc[ segnam = 'Z1EDL20' ] ).
+
+    LOOP AT c_ti_datos_idoc ASSIGNING FIELD-SYMBOL(<fs_es_idoc>) WHERE segnam = 'E1ADRM1'.
+      es_e1adrm1 = <fs_es_idoc>-sdata.
+      IF es_e1adrm1-partner_q CS 'WE'.
+        EXIT.
+      ELSE.
+        CLEAR: es_e1adrm1.
+      ENDIF.
+    ENDLOOP.
+
+    IF es_e1adrm1 IS NOT INITIAL.
+
+*      DATA(bol) = CONV char16( |{ sy-datum+2 }{ condense( val = |{ es_e1adrm1-partner_id ALPHA = OUT }| ) }| ).
+*      bol = |{ bol ALPHA = IN }|.
+      es_e1adrm1-partner_id = |{ es_e1adrm1-partner_id ALPHA = IN }|.
+      DATA(bol) = CONV char16( |0804303{ sy-datum+2 }{ es_e1adrm1-partner_id+14 }| ).
+
+      DO 16 TIMES.
+        modulo = sy-index MOD 2.
+        IF modulo = 0.
+          multiplicador = 3.
+        ELSE.
+          multiplicador = 1.
+        ENDIF.
+        posicion_inicial = sy-index - 1.
+        suma_total = suma_total + ( bol+posicion_inicial(1) * multiplicador ).
+      ENDDO.
+
+      modulo = suma_total MOD 10.
+
+      dig_verificador = 10 - modulo.
+
+      DATA(es_datos_idoc) = VALUE edidd( segnam = 'Z1EDL20' sdata = VALUE z1edl20( bol = |{ bol }{ COND #( WHEN dig_verificador = 10 THEN 0 ELSE dig_verificador ) }| ) ).
+      INSERT es_datos_idoc INTO c_ti_datos_idoc INDEX 2.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.

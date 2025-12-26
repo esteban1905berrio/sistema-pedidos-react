@@ -1,0 +1,1002 @@
+CLASS zclmmr1128_mensajes_ans_pkms DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_estado_msg_procesado TYPE nast-vstat VALUE '1'.
+
+    INTERFACES: zifcxr1002_alvgrid.
+
+    TYPES: BEGIN OF gtp_es_entrega,
+             icono_estado   TYPE icon_d,
+             bukrs          TYPE bukrs,
+             vbeln          TYPE likp-vbeln,
+             posnr          TYPE lips-posnr,
+             konnr          TYPE zfim11-konnr,
+             werks          TYPE lips-werks,
+             lgort          TYPE lgort_d,
+             lgpla          TYPE lips-lgpla,
+             lgtyp          TYPE lips-lgtyp,
+             bwlvs          TYPE  lips-bwlvs,
+             venum          TYPE vekp-venum,
+             vepos          TYPE vepo-vepos,
+             exidv          TYPE vekp-exidv,
+             clase_mensaje  TYPE nast-kschl,
+             vstat          TYPE nast-vstat,
+             emitir_mensaje TYPE flag,
+           END OF gtp_es_entrega.
+
+    TYPES: gr_numero_impo    TYPE RANGE OF zfim11-konnr,
+           gr_numero_almacen TYPE RANGE OF lgort_d.
+
+    TYPES: gtp_ti_entrega TYPE STANDARD TABLE OF gtp_es_entrega WITH EMPTY KEY.
+
+    DATA: go_log        TYPE REF TO zclcxr1002_log_aplicacion,
+          go_parametros TYPE REF TO zclcxr1000_parametros,
+          gti_entrega   TYPE gtp_ti_entrega.
+
+    METHODS:
+      constructor,
+      procesar_msj_ans_hacia_pkms
+        IMPORTING
+          VALUE(i_r_vbeln) TYPE STANDARD TABLE
+          VALUE(i_r_nimpo) TYPE STANDARD TABLE
+          i_r_bukrs        TYPE STANDARD TABLE
+          i_r_lgort        TYPE STANDARD TABLE,
+      consultar_entregas
+        IMPORTING
+          VALUE(i_r_vbeln) TYPE STANDARD TABLE
+          i_r_bukrs        TYPE STANDARD TABLE
+          i_r_lgort        TYPE STANDARD TABLE
+        CHANGING
+          c_ti_entrega     TYPE gtp_ti_entrega,
+      visualizar_resultado.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    DATA: gr_clase_mensaje TYPE RANGE OF nast-kschl.
+
+    METHODS: entrega_desde_numero_impo
+      IMPORTING
+        VALUE(i_r_nimpo)     TYPE gr_numero_impo
+        i_r_bukrs            TYPE STANDARD TABLE
+      RETURNING
+        VALUE(r_ti_entregas) TYPE gtp_ti_entrega,
+      verificar_mensajes_previos
+        CHANGING
+          c_ti_entrega TYPE gtp_ti_entrega,
+      generar_msj_ans_hacia_pkms
+        IMPORTING
+          i_r_lgort    TYPE gr_numero_almacen
+        CHANGING
+          c_ti_entrega TYPE gtp_ti_entrega,
+      modificar_entrega
+        IMPORTING
+          i_entrega        TYPE lips-vbeln
+          i_numero_almacen TYPE lips-lgort
+        EXPORTING
+          e_rc             TYPE sysubrc,
+      actualizar_estado_entrega
+        CHANGING
+          c_ti_entrega TYPE gtp_ti_entrega,
+      modificar_catalogo
+        CHANGING
+          c_ti_catalogo TYPE lvc_t_fcat.
+ENDCLASS.
+
+
+
+CLASS zclmmr1128_mensajes_ans_pkms IMPLEMENTATION.
+
+  METHOD procesar_msj_ans_hacia_pkms.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia(  ).
+
+    IF i_r_vbeln IS INITIAL AND i_r_nimpo IS INITIAL.
+      go_log->set_es_log( i_es = VALUE #( type = 'E' id = 'ZMM01' number = '306' ) ).
+      RETURN.
+    ENDIF.
+
+    gti_entrega = entrega_desde_numero_impo( i_r_nimpo = i_r_nimpo i_r_bukrs = i_r_bukrs ).
+
+    IF gti_entrega IS NOT INITIAL.
+
+      zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_ti                           = gti_entrega
+          i_nombre_columna               = 'VBELN'
+        CHANGING
+          c_ti_rango                     = i_r_vbeln ).
+
+    ENDIF.
+
+    consultar_entregas( EXPORTING i_r_vbeln = i_r_vbeln i_r_bukrs = i_r_bukrs i_r_lgort = i_r_lgort
+                        CHANGING c_ti_entrega = gti_entrega ).
+
+    verificar_mensajes_previos( CHANGING c_ti_entrega = gti_entrega ).
+
+    generar_msj_ans_hacia_pkms( EXPORTING i_r_lgort = i_r_lgort CHANGING c_ti_entrega = gti_entrega ).
+
+    actualizar_estado_entrega( CHANGING c_ti_entrega = gti_entrega ).
+
+  ENDMETHOD.
+
+
+  METHOD entrega_desde_numero_impo.
+
+    CHECK i_r_nimpo IS NOT INITIAL.
+
+    LOOP AT i_r_nimpo ASSIGNING FIELD-SYMBOL(<fs_es_nimpo>).
+      <fs_es_nimpo>-low = |{ <fs_es_nimpo>-low ALPHA = OUT }|.
+      <fs_es_nimpo>-low = |{ <fs_es_nimpo>-low WIDTH = 9 ALIGN = RIGHT }|.
+    ENDLOOP.
+
+    SELECT
+    FROM zfim11
+    FIELDS DISTINCT bukrs, konnr, vbeln, expos AS posnr
+    WHERE bukrs IN @i_r_bukrs
+    AND   konnr IN @i_r_nimpo
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_entregas.
+
+    IF r_ti_entregas IS INITIAL.
+
+      go_log->set_es_log( i_es = VALUE #( type = 'E' id = 'ZMM01' number = '304' message_v1 = i_r_nimpo[ 1 ]-low ) ).
+      RETURN.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD constructor.
+    go_log = zclcxr1002_log_aplicacion=>get_instancia(  ).
+
+    "Parametros
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'R1128'  ).
+    ENDIF.
+
+    gr_clase_mensaje = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CL_MSG' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                              ).
+  ENDMETHOD.
+
+
+  METHOD consultar_entregas.
+
+    CHECK i_r_vbeln IS NOT INITIAL.
+
+    SELECT
+    FROM lips AS _entrega
+    INNER JOIN vepo AS _um_posicion ON
+    _um_posicion~vbeln = _entrega~vbeln
+    AND _um_posicion~posnr = _entrega~posnr
+    INNER JOIN vekp AS _um ON
+    _um~venum = _um_posicion~venum
+    LEFT JOIN zfim11 AS _detalle_oc ON
+    _detalle_oc~vbeln = _entrega~vbeln
+    AND _detalle_oc~expos   = _entrega~posnr
+    LEFT JOIN ekes AS _confirmacionpedido ON
+    _confirmacionpedido~vbeln = _entrega~vbeln
+    LEFT JOIN ekpo AS _oc_posicion ON
+    _oc_posicion~ebeln = _confirmacionpedido~ebeln AND
+    _oc_posicion~ebelp = _confirmacionpedido~ebelp
+    FIELDS DISTINCT _detalle_oc~bukrs, _entrega~vbeln, _entrega~posnr, _entrega~werks, lgpla, lgtyp, bwlvs,
+    _um_posicion~venum, _um_posicion~vepos, _um~exidv, _detalle_oc~konnr, _oc_posicion~lgort
+    WHERE _entrega~vbeln IN @i_r_vbeln
+    INTO TABLE @DATA(ti_entregas_um).
+
+    DELETE ti_entregas_um WHERE lgort NOT IN i_r_lgort AND lgort IS NOT INITIAL.
+
+    SORT c_ti_entrega BY vbeln posnr.
+
+    IF ti_entregas_um IS NOT INITIAL.
+
+      LOOP AT ti_entregas_um REFERENCE INTO DATA(r_es_entrega_um).
+
+        TRY.
+            ASSIGN c_ti_entrega[ vbeln = r_es_entrega_um->vbeln posnr = r_es_entrega_um->posnr ]
+            TO FIELD-SYMBOL(<fs_es_entrega>).
+          CATCH cx_sy_itab_line_not_found.
+        ENDTRY.
+
+        IF <fs_es_entrega> IS ASSIGNED.
+          <fs_es_entrega> = CORRESPONDING #( r_es_entrega_um->* EXCEPT bukrs ).
+        ELSE.
+          APPEND CORRESPONDING #( r_es_entrega_um->* )
+          TO c_ti_entrega.
+        ENDIF.
+
+        UNASSIGN <fs_es_entrega>.
+
+      ENDLOOP.
+
+    ELSE.
+      go_log->set_es_log( i_es = VALUE #( type = 'E' id = 'ZMM01' number = '305' ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD verificar_mensajes_previos.
+
+    CHECK c_ti_entrega IS NOT INITIAL.
+
+    SELECT
+    FROM @c_ti_entrega AS _entrega
+    LEFT JOIN ztmmi1005_1 AS _log_envio_asn ON
+    _log_envio_asn~venum = _entrega~venum
+    AND _log_envio_asn~vepos = _entrega~vepos
+    AND _entrega~exidv = _log_envio_asn~hu_ident
+    AND ( _log_envio_asn~estado = '0' OR
+          _log_envio_asn~estado = @space )
+    FIELDS DISTINCT _entrega~vbeln, _entrega~venum, _entrega~vepos, hu_ident
+    INTO TABLE @DATA(ti_um_sin_asn_hacia_pkms).
+
+    SELECT
+    FROM @c_ti_entrega AS _entrega
+    INNER JOIN nast AS _mensaje ON
+    _mensaje~objky = _entrega~vbeln
+    FIELDS DISTINCT objky AS entrega, kschl, _mensaje~vstat
+    WHERE _mensaje~kschl  IN @gr_clase_mensaje
+    INTO TABLE @DATA(ti_mensajes_entrega).
+
+    LOOP AT c_ti_entrega ASSIGNING FIELD-SYMBOL(<fs_es_entrega>).
+      "Valida que la entrega y la um no tengan mensaje
+      CHECK line_exists( ti_um_sin_asn_hacia_pkms[ vbeln = <fs_es_entrega>-vbeln venum = <fs_es_entrega>-venum vepos = <fs_es_entrega>-vepos  ] ).
+      "Valida que la entrega no tenga msg generado
+      LOOP AT ti_mensajes_entrega INTO DATA(es_mensaje_entrega) WHERE entrega = <fs_es_entrega>-vbeln.
+        <fs_es_entrega>-clase_mensaje = es_mensaje_entrega-kschl.
+        <fs_es_entrega>-vstat = es_mensaje_entrega-vstat.
+      ENDLOOP.
+
+      CHECK NOT line_exists( ti_mensajes_entrega[ entrega = <fs_es_entrega>-vbeln kschl  = es_mensaje_entrega-kschl vstat = gc_estado_msg_procesado ] ).
+
+      "Validar que la entrega tenga um asociada
+      IF <fs_es_entrega>-venum IS INITIAL.
+        go_log->set_es_log( i_es = VALUE #( type = 'W' id = 'ZMM01' number = '305' message_v1 = <fs_es_entrega>-vbeln ) ).
+        CONTINUE.
+      ENDIF.
+
+      <fs_es_entrega>-emitir_mensaje = abap_true.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD generar_msj_ans_hacia_pkms.
+
+    DATA: ti_msj_retorno              TYPE bapiret2_t,
+          es_cabecera                 TYPE bapiibdlvhdrchg,
+          es_control                  TYPE bapiibdlvhdrctrlchg,
+          ti_entrega_posicion         TYPE STANDARD TABLE OF bapiibdlvitemchg,
+          ti_entrega_posicion_control TYPE STANDARD TABLE OF bapiibdlvitemctrlchg,
+          es_control_tecnico          TYPE bapidlvcontrol,
+          entrega_modificada          TYPE i.
+
+    CHECK c_ti_entrega IS NOT INITIAL.
+
+    LOOP AT c_ti_entrega ASSIGNING FIELD-SYMBOL(<fs_es_entrega>)
+                         WHERE emitir_mensaje = abap_true
+                         GROUP BY ( vbeln = <fs_es_entrega>-vbeln ).
+
+      CLEAR: es_cabecera, es_control, ti_msj_retorno, entrega_modificada.
+
+      es_cabecera-deliv_numb = es_control-deliv_numb = <fs_es_entrega>-vbeln.
+*      es_control-simulate    = abap_true.
+
+      LOOP AT GROUP <fs_es_entrega> ASSIGNING FIELD-SYMBOL(<fs_es_entrega_posicion>).
+
+        IF <fs_es_entrega>-lgort IS INITIAL AND i_r_lgort IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( type = 'E' id = 'ZMM01' number = '308' message_v1 = <fs_es_entrega>-vbeln ) ).
+          CONTINUE.
+        ELSEIF i_r_lgort IS NOT INITIAL.
+          <fs_es_entrega_posicion>-lgort = <fs_es_entrega>-lgort = i_r_lgort[ 1 ]-low.
+        ENDIF.
+
+      ENDLOOP.
+
+      modificar_entrega(
+          EXPORTING
+            i_entrega        = <fs_es_entrega>-vbeln
+            i_numero_almacen = <fs_es_entrega_posicion>-lgort
+          IMPORTING
+            e_rc             = entrega_modificada ).
+
+      CHECK entrega_modificada IS INITIAL.
+
+      es_control_tecnico-upd_ind = abap_true.
+
+      CALL FUNCTION 'BAPI_INB_DELIVERY_CHANGE'
+        EXPORTING
+          header_data    = es_cabecera
+          header_control = es_control
+          delivery       = <fs_es_entrega>-vbeln
+          techn_control  = es_control_tecnico
+        TABLES
+          item_data      = ti_entrega_posicion
+          item_control   = ti_entrega_posicion_control
+          return         = ti_msj_retorno.
+
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+      IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ELSE.
+
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD visualizar_resultado.
+
+    DATA(ti_entregas) = CORRESPONDING gtp_ti_entrega( gti_entrega EXCEPT posnr venum vepos exidv ).
+
+    SORT ti_entregas BY bukrs vbeln konnr werks lgort.
+
+    DELETE ADJACENT DUPLICATES FROM ti_entregas COMPARING vbeln.
+
+    TRY.
+        DATA(ti_catalogo) = zclcxr1002_util=>construir_catalogo( i_ti = ti_entregas i_optimizar_columnas = abap_true ).
+
+        modificar_catalogo( CHANGING c_ti_catalogo = ti_catalogo ).
+
+      CATCH cx_dynamic_check cx_static_check.
+        "handle exception
+    ENDTRY.
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos      = REF #( ti_entregas )
+        i_ti_catalogo   = ti_catalogo
+        i_o_ctr_alvgrid = me.
+
+  ENDMETHOD.
+
+
+  METHOD actualizar_estado_entrega.
+
+    CHECK c_ti_entrega IS NOT INITIAL.
+
+    SELECT
+    FROM @c_ti_entrega AS _entrega
+    INNER JOIN nast AS _mensaje ON
+    _mensaje~objky = _entrega~vbeln
+    FIELDS objky AS entrega, kschl, _mensaje~vstat
+    WHERE _mensaje~kschl  IN @gr_clase_mensaje
+    INTO TABLE @DATA(ti_mensajes_entrega).
+
+    LOOP AT c_ti_entrega ASSIGNING FIELD-SYMBOL(<fs_es_entrega>).
+
+
+      DATA(es_mensaje_entrega) = VALUE #( ti_mensajes_entrega[ entrega = <fs_es_entrega>-vbeln ] OPTIONAL ).
+
+      IF es_mensaje_entrega IS NOT INITIAL.
+        "Si el mensaje no fue procesado anteriormente de forma exitosa actualiza el estado
+        IF <fs_es_entrega>-vstat NE gc_estado_msg_procesado.
+          <fs_es_entrega>-vstat = es_mensaje_entrega-vstat.
+          <fs_es_entrega>-icono_estado = SWITCH #( <fs_es_entrega>-vstat
+                                                    WHEN gc_estado_msg_procesado THEN
+                                                       icon_green_light
+                                                    WHEN space THEN
+                                                       icon_light_out
+                                                    ELSE
+                                                       icon_red_light ).
+        ELSE.
+          <fs_es_entrega>-icono_estado = icon_yellow_light.
+        ENDIF.
+
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~modificar_catalogo.
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'ICONO_ESTADO'.
+          <fs_es_catalogo>-icon = abap_true.
+          <fs_es_catalogo>-coltext = TEXT-001.
+      ENDCASE.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~pai_at_exit_command.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~registrar_evento_alv.
+
+  ENDMETHOD.
+
+  METHOD modificar_entrega.
+
+    DATA: es_entrega_cabecera       TYPE vbkok,
+          ti_datos_posicion         TYPE STANDARD TABLE OF vbpok,
+          ti_protocolo_notificacion TYPE STANDARD TABLE OF prott.
+
+    CLEAR: e_rc.
+
+    CHECK i_numero_almacen IS NOT INITIAL.
+
+    SELECT
+    FROM lips AS _entrega
+    FIELDS DISTINCT _entrega~vbeln, _entrega~posnr, _entrega~werks, lgort, lgpla, lgtyp, bwlvs
+    WHERE _entrega~vbeln = @i_entrega
+    INTO TABLE @DATA(ti_entregas).
+
+    LOOP AT ti_entregas ASSIGNING FIELD-SYMBOL(<fs_es_entrega_posicion>).
+
+      CHECK <fs_es_entrega_posicion>-lgort NE i_numero_almacen.
+
+      APPEND INITIAL LINE TO ti_datos_posicion ASSIGNING FIELD-SYMBOL(<fs_vbpok>).
+      <fs_vbpok>-vbeln_vl = <fs_es_entrega_posicion>-vbeln.
+      <fs_vbpok>-posnr_vl = <fs_es_entrega_posicion>-posnr.
+      <fs_vbpok>-werks    = <fs_es_entrega_posicion>-werks.
+      <fs_vbpok>-lgort    = i_numero_almacen.
+      <fs_vbpok>-kzlgo    = abap_true.
+      <fs_vbpok>-xwmpp    = abap_true.
+      <fs_vbpok>-lgpla    = <fs_es_entrega_posicion>-lgpla.
+      <fs_vbpok>-lgtyp    = <fs_es_entrega_posicion>-lgtyp.
+      <fs_vbpok>-bwlvs    = <fs_es_entrega_posicion>-bwlvs.
+
+    ENDLOOP.
+
+    IF ti_datos_posicion IS NOT INITIAL.
+      es_entrega_cabecera-vbeln_vl   = i_entrega.
+
+      CALL FUNCTION 'WS_DELIVERY_UPDATE'
+        DESTINATION 'NONE'
+        EXPORTING
+          vbkok_wa  = es_entrega_cabecera
+          delivery  = i_entrega
+          commit    = abap_true
+        TABLES
+          vbpok_tab = ti_datos_posicion
+          prot      = ti_protocolo_notificacion
+        EXCEPTIONS
+          OTHERS    = 1.
+
+      e_rc = sy-subrc.
+
+      IF e_rc IS NOT INITIAL.
+        go_log->set_es_log( i_es = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+      ELSE.
+        WAIT UP TO 1 SECONDS.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_catalogo.
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'EMITIR_MENSAJE' OR 'LGPLA' OR 'LGTYP' OR 'BWLVS' OR 'VENUM' OR
+             'VEPOS' OR 'EXIDV' OR 'POSNR'.
+          <fs_es_catalogo>-no_out = abap_true.
+      ENDCASE.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclmmr1128_mensajes_ans_pkms DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_estado_msg_procesado TYPE nast-vstat VALUE '1'.
+
+    INTERFACES: zifcxr1002_alvgrid.
+
+    TYPES: BEGIN OF gtp_es_entrega,
+             icono_estado   TYPE icon_d,
+             bukrs          TYPE bukrs,
+             vbeln          TYPE likp-vbeln,
+             posnr          TYPE lips-posnr,
+             konnr          TYPE zfim11-konnr,
+             werks          TYPE lips-werks,
+             lgort          TYPE lgort_d,
+             lgpla          TYPE lips-lgpla,
+             lgtyp          TYPE lips-lgtyp,
+             bwlvs          TYPE  lips-bwlvs,
+             venum          TYPE vekp-venum,
+             vepos          TYPE vepo-vepos,
+             exidv          TYPE vekp-exidv,
+             clase_mensaje  TYPE nast-kschl,
+             vstat          TYPE nast-vstat,
+             emitir_mensaje TYPE flag,
+           END OF gtp_es_entrega.
+
+    TYPES: gr_numero_impo    TYPE RANGE OF zfim11-konnr,
+           gr_numero_almacen TYPE RANGE OF lgort_d.
+
+    TYPES: gtp_ti_entrega TYPE STANDARD TABLE OF gtp_es_entrega WITH EMPTY KEY.
+
+    DATA: go_log        TYPE REF TO zclcxr1002_log_aplicacion,
+          go_parametros TYPE REF TO zclcxr1000_parametros,
+          gti_entrega   TYPE gtp_ti_entrega.
+
+    METHODS:
+      constructor,
+      procesar_msj_ans_hacia_pkms
+        IMPORTING
+          VALUE(i_r_vbeln) TYPE STANDARD TABLE
+          VALUE(i_r_nimpo) TYPE STANDARD TABLE
+          i_r_bukrs        TYPE STANDARD TABLE
+          i_r_lgort        TYPE STANDARD TABLE,
+      consultar_entregas
+        IMPORTING
+          VALUE(i_r_vbeln) TYPE STANDARD TABLE
+          i_r_bukrs        TYPE STANDARD TABLE
+          i_r_lgort        TYPE STANDARD TABLE
+        CHANGING
+          c_ti_entrega     TYPE gtp_ti_entrega,
+      visualizar_resultado.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    DATA: gr_clase_mensaje TYPE RANGE OF nast-kschl.
+
+    METHODS: entrega_desde_numero_impo
+      IMPORTING
+        VALUE(i_r_nimpo)     TYPE gr_numero_impo
+        i_r_bukrs            TYPE STANDARD TABLE
+      RETURNING
+        VALUE(r_ti_entregas) TYPE gtp_ti_entrega,
+      verificar_mensajes_previos
+        CHANGING
+          c_ti_entrega TYPE gtp_ti_entrega,
+      generar_msj_ans_hacia_pkms
+        IMPORTING
+          i_r_lgort    TYPE gr_numero_almacen
+        CHANGING
+          c_ti_entrega TYPE gtp_ti_entrega,
+      modificar_entrega
+        IMPORTING
+          i_entrega        TYPE lips-vbeln
+          i_numero_almacen TYPE lips-lgort
+        EXPORTING
+          e_rc             TYPE sysubrc,
+      actualizar_estado_entrega
+        CHANGING
+          c_ti_entrega TYPE gtp_ti_entrega,
+      modificar_catalogo
+        CHANGING
+          c_ti_catalogo TYPE lvc_t_fcat.
+ENDCLASS.
+
+
+
+CLASS zclmmr1128_mensajes_ans_pkms IMPLEMENTATION.
+
+  METHOD procesar_msj_ans_hacia_pkms.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia(  ).
+
+    IF i_r_vbeln IS INITIAL AND i_r_nimpo IS INITIAL.
+      go_log->set_es_log( i_es = VALUE #( type = 'E' id = 'ZMM01' number = '306' ) ).
+      RETURN.
+    ENDIF.
+
+    gti_entrega = entrega_desde_numero_impo( i_r_nimpo = i_r_nimpo i_r_bukrs = i_r_bukrs ).
+
+    IF gti_entrega IS NOT INITIAL.
+
+      zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_ti                           = gti_entrega
+          i_nombre_columna               = 'VBELN'
+        CHANGING
+          c_ti_rango                     = i_r_vbeln ).
+
+    ENDIF.
+
+    consultar_entregas( EXPORTING i_r_vbeln = i_r_vbeln i_r_bukrs = i_r_bukrs i_r_lgort = i_r_lgort
+                        CHANGING c_ti_entrega = gti_entrega ).
+
+    verificar_mensajes_previos( CHANGING c_ti_entrega = gti_entrega ).
+
+    generar_msj_ans_hacia_pkms( EXPORTING i_r_lgort = i_r_lgort CHANGING c_ti_entrega = gti_entrega ).
+
+    actualizar_estado_entrega( CHANGING c_ti_entrega = gti_entrega ).
+
+  ENDMETHOD.
+
+
+  METHOD entrega_desde_numero_impo.
+
+    CHECK i_r_nimpo IS NOT INITIAL.
+
+    LOOP AT i_r_nimpo ASSIGNING FIELD-SYMBOL(<fs_es_nimpo>).
+      <fs_es_nimpo>-low = |{ <fs_es_nimpo>-low ALPHA = OUT }|.
+      <fs_es_nimpo>-low = |{ <fs_es_nimpo>-low WIDTH = 9 ALIGN = RIGHT }|.
+    ENDLOOP.
+
+    SELECT
+    FROM zfim11
+    FIELDS DISTINCT bukrs, konnr, vbeln, expos AS posnr
+    WHERE bukrs IN @i_r_bukrs
+    AND   konnr IN @i_r_nimpo
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_entregas.
+
+    IF r_ti_entregas IS INITIAL.
+
+      go_log->set_es_log( i_es = VALUE #( type = 'E' id = 'ZMM01' number = '304' message_v1 = i_r_nimpo[ 1 ]-low ) ).
+      RETURN.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD constructor.
+    go_log = zclcxr1002_log_aplicacion=>get_instancia(  ).
+
+    "Parametros
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'R1128'  ).
+    ENDIF.
+
+    gr_clase_mensaje = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CL_MSG' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti ) )
+                              ).
+  ENDMETHOD.
+
+
+  METHOD consultar_entregas.
+
+    CHECK i_r_vbeln IS NOT INITIAL.
+
+    SELECT
+    FROM lips AS _entrega
+    INNER JOIN vepo AS _um_posicion ON
+    _um_posicion~vbeln = _entrega~vbeln
+    AND _um_posicion~posnr = _entrega~posnr
+    INNER JOIN vekp AS _um ON
+    _um~venum = _um_posicion~venum
+    LEFT JOIN zfim11 AS _detalle_oc ON
+    _detalle_oc~vbeln = _entrega~vbeln
+    AND _detalle_oc~expos   = _entrega~posnr
+    LEFT JOIN ekes AS _confirmacionpedido ON
+    _confirmacionpedido~vbeln = _entrega~vbeln
+    LEFT JOIN ekpo AS _oc_posicion ON
+    _oc_posicion~ebeln = _confirmacionpedido~ebeln AND
+    _oc_posicion~ebelp = _confirmacionpedido~ebelp
+    FIELDS DISTINCT _detalle_oc~bukrs, _entrega~vbeln, _entrega~posnr, _entrega~werks, lgpla, lgtyp, bwlvs,
+    _um_posicion~venum, _um_posicion~vepos, _um~exidv, _detalle_oc~konnr, _oc_posicion~lgort
+    WHERE _entrega~vbeln IN @i_r_vbeln
+    INTO TABLE @DATA(ti_entregas_um).
+
+    DELETE ti_entregas_um WHERE lgort NOT IN i_r_lgort AND lgort IS NOT INITIAL.
+
+    SORT c_ti_entrega BY vbeln posnr.
+
+    IF ti_entregas_um IS NOT INITIAL.
+
+      LOOP AT ti_entregas_um REFERENCE INTO DATA(r_es_entrega_um).
+
+        TRY.
+            ASSIGN c_ti_entrega[ vbeln = r_es_entrega_um->vbeln posnr = r_es_entrega_um->posnr ]
+            TO FIELD-SYMBOL(<fs_es_entrega>).
+          CATCH cx_sy_itab_line_not_found.
+        ENDTRY.
+
+        IF <fs_es_entrega> IS ASSIGNED.
+          <fs_es_entrega> = CORRESPONDING #( r_es_entrega_um->* EXCEPT bukrs ).
+        ELSE.
+          APPEND CORRESPONDING #( r_es_entrega_um->* )
+          TO c_ti_entrega.
+        ENDIF.
+
+        UNASSIGN <fs_es_entrega>.
+
+      ENDLOOP.
+
+    ELSE.
+      go_log->set_es_log( i_es = VALUE #( type = 'E' id = 'ZMM01' number = '305' ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD verificar_mensajes_previos.
+
+    CHECK c_ti_entrega IS NOT INITIAL.
+
+    SELECT
+    FROM @c_ti_entrega AS _entrega
+    LEFT JOIN ztmmi1005_1 AS _log_envio_asn ON
+    _log_envio_asn~venum = _entrega~venum
+    AND _log_envio_asn~vepos = _entrega~vepos
+    AND _entrega~exidv = _log_envio_asn~hu_ident
+    AND ( _log_envio_asn~estado = '0' OR
+          _log_envio_asn~estado = @space )
+    FIELDS DISTINCT _entrega~vbeln, _entrega~venum, _entrega~vepos, hu_ident
+    INTO TABLE @DATA(ti_um_sin_asn_hacia_pkms).
+
+    SELECT
+    FROM @c_ti_entrega AS _entrega
+    INNER JOIN nast AS _mensaje ON
+    _mensaje~objky = _entrega~vbeln
+    FIELDS DISTINCT objky AS entrega, kschl, _mensaje~vstat
+    WHERE _mensaje~kschl  IN @gr_clase_mensaje
+    INTO TABLE @DATA(ti_mensajes_entrega).
+
+    LOOP AT c_ti_entrega ASSIGNING FIELD-SYMBOL(<fs_es_entrega>).
+      "Valida que la entrega y la um no tengan mensaje
+      CHECK line_exists( ti_um_sin_asn_hacia_pkms[ vbeln = <fs_es_entrega>-vbeln venum = <fs_es_entrega>-venum vepos = <fs_es_entrega>-vepos  ] ).
+      "Valida que la entrega no tenga msg generado
+      LOOP AT ti_mensajes_entrega INTO DATA(es_mensaje_entrega) WHERE entrega = <fs_es_entrega>-vbeln.
+        <fs_es_entrega>-clase_mensaje = es_mensaje_entrega-kschl.
+        <fs_es_entrega>-vstat = es_mensaje_entrega-vstat.
+      ENDLOOP.
+
+      CHECK NOT line_exists( ti_mensajes_entrega[ entrega = <fs_es_entrega>-vbeln kschl  = es_mensaje_entrega-kschl vstat = gc_estado_msg_procesado ] ).
+
+      "Validar que la entrega tenga um asociada
+      IF <fs_es_entrega>-venum IS INITIAL.
+        go_log->set_es_log( i_es = VALUE #( type = 'W' id = 'ZMM01' number = '305' message_v1 = <fs_es_entrega>-vbeln ) ).
+        CONTINUE.
+      ENDIF.
+
+      <fs_es_entrega>-emitir_mensaje = abap_true.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD generar_msj_ans_hacia_pkms.
+
+    DATA: ti_msj_retorno              TYPE bapiret2_t,
+          es_cabecera                 TYPE bapiibdlvhdrchg,
+          es_control                  TYPE bapiibdlvhdrctrlchg,
+          ti_entrega_posicion         TYPE STANDARD TABLE OF bapiibdlvitemchg,
+          ti_entrega_posicion_control TYPE STANDARD TABLE OF bapiibdlvitemctrlchg,
+          es_control_tecnico          TYPE bapidlvcontrol,
+          entrega_modificada          TYPE i.
+
+    CHECK c_ti_entrega IS NOT INITIAL.
+
+    LOOP AT c_ti_entrega ASSIGNING FIELD-SYMBOL(<fs_es_entrega>)
+                         WHERE emitir_mensaje = abap_true
+                         GROUP BY ( vbeln = <fs_es_entrega>-vbeln ).
+
+      CLEAR: es_cabecera, es_control, ti_msj_retorno, entrega_modificada.
+
+      es_cabecera-deliv_numb = es_control-deliv_numb = <fs_es_entrega>-vbeln.
+*      es_control-simulate    = abap_true.
+
+      LOOP AT GROUP <fs_es_entrega> ASSIGNING FIELD-SYMBOL(<fs_es_entrega_posicion>).
+
+        IF <fs_es_entrega>-lgort IS INITIAL AND i_r_lgort IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( type = 'E' id = 'ZMM01' number = '308' message_v1 = <fs_es_entrega>-vbeln ) ).
+          CONTINUE.
+        ELSEIF i_r_lgort IS NOT INITIAL.
+          <fs_es_entrega_posicion>-lgort = <fs_es_entrega>-lgort = i_r_lgort[ 1 ]-low.
+        ENDIF.
+
+      ENDLOOP.
+
+      modificar_entrega(
+          EXPORTING
+            i_entrega        = <fs_es_entrega>-vbeln
+            i_numero_almacen = <fs_es_entrega_posicion>-lgort
+          IMPORTING
+            e_rc             = entrega_modificada ).
+
+      CHECK entrega_modificada IS INITIAL.
+
+      es_control_tecnico-upd_ind = abap_true.
+
+      CALL FUNCTION 'BAPI_INB_DELIVERY_CHANGE'
+        EXPORTING
+          header_data    = es_cabecera
+          header_control = es_control
+          delivery       = <fs_es_entrega>-vbeln
+          techn_control  = es_control_tecnico
+        TABLES
+          item_data      = ti_entrega_posicion
+          item_control   = ti_entrega_posicion_control
+          return         = ti_msj_retorno.
+
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+      IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+      ELSE.
+
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD visualizar_resultado.
+
+    DATA(ti_entregas) = CORRESPONDING gtp_ti_entrega( gti_entrega EXCEPT posnr venum vepos exidv ).
+
+    SORT ti_entregas BY bukrs vbeln konnr werks lgort.
+
+    DELETE ADJACENT DUPLICATES FROM ti_entregas COMPARING vbeln.
+
+    TRY.
+        DATA(ti_catalogo) = zclcxr1002_util=>construir_catalogo( i_ti = ti_entregas i_optimizar_columnas = abap_true ).
+
+        modificar_catalogo( CHANGING c_ti_catalogo = ti_catalogo ).
+
+      CATCH cx_dynamic_check cx_static_check.
+        "handle exception
+    ENDTRY.
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos      = REF #( ti_entregas )
+        i_ti_catalogo   = ti_catalogo
+        i_o_ctr_alvgrid = me.
+
+  ENDMETHOD.
+
+
+  METHOD actualizar_estado_entrega.
+
+    CHECK c_ti_entrega IS NOT INITIAL.
+
+    SELECT
+    FROM @c_ti_entrega AS _entrega
+    INNER JOIN nast AS _mensaje ON
+    _mensaje~objky = _entrega~vbeln
+    FIELDS objky AS entrega, kschl, _mensaje~vstat
+    WHERE _mensaje~kschl  IN @gr_clase_mensaje
+    INTO TABLE @DATA(ti_mensajes_entrega).
+
+    LOOP AT c_ti_entrega ASSIGNING FIELD-SYMBOL(<fs_es_entrega>).
+
+
+      DATA(es_mensaje_entrega) = VALUE #( ti_mensajes_entrega[ entrega = <fs_es_entrega>-vbeln ] OPTIONAL ).
+
+      IF es_mensaje_entrega IS NOT INITIAL.
+        "Si el mensaje no fue procesado anteriormente de forma exitosa actualiza el estado
+        IF <fs_es_entrega>-vstat NE gc_estado_msg_procesado.
+          <fs_es_entrega>-vstat = es_mensaje_entrega-vstat.
+          <fs_es_entrega>-icono_estado = SWITCH #( <fs_es_entrega>-vstat
+                                                    WHEN gc_estado_msg_procesado THEN
+                                                       icon_green_light
+                                                    WHEN space THEN
+                                                       icon_light_out
+                                                    ELSE
+                                                       icon_red_light ).
+        ELSE.
+          <fs_es_entrega>-icono_estado = icon_yellow_light.
+        ENDIF.
+
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~modificar_catalogo.
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'ICONO_ESTADO'.
+          <fs_es_catalogo>-icon = abap_true.
+          <fs_es_catalogo>-coltext = TEXT-001.
+      ENDCASE.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~pai_at_exit_command.
+
+  ENDMETHOD.
+
+  METHOD zifcxr1002_alvgrid~registrar_evento_alv.
+
+  ENDMETHOD.
+
+  METHOD modificar_entrega.
+
+    DATA: es_entrega_cabecera       TYPE vbkok,
+          ti_datos_posicion         TYPE STANDARD TABLE OF vbpok,
+          ti_protocolo_notificacion TYPE STANDARD TABLE OF prott.
+
+    CLEAR: e_rc.
+
+    CHECK i_numero_almacen IS NOT INITIAL.
+
+    SELECT
+    FROM lips AS _entrega
+    FIELDS DISTINCT _entrega~vbeln, _entrega~posnr, _entrega~werks, lgort, lgpla, lgtyp, bwlvs
+    WHERE _entrega~vbeln = @i_entrega
+    INTO TABLE @DATA(ti_entregas).
+
+    LOOP AT ti_entregas ASSIGNING FIELD-SYMBOL(<fs_es_entrega_posicion>).
+
+      CHECK <fs_es_entrega_posicion>-lgort NE i_numero_almacen.
+
+      APPEND INITIAL LINE TO ti_datos_posicion ASSIGNING FIELD-SYMBOL(<fs_vbpok>).
+      <fs_vbpok>-vbeln_vl = <fs_es_entrega_posicion>-vbeln.
+      <fs_vbpok>-posnr_vl = <fs_es_entrega_posicion>-posnr.
+      <fs_vbpok>-werks    = <fs_es_entrega_posicion>-werks.
+      <fs_vbpok>-lgort    = i_numero_almacen.
+      <fs_vbpok>-kzlgo    = abap_true.
+      <fs_vbpok>-xwmpp    = abap_true.
+      <fs_vbpok>-lgpla    = <fs_es_entrega_posicion>-lgpla.
+      <fs_vbpok>-lgtyp    = <fs_es_entrega_posicion>-lgtyp.
+      <fs_vbpok>-bwlvs    = <fs_es_entrega_posicion>-bwlvs.
+
+    ENDLOOP.
+
+    IF ti_datos_posicion IS NOT INITIAL.
+      es_entrega_cabecera-vbeln_vl   = i_entrega.
+
+      CALL FUNCTION 'WS_DELIVERY_UPDATE'
+        DESTINATION 'NONE'
+        EXPORTING
+          vbkok_wa  = es_entrega_cabecera
+          delivery  = i_entrega
+          commit    = abap_true
+        TABLES
+          vbpok_tab = ti_datos_posicion
+          prot      = ti_protocolo_notificacion
+        EXCEPTIONS
+          OTHERS    = 1.
+
+      e_rc = sy-subrc.
+
+      IF e_rc IS NOT INITIAL.
+        go_log->set_es_log( i_es = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+      ELSE.
+        WAIT UP TO 1 SECONDS.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_catalogo.
+
+    LOOP AT c_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'EMITIR_MENSAJE' OR 'LGPLA' OR 'LGTYP' OR 'BWLVS' OR 'VENUM' OR
+             'VEPOS' OR 'EXIDV' OR 'POSNR'.
+          <fs_es_catalogo>-no_out = abap_true.
+      ENDCASE.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.

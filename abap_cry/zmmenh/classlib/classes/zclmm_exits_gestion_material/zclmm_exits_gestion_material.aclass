@@ -1,0 +1,250 @@
+class ZCLMM_EXITS_GESTION_MATERIAL definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces IF_EX_BADI_BATCH_DET .
+  interfaces IF_EX_BADI_ARTICLE_REF_RT .
+  interfaces IF_BADI_INTERFACE .
+  interfaces IF_EX_ME_PROCESS_PO_CUST .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLMM_EXITS_GESTION_MATERIAL IMPLEMENTATION.
+
+
+  METHOD if_ex_badi_article_ref_rt~add_inactive_fields.
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~import_at_update_task.
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~referenz.
+
+    zclmme1004_mod_desc_material=>modificar_descripcion_variante(
+      EXPORTING
+        i_es_ref_mara = ref_mara
+        i_ti_ref_makt = ref_makt
+      CHANGING
+        c_ti_makt     = badi_makt ).
+
+    zclmme1006_determinacion_cebe=>asignar_valores_x_defecto(
+      EXPORTING
+        i_es_mara    = badi_mara
+        i_badi_tbnam = badi_tbnam
+      CHANGING
+        c_es_mara    = badi_mara
+        c_es_mbew    = badi_mbew
+        c_es_marc    = badi_marc ).
+
+    zclmme1006_determinacion_cebe=>determinar_cebe(
+     EXPORTING
+       i_es_mara    = badi_mara
+       i_badi_tbnam = badi_tbnam
+       i_badi_flg_referenztyp = badi_flg_referenztyp
+     CHANGING
+       c_es_marc    = badi_marc ).
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~referenz_after.
+
+    zclmme1006_determinacion_cebe=>asignar_valores_x_defecto(
+      EXPORTING
+        i_es_mara    = badi_mara
+        i_badi_tbnam = badi_tbnam
+      CHANGING
+        c_es_mara    = badi_mara
+        c_es_mbew    = badi_mbew
+        c_es_marc    = badi_marc ).
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~referenz_before.
+    zclmme1006_determinacion_cebe=>asignar_valores_x_defecto(
+      EXPORTING
+        i_es_mara    = badi_mara
+        i_badi_tbnam = badi_tbnam
+      CHANGING
+        c_es_mara    = badi_mara
+        c_es_mbew    = badi_mbew
+        c_es_marc    = badi_marc ).
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~transport_to_update_task.
+  ENDMETHOD.
+
+
+METHOD if_ex_badi_batch_det~determine_batches.
+
+  break lemoreno.
+  break ccifuent.
+
+ENDMETHOD.
+
+
+METHOD if_ex_badi_batch_det~modify_batch.
+
+*  BREAK ccifuent.
+*  BREAK lemoreno.
+
+*  zclmme1053_lote_unico=>validar_lote(
+*    EXPORTING
+*     i_matnr    = iv_matnr
+*     i_werks    = iv_werks
+*     i_sgt_scat = iv_sgt_scat
+*     i_charg    = iv_charg
+*     i_lgort    = iv_lgort
+*    CHANGING
+*     c_charg    = cv_charg
+*     c_sgt_scat = cv_sgt_scat ).
+
+ENDMETHOD.
+
+
+  method IF_EX_ME_PROCESS_PO_CUST~CHECK.
+  endmethod.
+
+
+  method IF_EX_ME_PROCESS_PO_CUST~POST.
+  endmethod.
+
+
+  method IF_EX_ME_PROCESS_PO_CUST~PROCESS_ITEM.
+  endmethod.
+ENDCLASS.
+class ZCLMM_EXITS_GESTION_MATERIAL definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces IF_EX_BADI_BATCH_DET .
+  interfaces IF_EX_BADI_ARTICLE_REF_RT .
+  interfaces IF_BADI_INTERFACE .
+  interfaces IF_EX_ME_PROCESS_PO_CUST .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLMM_EXITS_GESTION_MATERIAL IMPLEMENTATION.
+
+
+  METHOD if_ex_badi_article_ref_rt~add_inactive_fields.
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~import_at_update_task.
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~referenz.
+
+    zclmme1004_mod_desc_material=>modificar_descripcion_variante(
+      EXPORTING
+        i_es_ref_mara = ref_mara
+        i_ti_ref_makt = ref_makt
+      CHANGING
+        c_ti_makt     = badi_makt ).
+
+    zclmme1006_determinacion_cebe=>asignar_valores_x_defecto(
+      EXPORTING
+        i_es_mara    = badi_mara
+        i_badi_tbnam = badi_tbnam
+      CHANGING
+        c_es_mara    = badi_mara
+        c_es_mbew    = badi_mbew
+        c_es_marc    = badi_marc ).
+
+    zclmme1006_determinacion_cebe=>determinar_cebe(
+     EXPORTING
+       i_es_mara    = badi_mara
+       i_badi_tbnam = badi_tbnam
+       i_badi_flg_referenztyp = badi_flg_referenztyp
+     CHANGING
+       c_es_marc    = badi_marc ).
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~referenz_after.
+
+    zclmme1006_determinacion_cebe=>asignar_valores_x_defecto(
+      EXPORTING
+        i_es_mara    = badi_mara
+        i_badi_tbnam = badi_tbnam
+      CHANGING
+        c_es_mara    = badi_mara
+        c_es_mbew    = badi_mbew
+        c_es_marc    = badi_marc ).
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~referenz_before.
+    zclmme1006_determinacion_cebe=>asignar_valores_x_defecto(
+      EXPORTING
+        i_es_mara    = badi_mara
+        i_badi_tbnam = badi_tbnam
+      CHANGING
+        c_es_mara    = badi_mara
+        c_es_mbew    = badi_mbew
+        c_es_marc    = badi_marc ).
+  ENDMETHOD.
+
+
+  METHOD if_ex_badi_article_ref_rt~transport_to_update_task.
+  ENDMETHOD.
+
+
+METHOD if_ex_badi_batch_det~determine_batches.
+
+  break lemoreno.
+  break ccifuent.
+
+ENDMETHOD.
+
+
+METHOD if_ex_badi_batch_det~modify_batch.
+
+*  BREAK ccifuent.
+*  BREAK lemoreno.
+
+*  zclmme1053_lote_unico=>validar_lote(
+*    EXPORTING
+*     i_matnr    = iv_matnr
+*     i_werks    = iv_werks
+*     i_sgt_scat = iv_sgt_scat
+*     i_charg    = iv_charg
+*     i_lgort    = iv_lgort
+*    CHANGING
+*     c_charg    = cv_charg
+*     c_sgt_scat = cv_sgt_scat ).
+
+ENDMETHOD.
+
+
+  method IF_EX_ME_PROCESS_PO_CUST~CHECK.
+  endmethod.
+
+
+  method IF_EX_ME_PROCESS_PO_CUST~POST.
+  endmethod.
+
+
+  method IF_EX_ME_PROCESS_PO_CUST~PROCESS_ITEM.
+  endmethod.
+ENDCLASS.

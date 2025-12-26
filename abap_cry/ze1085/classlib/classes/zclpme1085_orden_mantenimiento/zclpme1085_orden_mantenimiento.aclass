@@ -1,0 +1,554 @@
+CLASS zclpme1085_orden_mantenimiento DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_actividad_mantenimien TYPE ila  VALUE '401',
+               gc_nombre_objeto_log           TYPE balobj_d  VALUE 'ZPM_1',
+               gc_nombre_subobjeto_log        TYPE balsubobj VALUE 'ZE1085_1'.
+
+    DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS finalizacion_proceso
+      IMPORTING
+        p_task TYPE clike.
+
+    METHODS:
+      notificar_exceso_valor_medido
+        CHANGING
+          c_ti_imrg TYPE imrg_tab,
+      crear_avisoorden_mantenimiento
+        IMPORTING
+          i_ti_imrg                          TYPE imrg_tab
+          i_es_imptt                         TYPE impt
+          i_numero_equipo                    TYPE itob-equnr
+        RETURNING
+          VALUE(r_es_resultado_notificacion) TYPE bapi2080_nothdre.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS:
+      validar_valor_fuera_de_rangp
+        IMPORTING
+          i_ti_imrg               TYPE imrg_tab
+          i_es_imptt              TYPE impt
+        RETURNING
+          VALUE(r_fuera_de_rango) TYPE flag,
+
+      crear_aviso_de_mantenimiento
+        IMPORTING
+          i_ti_imrg                          TYPE imrg_tab
+          i_es_imptt                         TYPE impt
+          i_numero_equipo                    TYPE itob-equnr
+        RETURNING
+          VALUE(r_es_resultado_notificacion) TYPE bapi2080_nothdre,
+      crear_orden_de_mantenimiento
+        IMPORTING
+          i_numero_equipo                    TYPE itob-equnr
+          i_ti_imrg                          TYPE imrg_tab
+          VALUE(i_es_resultado_notificacion) TYPE bapi2080_nothdre.
+
+ENDCLASS.
+
+
+
+CLASS zclpme1085_orden_mantenimiento IMPLEMENTATION.
+
+  METHOD notificar_exceso_valor_medido.
+
+    DATA: fuera_de_rango TYPE flag,
+          numero_equipo  TYPE itob-equnr.
+
+    FIELD-SYMBOLS: <fs_es_imptt>   TYPE impt.
+
+    "Registro en tabla ZTCXR1001_3
+    "E1085  NOTIFICAR_EXCESO_VALOR_MEDIDO   EXIT_SAPLIMR0_001   ZCLPME1085_ORDEN_MANTENIMIENTO  03  X
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_metodo = 'NOTIFICAR_EXCESO_VALOR_MEDIDO' i_ricefw = 'E1085' ) = abap_true.
+
+    ASSIGN ('(SAPLIMR0)IMPT') TO <fs_es_imptt>.
+
+    CHECK <fs_es_imptt> IS ASSIGNED AND
+          c_ti_imrg IS NOT INITIAL.
+
+    fuera_de_rango = validar_valor_fuera_de_rangp( i_ti_imrg = c_ti_imrg i_es_imptt = <fs_es_imptt> ).
+
+    IF fuera_de_rango = abap_true.
+
+      "recuperar numero de equipo
+      numero_equipo = <fs_es_imptt>-mpobj+3(18).
+      numero_equipo = |{ numero_equipo ALPHA = IN }|.
+
+      CALL FUNCTION 'ZPME1085_CREAR_ORDEN_MANT_1'
+        DESTINATION 'NONE'
+        STARTING NEW TASK 'ZPME1085_CREAR_ORDEN_AVISO'
+        CALLING finalizacion_proceso ON END OF TASK
+        EXPORTING
+          i_ti_imrg       = c_ti_imrg
+          i_es_imptt      = <fs_es_imptt>
+          i_numero_equipo = numero_equipo.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD crear_avisoorden_mantenimiento.
+
+***    BREAK seblondo.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( i_es_cabecera_log = VALUE #( object = gc_nombre_objeto_log
+                                                                                    subobject = gc_nombre_subobjeto_log
+                                                                                    aldate_del = sy-datum ) ).
+
+    DATA(es_resultado_notificacion) = crear_aviso_de_mantenimiento( i_numero_equipo = i_numero_equipo
+                                                                    i_ti_imrg       = i_ti_imrg
+                                                                    i_es_imptt      = i_es_imptt ).
+
+    crear_orden_de_mantenimiento( i_numero_equipo = i_numero_equipo
+                                  i_ti_imrg       = i_ti_imrg
+                                  i_es_resultado_notificacion = es_resultado_notificacion ).
+    "Guardar Log de aplicacion
+    go_log->guardar( ).
+
+  ENDMETHOD.
+
+  METHOD validar_valor_fuera_de_rangp.
+
+    CHECK i_ti_imrg IS NOT INITIAL.
+
+    DATA(es_imrg) = VALUE #( i_ti_imrg[ 1 ] ).
+
+    IF NOT ( i_es_imptt-mrmaxi IS INITIAL ) .
+      CALL FUNCTION 'CHECK_EQUALITY_13DECS'
+        EXPORTING
+          iv_float_1         = es_imrg-readg
+          iv_float_2         = i_es_imptt-mrmax
+        EXCEPTIONS
+          float_1_eq_float_2 = 1
+          float_1_gt_float_2 = 2
+          float_1_lt_float_2 = 3.
+
+      IF sy-subrc = 2.
+        r_fuera_de_rango = abap_true.
+      ENDIF.
+    ENDIF.
+
+    IF NOT ( i_es_imptt-mrmini IS INITIAL ).
+      CALL FUNCTION 'CHECK_EQUALITY_13DECS'
+        EXPORTING
+          iv_float_1         = es_imrg-readg
+          iv_float_2         = i_es_imptt-mrmin
+        EXCEPTIONS
+          float_1_eq_float_2 = 1
+          float_1_gt_float_2 = 2
+          float_1_lt_float_2 = 3.
+
+      IF  sy-subrc = 3.
+        r_fuera_de_rango = abap_true.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD crear_aviso_de_mantenimiento.
+
+    DATA: es_cabecera    TYPE bapi2080_nothdri,
+          ti_msg_retorno TYPE bapiret2_t,
+          clase_aviso    TYPE qmart VALUE 'A2'.
+
+    DATA(es_imrg) = i_ti_imrg[ 1 ].
+
+    es_cabecera = VALUE #( refobjecttype = 'Preven01' equipment = i_numero_equipo short_text = es_imrg-mdtxt
+                           notif_date = es_imrg-idate notiftime = es_imrg-itime ).
+
+    CALL FUNCTION 'BAPI_ALM_NOTIF_CREATE'
+      EXPORTING
+        notif_type         = clase_aviso
+        notifheader        = es_cabecera
+        maintactytype      = gc_clase_actividad_mantenimien
+*       date_adjustment    = 'O'
+      IMPORTING
+        notifheader_export = r_es_resultado_notificacion
+      TABLES
+        return             = ti_msg_retorno.
+
+    go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno ) ).
+
+    IF NOT line_exists( ti_msg_retorno[ type = 'E' ] ).
+
+      CLEAR: ti_msg_retorno.
+
+      CALL FUNCTION 'BAPI_ALM_NOTIF_SAVE'
+        EXPORTING
+          number              = r_es_resultado_notificacion-notif_no
+          iv_refresh_complete = abap_true
+        IMPORTING
+          notifheader         = r_es_resultado_notificacion
+        TABLES
+          return              = ti_msg_retorno.
+
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno ) ).
+
+      IF NOT line_exists( ti_msg_retorno[ type = 'E' ] ).
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD crear_orden_de_mantenimiento.
+
+    DATA: ti_metodo          TYPE STANDARD TABLE OF bapi_alm_order_method,
+          ti_cabecera        TYPE STANDARD TABLE OF bapi_alm_order_headers_i,
+          ti_cabecera_marca  TYPE STANDARD TABLE OF bapi_alm_order_headers_up,
+          ti_operacion       TYPE STANDARD TABLE OF bapi_alm_order_operation,
+          ti_operacion_marca TYPE STANDARD TABLE OF bapi_alm_order_operation_up,
+          ti_msg_retorno     TYPE bapiret2_t,
+          clave_objeto       TYPE string VALUE '%00000000001'.
+
+    CHECK i_numero_equipo IS NOT INITIAL AND i_ti_imrg IS NOT INITIAL AND
+          i_es_resultado_notificacion-notif_no IS NOT INITIAL  AND
+          go_log->get_errores( ) IS INITIAL.
+
+    DATA(es_imrg) = i_ti_imrg[ 1 ].
+
+    SELECT
+    FROM equz
+    LEFT JOIN crhd ON
+    crhd~objid = equz~gewrk
+    FIELDS equnr, segchangeddatetime, iwerk, gewrk, arbpl
+    WHERE equnr = @i_numero_equipo
+    INTO TABLE @DATA(ti_equipo).
+
+    SORT ti_equipo BY segchangeddatetime DESCENDING.
+
+    DATA(es_equipo) = VALUE #( ti_equipo[ 1 ] OPTIONAL ).
+
+    ti_metodo = VALUE #(
+                        ( refnumber = '000001' objecttype = 'HEADER' method = 'CREATETONOTIF' objectkey = |{ clave_objeto }{ i_es_resultado_notificacion-notif_no }| )
+                        ( refnumber = '000001' objecttype = 'OPERATION' method = 'CREATE' objectkey = clave_objeto )
+                        ( refnumber = '000001' objecttype = '' method = 'SAVE' objectkey = clave_objeto )
+                       ).
+
+    ti_cabecera = VALUE #(
+                            ( orderid = clave_objeto order_type = 'MP04' planplant = es_equipo-iwerk pmacttype = gc_clase_actividad_mantenimien
+                              mn_wk_ctr = es_equipo-arbpl equipment = i_numero_equipo start_date = es_imrg-idate )
+                         ).
+
+    ti_cabecera_marca = VALUE #( ( orderid = clave_objeto notif_no = abap_true pmacttype = abap_true ) ).
+
+    ti_operacion = VALUE #( ( activity = '0010' control_key = 'PM01' work_cntr = es_equipo-arbpl plant = es_equipo-iwerk description = es_imrg-mdtxt ) ).
+
+    ti_operacion_marca = VALUE #( ( activity = abap_true control_key = abap_true work_cntr = abap_true plant = abap_true description = abap_true ) ).
+
+    CALL FUNCTION 'BAPI_ALM_ORDER_MAINTAIN'
+      TABLES
+        it_methods      = ti_metodo
+        it_header       = ti_cabecera
+        it_header_up    = ti_cabecera_marca
+        it_operation    = ti_operacion
+        it_operation_up = ti_operacion_marca
+        return          = ti_msg_retorno.
+
+    go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno ) ).
+
+    IF NOT line_exists( ti_msg_retorno[ type = 'E' ] ).
+
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = abap_true.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD finalizacion_proceso.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclpme1085_orden_mantenimiento DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_actividad_mantenimien TYPE ila  VALUE '401',
+               gc_nombre_objeto_log           TYPE balobj_d  VALUE 'ZPM_1',
+               gc_nombre_subobjeto_log        TYPE balsubobj VALUE 'ZE1085_1'.
+
+    DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS finalizacion_proceso
+      IMPORTING
+        p_task TYPE clike.
+
+    METHODS:
+      notificar_exceso_valor_medido
+        CHANGING
+          c_ti_imrg TYPE imrg_tab,
+      crear_avisoorden_mantenimiento
+        IMPORTING
+          i_ti_imrg                          TYPE imrg_tab
+          i_es_imptt                         TYPE impt
+          i_numero_equipo                    TYPE itob-equnr
+        RETURNING
+          VALUE(r_es_resultado_notificacion) TYPE bapi2080_nothdre.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS:
+      validar_valor_fuera_de_rangp
+        IMPORTING
+          i_ti_imrg               TYPE imrg_tab
+          i_es_imptt              TYPE impt
+        RETURNING
+          VALUE(r_fuera_de_rango) TYPE flag,
+
+      crear_aviso_de_mantenimiento
+        IMPORTING
+          i_ti_imrg                          TYPE imrg_tab
+          i_es_imptt                         TYPE impt
+          i_numero_equipo                    TYPE itob-equnr
+        RETURNING
+          VALUE(r_es_resultado_notificacion) TYPE bapi2080_nothdre,
+      crear_orden_de_mantenimiento
+        IMPORTING
+          i_numero_equipo                    TYPE itob-equnr
+          i_ti_imrg                          TYPE imrg_tab
+          VALUE(i_es_resultado_notificacion) TYPE bapi2080_nothdre.
+
+ENDCLASS.
+
+
+
+CLASS zclpme1085_orden_mantenimiento IMPLEMENTATION.
+
+  METHOD notificar_exceso_valor_medido.
+
+    DATA: fuera_de_rango TYPE flag,
+          numero_equipo  TYPE itob-equnr.
+
+    FIELD-SYMBOLS: <fs_es_imptt>   TYPE impt.
+
+    "Registro en tabla ZTCXR1001_3
+    "E1085  NOTIFICAR_EXCESO_VALOR_MEDIDO   EXIT_SAPLIMR0_001   ZCLPME1085_ORDEN_MANTENIMIENTO  03  X
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_metodo = 'NOTIFICAR_EXCESO_VALOR_MEDIDO' i_ricefw = 'E1085' ) = abap_true.
+
+    ASSIGN ('(SAPLIMR0)IMPT') TO <fs_es_imptt>.
+
+    CHECK <fs_es_imptt> IS ASSIGNED AND
+          c_ti_imrg IS NOT INITIAL.
+
+    fuera_de_rango = validar_valor_fuera_de_rangp( i_ti_imrg = c_ti_imrg i_es_imptt = <fs_es_imptt> ).
+
+    IF fuera_de_rango = abap_true.
+
+      "recuperar numero de equipo
+      numero_equipo = <fs_es_imptt>-mpobj+3(18).
+      numero_equipo = |{ numero_equipo ALPHA = IN }|.
+
+      CALL FUNCTION 'ZPME1085_CREAR_ORDEN_MANT_1'
+        DESTINATION 'NONE'
+        STARTING NEW TASK 'ZPME1085_CREAR_ORDEN_AVISO'
+        CALLING finalizacion_proceso ON END OF TASK
+        EXPORTING
+          i_ti_imrg       = c_ti_imrg
+          i_es_imptt      = <fs_es_imptt>
+          i_numero_equipo = numero_equipo.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD crear_avisoorden_mantenimiento.
+
+***    BREAK seblondo.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( i_es_cabecera_log = VALUE #( object = gc_nombre_objeto_log
+                                                                                    subobject = gc_nombre_subobjeto_log
+                                                                                    aldate_del = sy-datum ) ).
+
+    DATA(es_resultado_notificacion) = crear_aviso_de_mantenimiento( i_numero_equipo = i_numero_equipo
+                                                                    i_ti_imrg       = i_ti_imrg
+                                                                    i_es_imptt      = i_es_imptt ).
+
+    crear_orden_de_mantenimiento( i_numero_equipo = i_numero_equipo
+                                  i_ti_imrg       = i_ti_imrg
+                                  i_es_resultado_notificacion = es_resultado_notificacion ).
+    "Guardar Log de aplicacion
+    go_log->guardar( ).
+
+  ENDMETHOD.
+
+  METHOD validar_valor_fuera_de_rangp.
+
+    CHECK i_ti_imrg IS NOT INITIAL.
+
+    DATA(es_imrg) = VALUE #( i_ti_imrg[ 1 ] ).
+
+    IF NOT ( i_es_imptt-mrmaxi IS INITIAL ) .
+      CALL FUNCTION 'CHECK_EQUALITY_13DECS'
+        EXPORTING
+          iv_float_1         = es_imrg-readg
+          iv_float_2         = i_es_imptt-mrmax
+        EXCEPTIONS
+          float_1_eq_float_2 = 1
+          float_1_gt_float_2 = 2
+          float_1_lt_float_2 = 3.
+
+      IF sy-subrc = 2.
+        r_fuera_de_rango = abap_true.
+      ENDIF.
+    ENDIF.
+
+    IF NOT ( i_es_imptt-mrmini IS INITIAL ).
+      CALL FUNCTION 'CHECK_EQUALITY_13DECS'
+        EXPORTING
+          iv_float_1         = es_imrg-readg
+          iv_float_2         = i_es_imptt-mrmin
+        EXCEPTIONS
+          float_1_eq_float_2 = 1
+          float_1_gt_float_2 = 2
+          float_1_lt_float_2 = 3.
+
+      IF  sy-subrc = 3.
+        r_fuera_de_rango = abap_true.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD crear_aviso_de_mantenimiento.
+
+    DATA: es_cabecera    TYPE bapi2080_nothdri,
+          ti_msg_retorno TYPE bapiret2_t,
+          clase_aviso    TYPE qmart VALUE 'A2'.
+
+    DATA(es_imrg) = i_ti_imrg[ 1 ].
+
+    es_cabecera = VALUE #( refobjecttype = 'Preven01' equipment = i_numero_equipo short_text = es_imrg-mdtxt
+                           notif_date = es_imrg-idate notiftime = es_imrg-itime ).
+
+    CALL FUNCTION 'BAPI_ALM_NOTIF_CREATE'
+      EXPORTING
+        notif_type         = clase_aviso
+        notifheader        = es_cabecera
+        maintactytype      = gc_clase_actividad_mantenimien
+*       date_adjustment    = 'O'
+      IMPORTING
+        notifheader_export = r_es_resultado_notificacion
+      TABLES
+        return             = ti_msg_retorno.
+
+    go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno ) ).
+
+    IF NOT line_exists( ti_msg_retorno[ type = 'E' ] ).
+
+      CLEAR: ti_msg_retorno.
+
+      CALL FUNCTION 'BAPI_ALM_NOTIF_SAVE'
+        EXPORTING
+          number              = r_es_resultado_notificacion-notif_no
+          iv_refresh_complete = abap_true
+        IMPORTING
+          notifheader         = r_es_resultado_notificacion
+        TABLES
+          return              = ti_msg_retorno.
+
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno ) ).
+
+      IF NOT line_exists( ti_msg_retorno[ type = 'E' ] ).
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD crear_orden_de_mantenimiento.
+
+    DATA: ti_metodo          TYPE STANDARD TABLE OF bapi_alm_order_method,
+          ti_cabecera        TYPE STANDARD TABLE OF bapi_alm_order_headers_i,
+          ti_cabecera_marca  TYPE STANDARD TABLE OF bapi_alm_order_headers_up,
+          ti_operacion       TYPE STANDARD TABLE OF bapi_alm_order_operation,
+          ti_operacion_marca TYPE STANDARD TABLE OF bapi_alm_order_operation_up,
+          ti_msg_retorno     TYPE bapiret2_t,
+          clave_objeto       TYPE string VALUE '%00000000001'.
+
+    CHECK i_numero_equipo IS NOT INITIAL AND i_ti_imrg IS NOT INITIAL AND
+          i_es_resultado_notificacion-notif_no IS NOT INITIAL  AND
+          go_log->get_errores( ) IS INITIAL.
+
+    DATA(es_imrg) = i_ti_imrg[ 1 ].
+
+    SELECT
+    FROM equz
+    LEFT JOIN crhd ON
+    crhd~objid = equz~gewrk
+    FIELDS equnr, segchangeddatetime, iwerk, gewrk, arbpl
+    WHERE equnr = @i_numero_equipo
+    INTO TABLE @DATA(ti_equipo).
+
+    SORT ti_equipo BY segchangeddatetime DESCENDING.
+
+    DATA(es_equipo) = VALUE #( ti_equipo[ 1 ] OPTIONAL ).
+
+    ti_metodo = VALUE #(
+                        ( refnumber = '000001' objecttype = 'HEADER' method = 'CREATETONOTIF' objectkey = |{ clave_objeto }{ i_es_resultado_notificacion-notif_no }| )
+                        ( refnumber = '000001' objecttype = 'OPERATION' method = 'CREATE' objectkey = clave_objeto )
+                        ( refnumber = '000001' objecttype = '' method = 'SAVE' objectkey = clave_objeto )
+                       ).
+
+    ti_cabecera = VALUE #(
+                            ( orderid = clave_objeto order_type = 'MP04' planplant = es_equipo-iwerk pmacttype = gc_clase_actividad_mantenimien
+                              mn_wk_ctr = es_equipo-arbpl equipment = i_numero_equipo start_date = es_imrg-idate )
+                         ).
+
+    ti_cabecera_marca = VALUE #( ( orderid = clave_objeto notif_no = abap_true pmacttype = abap_true ) ).
+
+    ti_operacion = VALUE #( ( activity = '0010' control_key = 'PM01' work_cntr = es_equipo-arbpl plant = es_equipo-iwerk description = es_imrg-mdtxt ) ).
+
+    ti_operacion_marca = VALUE #( ( activity = abap_true control_key = abap_true work_cntr = abap_true plant = abap_true description = abap_true ) ).
+
+    CALL FUNCTION 'BAPI_ALM_ORDER_MAINTAIN'
+      TABLES
+        it_methods      = ti_metodo
+        it_header       = ti_cabecera
+        it_header_up    = ti_cabecera_marca
+        it_operation    = ti_operacion
+        it_operation_up = ti_operacion_marca
+        return          = ti_msg_retorno.
+
+    go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno ) ).
+
+    IF NOT line_exists( ti_msg_retorno[ type = 'E' ] ).
+
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = abap_true.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD finalizacion_proceso.
+
+  ENDMETHOD.
+
+ENDCLASS.

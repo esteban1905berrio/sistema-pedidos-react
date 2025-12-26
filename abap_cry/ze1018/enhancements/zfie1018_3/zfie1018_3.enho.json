@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFIE1018_3",
+  "header" : {
+    "enhancementName" : "ZFIE1018_3",
+    "description" : "Envio de decisiones de credito documentada",
+    "toolType" : "BADI_IMPL",
+    "toolTypeText" : "BAdI Implementation",
+    "devclass" : "ZE1018",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-07-01",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-07-01"
+  },
+  "elements" : [ {
+    "elementType" : "BADI_IMPL",
+    "spotName" : "",
+    "programName" : "",
+    "fullName" : "",
+    "badiName" : "UKMRSE_3_DCD_MNTNO",
+    "badiImpl" : "ZFI_UKMRSE_3_DCD_MNTNO_1",
+    "implClass" : "ZCLFI_IM_UKMRSE_3_DCD_MNTNO_1",
+    "interfaceName" : "IF_UKMRSE_3_DCD_MNTNO",
+    "active" : true,
+    "sourceCode" : ""
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

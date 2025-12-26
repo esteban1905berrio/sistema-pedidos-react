@@ -1,0 +1,114 @@
+CLASS zclfi_im_ukm_r3_activate DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+*"* public components of class ZCLFI_IM_UKM_R3_ACTIVATE
+*"* do not include other source files here!!!
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_ex_ukm_r3_activate .
+  PROTECTED SECTION.
+*"* protected components of class ZCLFI_IM_UKM_R3_ACTIVATE
+*"* do not include other source files here!!!
+  PRIVATE SECTION.
+*"* private components of class ZCLFI_IM_UKM_R3_ACTIVATE
+*"* do not include other source files here!!!
+ENDCLASS.
+
+
+
+CLASS ZCLFI_IM_UKM_R3_ACTIVATE IMPLEMENTATION.
+
+
+  METHOD if_ex_ukm_r3_activate~dcd_active.
+
+    e_dcd_active = 'X'.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_r3_activate~fi_ar_update_mode.
+    e_direct_update = 'X'. "necessary to suppress PM from SD
+    e_update_fm = ''.
+*    e_read_view = 'X'. "use FI/AR views and not UKM_ITEM for FI/AR commitments
+    e_read_view = ''. "use FI/AR views and not UKM_ITEM for FI/AR commitments
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_r3_activate~get_rfcdest_fscm.
+
+    c_rfcdest = space.
+    c_is_local_interface_used = 'X'.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_r3_activate~no_sld.
+
+    e_no_sld = 'X'.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_r3_activate~set_active.
+
+    e_active_flag = 'X'.
+    e_erp2005 = 'X'.
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclfi_im_ukm_r3_activate DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+*"* public components of class ZCLFI_IM_UKM_R3_ACTIVATE
+*"* do not include other source files here!!!
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_ex_ukm_r3_activate .
+  PROTECTED SECTION.
+*"* protected components of class ZCLFI_IM_UKM_R3_ACTIVATE
+*"* do not include other source files here!!!
+  PRIVATE SECTION.
+*"* private components of class ZCLFI_IM_UKM_R3_ACTIVATE
+*"* do not include other source files here!!!
+ENDCLASS.
+
+
+
+CLASS ZCLFI_IM_UKM_R3_ACTIVATE IMPLEMENTATION.
+
+
+  METHOD if_ex_ukm_r3_activate~dcd_active.
+
+    e_dcd_active = 'X'.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_r3_activate~fi_ar_update_mode.
+    e_direct_update = 'X'. "necessary to suppress PM from SD
+    e_update_fm = ''.
+*    e_read_view = 'X'. "use FI/AR views and not UKM_ITEM for FI/AR commitments
+    e_read_view = ''. "use FI/AR views and not UKM_ITEM for FI/AR commitments
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_r3_activate~get_rfcdest_fscm.
+
+    c_rfcdest = space.
+    c_is_local_interface_used = 'X'.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_r3_activate~no_sld.
+
+    e_no_sld = 'X'.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ukm_r3_activate~set_active.
+
+    e_active_flag = 'X'.
+    e_erp2005 = 'X'.
+  ENDMETHOD.
+ENDCLASS.

@@ -1,0 +1,2460 @@
+class ZCLFIE1002_VAL_XREF1_XREF3 definition
+  public
+  final
+  create public .
+
+public section.
+
+  types:
+    BEGIN OF gtp_es_datos_tercero,
+        kunnr TYPE kna1-kunnr,
+        lifnr TYPE lfa1-lifnr,
+        name1 TYPE kna1-name1,
+        name2 TYPE kna1-name2,
+        name3 TYPE kna1-name3,
+        name4 TYPE kna1-name4,
+        stcd1 TYPE kna1-stcd1,
+        stenr TYPE lfa1-stenr,
+        ktokk TYPE lfa1-ktokk, ".Adicion Jose Miguel Valencia 25.11.2021
+      END OF gtp_es_datos_tercero .
+  types:
+    gtp_ti_datos_tercero TYPE STANDARD TABLE OF gtp_es_datos_tercero WITH EMPTY KEY .
+  types:
+    gtp_r_nit       TYPE RANGE OF kna1-stcd1 .
+  types:
+    gtp_r_cuenta    TYPE RANGE OF bseg-hkont .
+  types:
+    gtp_r_cliente   TYPE RANGE OF kna1-kunnr .
+  types:
+    gtp_r_proveedor TYPE RANGE OF lfa1-kunnr .
+
+  constants C_RICEFW type ZTCXR1000_1-RICEFW value 'E1002' ##NO_TEXT.
+  constants C_W type CHAR1 value 'W' ##NO_TEXT.
+
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Modificar valores XREF3 de cliente y proveedor segun el NIT ingresado en BSEG-XREF1<br/>
+    "! </p>
+    "! <strong>Identificador:</strong>
+    "! E1002 <br/>
+    "! <strong>Autor:</strong>
+    "! Sebastian Londono
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+    "! \ 15.10.2021  \ S4DK903879 \ Jose Miguel Valencia \ 1301-02  \
+    "! @parameter i_bukrs | Sociedad
+    "! @parameter i_blart | Clase de documento
+    "! @parameter i_tcode | Codigo transaccion
+    "! @parameter c_ti_bseg | tabla interna con datos a modificar
+  class-methods SUSTITUIR_XREF3
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional .
+  class-methods SUSTITUIR_XREF3_CLIENTE
+    importing
+      !I_BLART type BKPF-BLART optional
+    exporting
+      !E_TI_NIT_NO_ENCONTRADO type GTP_R_NIT
+    changing
+      !C_TI_BSEG type BSEG_T .
+  class-methods SUSTITUIR_XREF3_PROVEEDOR
+    importing
+      !I_BLART type BKPF-BLART optional
+    exporting
+      !E_TI_NIT_NO_ENCONTRADO type GTP_R_NIT
+    changing
+      !C_TI_BSEG type BSEG_T .
+  class-methods ASIGNAR_VALORES_GLOBALES
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE .
+  class-methods SUSTITUIR_XREF1_XREF3
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+      !I_TI_BKPF type BKPF_T optional
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XREF_CLIENTE
+    importing
+      !I_BLART type BKPF-BLART optional
+      !I_TI_BKPF type BKPF_T optional
+    exporting
+      !E_FLAG type XFELD
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XREF_PROVEEDOR
+    importing
+      !I_BLART type BKPF-BLART optional
+    exporting
+      !E_FLAG type XFELD
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XREF_PRODIVERSO
+    importing
+      !I_BLART type BKPF-BLART
+      !I_TI_BKPF type BKPF_T
+    exporting
+      !E_FLAG type XFELD
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+    "! Sustitución campo BKPF-BKTXT por BSEG-SGTXT
+    "! @parameter i_ti_bkpf | Cabecera Documento
+    "! @parameter c_ti_bseg | Posiciones Documento
+  class-methods SUSTITUIR_TEXTOS_BSEG
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods CARGAR_PARAMETROS .
+  class-methods SUSTITUIR_XBLNR
+    importing
+      !I_TI_BKPF type BKPF_T
+      !I_TI_BSEG type BSEG_T
+    changing
+      !C_TI_BKPFSUB type BKPF_SUBST_T .
+  class-methods SUSTITUIR_XREF1_XREF3_COMPENSA
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T .
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA: g_bukrs               TYPE bseg-bukrs,
+                g_blart               TYPE bkpf-blart,
+                g_tcode               TYPE sytcode,
+                go_parametros         TYPE REF TO zclcxr1000_parametros,
+                gr_clase_documentos   TYPE RANGE OF bkpf-blart,
+                gr_codigo_transaccion TYPE RANGE OF sytcode,
+                gr_cuentas_cliente    TYPE RANGE OF acdoca-racct,
+                gr_cuentas_proveedor  TYPE RANGE OF acdoca-racct,
+                gr_sociedades         TYPE RANGE OF bseg-bukrs,
+                gr_grpcuentas         TYPE RANGE OF lfa1-ktokk,   ".Grupo de Cuentas Actualizacion XREF1
+                gr_transacciones_xref TYPE RANGE OF sytcode,      ".Codigos Transacciones Actualizacion XREF1 y XREF3
+                gr_trx_textos_pos     TYPE RANGE OF sytcode,      ".Codigos Transacciones Sustitucion Textos Posicion
+                gr_tipo_prodiverso    TYPE RANGE OF char4,        ".Tipos cliente/Proveedor Prodiverso
+                gr_clase_cta          TYPE RANGE OF bseg-koart,   ".Clases de Cuenta
+                gr_cl_doc_med_pago    TYPE RANGE OF bkpf-blart.   ".Clases de Documentos Medio de pago cliente prodiverso
+
+    CLASS-METHODS:
+      consultar_cliente_por_nit
+        IMPORTING
+          VALUE(i_r_nit)            TYPE gtp_r_nit
+        RETURNING
+          VALUE(r_ti_datos_cliente) TYPE gtp_ti_datos_tercero,
+      consultar_proveedor_por_nit
+        IMPORTING
+          VALUE(i_r_nit)              TYPE gtp_r_nit
+        RETURNING
+          VALUE(r_ti_datos_proveedor) TYPE gtp_ti_datos_tercero,
+      ejecutar_validacion
+        RETURNING
+          VALUE(r_rc) TYPE flag,
+      validar_nit_tercero
+        IMPORTING
+          i_r_hkont TYPE gtp_r_cuenta
+        CHANGING
+          c_r_nit   TYPE gtp_r_nit
+          c_ti_bseg TYPE bseg_t,
+
+      consultar_cliente_por_id
+        IMPORTING
+          VALUE(i_r_cliente)        TYPE gtp_r_cliente
+        RETURNING
+          VALUE(r_ti_datos_cliente) TYPE gtp_ti_datos_tercero,
+
+      consultar_proveedor_por_id
+        IMPORTING
+          VALUE(i_r_proveedor)      TYPE gtp_r_proveedor
+        RETURNING
+          VALUE(r_ti_datos_cliente) TYPE gtp_ti_datos_tercero,
+
+      "! Metodo para realizar la sustitucion cuando es cliente tercero
+      "! @parameter i_c_prodiverso | Tipo de cliente/Proverdor prodiverso
+      sustitucion_tercero
+        IMPORTING
+          VALUE(i_c_prodiverso) TYPE char4 OPTIONAL
+          VALUE(i_ti_bseg)      TYPE bseg_t
+          VALUE(i_ti_bsec)      TYPE bsec_t
+          VALUE(i_ti_bkpf)      TYPE bkpf_t OPTIONAL
+        EXPORTING
+          e_flag                TYPE xfeld
+        CHANGING
+          c_ti_bseg_subst       TYPE bseg_subst_t.
+
+ENDCLASS.
+
+
+
+CLASS ZCLFIE1002_VAL_XREF1_XREF3 IMPLEMENTATION.
+
+
+  METHOD consultar_cliente_por_nit.
+
+    CHECK i_r_nit IS NOT INITIAL.
+
+    LOOP AT i_r_nit ASSIGNING FIELD-SYMBOL(<fs_nit>).
+      CONDENSE <fs_nit>-low NO-GAPS.
+      CONDENSE <fs_nit>-high NO-GAPS.
+    ENDLOOP.
+
+    SELECT kunnr, name1, name2, name3, name4, stcd1
+    FROM kna1
+    WHERE stcd1 IN @i_r_nit
+    ORDER BY kunnr ASCENDING
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_cliente.
+
+  ENDMETHOD.
+
+
+  METHOD consultar_proveedor_por_nit.
+
+    CHECK i_r_nit IS NOT INITIAL.
+
+    LOOP AT i_r_nit ASSIGNING FIELD-SYMBOL(<fs_nit>).
+      CONDENSE <fs_nit>-low NO-GAPS.
+      CONDENSE <fs_nit>-high NO-GAPS.
+    ENDLOOP.
+
+    SELECT lifnr, name1, name2, name3, name4, stcd1, stenr
+    FROM lfa1
+    WHERE stcd1 IN @i_r_nit
+    ORDER BY lifnr ASCENDING
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_proveedor.
+
+    IF lines( r_ti_datos_proveedor ) EQ 0.
+      ".Consultamos Nº identificación fiscal p.interlocutor comercial
+      SELECT partner, taxtype, taxnum
+        FROM dfkkbptaxnum
+       WHERE taxnum IN @i_r_nit
+        INTO TABLE @DATA(ti_taxnum).
+      IF lines( ti_taxnum ) GT 0.
+
+        "Creamos un rango con los codigo internos del proveedor(LIFNR)
+        DATA(r_lifnr) = VALUE fip_t_lifnr_range(
+          FOR es_taxnum IN ti_taxnum
+          LET s = 'I'
+              o = 'EQ' IN sign = s
+                          option = o
+        ( low = es_taxnum-partner )
+         ).
+
+        SELECT lifnr, name1, name2, name3, name4, stcd1, stenr
+          FROM lfa1
+         WHERE lifnr IN @r_lifnr
+           AND ktokk IN @gr_grpcuentas
+         ORDER BY lifnr ASCENDING
+          INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_proveedor.
+        IF lines( r_ti_datos_proveedor ) GT 0.
+          "Colocar en el campo stcd1 el valor del nit(i_r_nit)
+          r_ti_datos_proveedor[ 1 ]-stcd1 = i_r_nit[ 1 ]-low.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref3_cliente.
+    DATA: r_nit TYPE RANGE OF kna1-stcd1.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti             = c_ti_bseg
+        i_nombre_columna = 'XREF1'
+      CHANGING
+        c_ti_rango       = r_nit ).
+
+    e_ti_nit_no_encontrado = r_nit.
+
+    validar_nit_tercero(
+      EXPORTING
+        i_r_hkont = gr_cuentas_cliente
+      CHANGING
+        c_r_nit   = r_nit
+        c_ti_bseg = c_ti_bseg ).
+
+    DATA(ti_datos_cliente) = consultar_cliente_por_nit( i_r_nit = r_nit ).
+
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>) WHERE xref1 IS NOT INITIAL.
+
+      CHECK <fs_bseg>-hkont IN gr_cuentas_cliente AND gr_cuentas_cliente IS NOT INITIAL.
+
+      TRY.
+          <fs_bseg>-xref3 = ti_datos_cliente[ stcd1 = <fs_bseg>-xref1 ]-name1.
+          DELETE e_ti_nit_no_encontrado WHERE low = <fs_bseg>-xref1.
+        CATCH cx_sy_itab_line_not_found .
+
+      ENDTRY.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref3_proveedor.
+    DATA: r_nit TYPE RANGE OF kna1-stcd1.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    validar_nit_tercero(
+      EXPORTING
+        i_r_hkont = gr_cuentas_proveedor
+      CHANGING
+        c_r_nit   = r_nit
+        c_ti_bseg = c_ti_bseg ).
+
+    DATA(ti_datos_proveedor) = consultar_proveedor_por_nit( i_r_nit = r_nit ).
+
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>) WHERE xref1 IS NOT INITIAL.
+
+      CHECK <fs_bseg>-hkont IN gr_cuentas_proveedor AND gr_cuentas_proveedor IS NOT INITIAL.
+
+      TRY.
+          <fs_bseg>-xref3 = ti_datos_proveedor[ stcd1 = <fs_bseg>-xref1 ]-name1.
+          DELETE e_ti_nit_no_encontrado WHERE low = <fs_bseg>-xref1.
+        CATCH cx_sy_itab_line_not_found.
+
+      ENDTRY.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref3.
+
+    asignar_valores_globales( i_bukrs = i_bukrs
+                              i_blart = i_blart
+                              i_tcode = i_tcode ).
+
+    cargar_parametros(  ).
+
+    CHECK ejecutar_validacion( ) = abap_true.
+
+    sustituir_xref3_cliente(
+     IMPORTING
+        e_ti_nit_no_encontrado = DATA(ti_nit_no_encontrado)
+     CHANGING
+        c_ti_bseg = c_ti_bseg[] ).
+
+    sustituir_xref3_proveedor(
+      IMPORTING
+        e_ti_nit_no_encontrado = ti_nit_no_encontrado
+      CHANGING
+        c_ti_bseg = c_ti_bseg[] ).
+
+    IF ti_nit_no_encontrado IS NOT INITIAL.
+      MESSAGE e036(zfi01) WITH ti_nit_no_encontrado[ 1 ]-low.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD cargar_parametros.
+
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = c_ricefw ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'CLASEDOC'
+      IMPORTING
+        e_ti_valrango           = gr_clase_documentos
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'COD_TRANSA'
+      IMPORTING
+        e_ti_valrango           = gr_codigo_transaccion
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'CUENTA_CLI'
+      IMPORTING
+        e_ti_valrango           = gr_cuentas_cliente
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'CUENTA_PRV'
+      IMPORTING
+        e_ti_valrango           = gr_cuentas_proveedor
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'SOCIEDADES'
+      IMPORTING
+        e_ti_valrango           = gr_sociedades
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    ".Transacciones actualizar XREF1 y XREF3
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'TCODE_XREF'
+       IMPORTING
+         e_ti_valrango           = gr_transacciones_xref
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Grupo de cuentas actualizar XREF1
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'GRPCUENTA'
+       IMPORTING
+         e_ti_valrango           = gr_grpcuentas
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Transacciones Sustitucion Textos Posicion
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'TRXTEXTOS'
+       IMPORTING
+         e_ti_valrango           = gr_trx_textos_pos
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Tipos Cliente/Proveedor Prodiverso
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'TIPOPRODIV'
+       IMPORTING
+         e_ti_valrango           = gr_tipo_prodiverso
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Clases de Cuenta(KOART)
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'CLASECTA'
+       IMPORTING
+         e_ti_valrango           = gr_clase_cta
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Clases de Documento Medios de pago cliente prodiverso
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'CLMEDPAGO'
+       IMPORTING
+         e_ti_valrango           = gr_cl_doc_med_pago
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+
+
+  ENDMETHOD.
+
+
+  METHOD ejecutar_validacion.
+
+    IF g_blart IN gr_clase_documentos AND g_bukrs IN gr_sociedades AND g_tcode IN gr_codigo_transaccion
+     AND gr_codigo_transaccion IS NOT INITIAL AND gr_clase_documentos IS NOT INITIAL AND gr_sociedades IS NOT INITIAL.
+      r_rc = abap_true.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD asignar_valores_globales.
+    g_blart = i_blart.
+    g_bukrs = i_bukrs.
+    g_tcode = i_tcode.
+  ENDMETHOD.
+
+
+  METHOD validar_nit_tercero.
+
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>) WHERE hkont IN i_r_hkont.
+
+      IF <fs_bseg>-xref1 IS INITIAL.
+        MESSAGE e000(zfi) WITH <fs_bseg>-hkont.
+      ELSE.
+        zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_low            = <fs_bseg>-xref1
+        CHANGING
+          c_ti_rango       = c_r_nit ).
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref1_xref3.
+
+    DATA:
+      proceso_ok TYPE xfeld.
+
+    asignar_valores_globales( i_bukrs = i_bukrs
+                              i_blart = i_blart
+                              i_tcode = i_tcode ).
+
+    sustituir_xref_cliente(
+      EXPORTING
+        i_ti_bkpf = i_ti_bkpf
+      IMPORTING
+        e_flag          = proceso_ok
+      CHANGING
+        c_ti_bseg = c_ti_bseg[]
+        c_ti_bseg_subst = c_ti_bseg_subst[]
+        c_ti_bsec       = c_ti_bsec[]
+        ).
+
+    sustituir_xref_proveedor(
+      IMPORTING
+        e_flag          = proceso_ok
+      CHANGING
+        c_ti_bseg = c_ti_bseg[]
+        c_ti_bseg_subst = c_ti_bseg_subst[]
+        c_ti_bsec       = c_ti_bsec[] ).
+
+    IF proceso_ok NE abap_true.
+      sustituir_xref_prodiverso(
+        EXPORTING
+          i_blart         = i_blart
+          i_ti_bkpf       = i_ti_bkpf
+        IMPORTING
+          e_flag          = proceso_ok
+        CHANGING
+          c_ti_bseg       = c_ti_bseg
+          c_ti_bseg_subst = c_ti_bseg_subst
+          c_ti_bsec       = c_ti_bsec
+      ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref_cliente.
+
+    DATA:
+      r_cliente        TYPE RANGE OF kna1-kunnr,
+      es_datos_tercero TYPE gtp_es_datos_tercero,
+      contador         TYPE sytabix.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    ".Creamos rango del cliente
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti             = c_ti_bseg
+        i_nombre_columna = 'KUNNR'
+      CHANGING
+        c_ti_rango       = r_cliente ).
+
+    IF NOT line_exists( r_cliente[ 1 ] ).
+      EXIT.
+    ENDIF.
+
+    DATA(ti_datos_cliente) = consultar_cliente_por_id( i_r_cliente = r_cliente ).
+    DATA(ti_bseg_aux) = c_ti_bseg.
+    DELETE ti_bseg_aux WHERE kunnr EQ space OR
+                             kunnr IS INITIAL.
+    IF lines( ti_bseg_aux ) EQ 0.
+      EXIT.
+    ELSE.
+      TRY.
+          DATA(cliente) = ti_bseg_aux[ 1 ]-kunnr.
+        CATCH cx_sy_itab_line_not_found .
+      ENDTRY.
+    ENDIF.
+
+    e_flag = abap_true.
+
+    ".recorremos las posiciones del documento
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>).
+
+      TRY.
+          ADD 1 TO contador.
+          IF contador = 1.
+            DATA(es_datos_tercero_pos1) = ti_datos_cliente[ kunnr = cliente ].
+          ENDIF.
+          es_datos_tercero = COND #( WHEN <fs_bseg>-koart EQ 'S' THEN es_datos_tercero_pos1 ELSE ti_datos_cliente[ kunnr = <fs_bseg>-kunnr ] ).
+          <fs_bseg>-xref1 = es_datos_tercero-stcd1.
+          <fs_bseg>-xref3 = es_datos_tercero-name1.
+
+        CATCH cx_sy_itab_line_not_found .
+          CONTINUE.
+*          EXIT.
+      ENDTRY.
+    ENDLOOP.
+
+    IF lines( c_ti_bseg_subst ) GT 0.
+      sustitucion_tercero(
+        EXPORTING
+          i_c_prodiverso  = VALUE #( ti_datos_cliente[ 1 ]-ktokk OPTIONAL )
+          i_ti_bseg       = c_ti_bseg
+          i_ti_bsec       = c_ti_bsec
+          i_ti_bkpf       = i_ti_bkpf
+        CHANGING
+          c_ti_bseg_subst = c_ti_bseg_subst
+      ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref_proveedor.
+    DATA:
+      r_proveedor      TYPE RANGE OF kna1-kunnr,
+      es_datos_tercero TYPE gtp_es_datos_tercero,
+      contador         TYPE sytabix.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    ".Creamos rango del proveedor
+    zclcxr1002_util=>crear_rango(
+    EXPORTING
+      i_ti             = c_ti_bseg
+      i_nombre_columna = 'LIFNR'
+    CHANGING
+      c_ti_rango       = r_proveedor ).
+
+    IF NOT line_exists( r_proveedor[ 1 ] ).
+      EXIT.
+    ENDIF.
+
+    DATA(ti_datos_cliente) = consultar_proveedor_por_id( i_r_proveedor = r_proveedor ).
+    DATA(ti_bseg_aux) = c_ti_bseg.
+    DELETE ti_bseg_aux WHERE lifnr EQ space OR
+                             lifnr IS INITIAL.
+    IF lines( ti_bseg_aux ) EQ 0.
+      EXIT.
+    ELSE.
+      TRY.
+          DATA(proveedor) = ti_bseg_aux[ 1 ]-lifnr.
+        CATCH cx_sy_itab_line_not_found .
+      ENDTRY.
+    ENDIF.
+    e_flag = abap_true.
+    ".recorremos las posiciones del documento
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>).
+      TRY.
+          ADD 1 TO contador.
+
+          IF contador = 1.
+            DATA(es_datos_tercero_pos1) = ti_datos_cliente[ lifnr = proveedor ].
+          ENDIF.
+
+          IF <fs_bseg>-lifnr IS NOT INITIAL.
+            READ TABLE ti_datos_cliente
+              WITH KEY lifnr = <fs_bseg>-lifnr
+              INTO DATA(es_datos_cliente).
+            IF sy-subrc = 0.
+              MOVE-CORRESPONDING es_datos_cliente TO es_datos_tercero_pos1.
+            ENDIF.
+          ENDIF.
+
+          es_datos_tercero = COND #( WHEN <fs_bseg>-koart IN gr_clase_cta THEN es_datos_tercero_pos1 ELSE ti_datos_cliente[ lifnr = <fs_bseg>-lifnr ] ).
+          <fs_bseg>-xref1 = es_datos_tercero-stcd1.
+          <fs_bseg>-xref3 = es_datos_tercero-name1.
+        CATCH cx_sy_itab_line_not_found .
+          CONTINUE.
+*          EXIT.
+      ENDTRY.
+    ENDLOOP.
+
+    IF lines( c_ti_bseg_subst ) GT 0.
+      sustitucion_tercero(
+        EXPORTING
+          i_c_prodiverso  = VALUE #( ti_datos_cliente[ 1 ]-ktokk OPTIONAL )
+          i_ti_bseg       = c_ti_bseg
+          i_ti_bsec       = c_ti_bsec
+        CHANGING
+          c_ti_bseg_subst = c_ti_bseg_subst
+      ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD consultar_cliente_por_id.
+
+    CHECK i_r_cliente IS NOT INITIAL.
+
+    LOOP AT i_r_cliente ASSIGNING FIELD-SYMBOL(<fs_cliente>).
+      CONDENSE <fs_cliente>-low NO-GAPS.
+      CONDENSE <fs_cliente>-high NO-GAPS.
+    ENDLOOP.
+
+    SELECT kunnr, name1, name2, name3, name4, stcd1, ktokd AS ktokk
+      FROM kna1
+     WHERE kunnr IN @i_r_cliente
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_cliente.
+
+*--------------------------------------------------------------------*
+* Ini LEMORENO - Se incluye mecanica para obtener STCD1 de Clientes
+*                del Exterior.
+*--------------------------------------------------------------------*
+    IF lines( r_ti_datos_cliente ) GT 0.
+      ".Validamos si el campo STCD1 esta vacio
+      DATA(r_kunnr) = VALUE gtp_r_cliente(
+        FOR es_aux IN r_ti_datos_cliente
+          WHERE ( ( stcd1 EQ space OR stcd1 EQ '' ) AND
+                    ktokk IN gr_grpcuentas )
+          LET s = 'I'
+              o = 'EQ' IN sign = s
+                          option = o
+        ( low = es_aux-kunnr )
+        ).
+
+      IF lines( r_kunnr ) > 0.
+        ".Consultamos Nº identificación fiscal p.interlocutor comercial
+        SELECT partner, taxtype, taxnum
+          FROM dfkkbptaxnum
+         WHERE partner IN @r_kunnr
+          INTO TABLE @DATA(ti_taxnum).
+        IF lines( ti_taxnum ) GT 0.
+
+          LOOP AT r_ti_datos_cliente ASSIGNING FIELD-SYMBOL(<fs_datos_aux>).
+            IF <fs_datos_aux>-stcd1 IS NOT INITIAL.
+              CONTINUE.
+            ENDIF.
+            TRY.
+                <fs_datos_aux>-stcd1 = ti_taxnum[ partner = <fs_datos_aux>-kunnr ]-taxnum.
+              CATCH cx_sy_itab_line_not_found.
+            ENDTRY.
+
+          ENDLOOP.
+
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+*--------------------------------------------------------------------*
+
+  ENDMETHOD.
+
+
+  METHOD consultar_proveedor_por_id.
+
+    CHECK i_r_proveedor IS NOT INITIAL.
+
+    LOOP AT i_r_proveedor ASSIGNING FIELD-SYMBOL(<fs_proveedor>).
+      CONDENSE <fs_proveedor>-low NO-GAPS.
+      CONDENSE <fs_proveedor>-high NO-GAPS.
+    ENDLOOP.
+
+    SELECT lifnr, name1, name2, name3, name4, stcd1, stenr, ktokk
+      FROM lfa1
+     WHERE lifnr IN @i_r_proveedor
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_cliente.
+    IF lines( r_ti_datos_cliente ) GT 0.
+      ".Validamos si el campo STCD1 esta vacio
+      DATA(r_lifnr) = VALUE gtp_r_proveedor(
+        FOR es_aux IN r_ti_datos_cliente
+          WHERE ( ( stcd1 EQ space OR stcd1 EQ '' ) AND
+                    ktokk IN gr_grpcuentas )
+          LET s = 'I'
+              o = 'EQ' IN sign = s
+                          option = o
+        ( low = es_aux-lifnr )
+        ).
+
+      ".Consultamos Nº identificación fiscal p.interlocutor comercial
+      SELECT partner, taxtype, taxnum
+        FROM dfkkbptaxnum
+       WHERE partner IN @r_lifnr
+        INTO TABLE @DATA(ti_taxnum).
+      IF lines( ti_taxnum ) GT 0.
+
+        LOOP AT r_ti_datos_cliente ASSIGNING FIELD-SYMBOL(<fs_datos_aux>).
+          IF <fs_datos_aux>-stcd1 IS NOT INITIAL.
+            CONTINUE.
+          ENDIF.
+          TRY.
+              <fs_datos_aux>-stcd1 = ti_taxnum[ partner = <fs_datos_aux>-lifnr ]-taxnum.
+            CATCH cx_sy_itab_line_not_found.
+          ENDTRY.
+
+
+        ENDLOOP.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref_prodiverso.
+    DATA:
+      es_bseg_subst TYPE bseg_subst.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    ".Recorremos la cabecera del doc
+    LOOP AT i_ti_bkpf ASSIGNING FIELD-SYMBOL(<fs_bkpf>).
+
+      sustitucion_tercero(
+        EXPORTING
+          i_ti_bseg       = c_ti_bseg
+          i_ti_bsec       = c_ti_bsec
+        IMPORTING
+          e_flag          = e_flag
+        CHANGING
+          c_ti_bseg_subst = c_ti_bseg_subst
+      ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD sustitucion_tercero.
+
+    DATA:
+      rn_cuentas TYPE RANGE OF ztfii1014_11-hkont.
+
+    DATA:
+      ti_bstkd    TYPE  zttsdi1072_2,
+      ti_contacto TYPE  zttsdi1072_1.
+
+    DATA:
+      es_bsec       TYPE bsec,
+      es_bseg_subst TYPE bseg_subst.
+
+    FIELD-SYMBOLS:
+      <es_bseg> TYPE bseg.
+
+
+
+    DATA:
+      tabix  TYPE sytabix,
+      ref_1  TYPE bseg-xref1,
+      ref_3  TYPE bseg-xref3,
+      cuenta TYPE ztfii1014_11-hkont.
+
+    ".Validamos si es cliente/proveedor prodiverso
+    IF gr_tipo_prodiverso[] IS NOT INITIAL AND
+       i_c_prodiverso IS NOT INITIAL AND
+       i_c_prodiverso IN gr_tipo_prodiverso[].
+
+      DATA(ti_bseg_aux) = i_ti_bseg.
+      ".Ordenamos por cuenta
+      SORT ti_bseg_aux BY hkont.
+      ".Eliminamos duplicados
+      DELETE ADJACENT DUPLICATES FROM ti_bseg_aux COMPARING hkont.
+
+      ".Rango con las cuentas
+      rn_cuentas = VALUE #(
+      FOR es_bseg_aux IN ti_bseg_aux
+      ( sign = 'I'
+        option = 'EQ'
+        low = |{ es_bseg_aux-hkont ALPHA = IN }| )
+       ).
+
+      ".Consultamos Relación bancos y ctas. contables
+      SELECT cmdtx, nit, hkont
+        FROM ztfii1014_11
+       WHERE hkont IN @rn_cuentas
+        INTO TABLE @DATA(ti_ztfii1014_11).
+
+      ti_bseg_aux = i_ti_bseg.
+      ".Ordenamos por cliente
+      SORT ti_bseg_aux BY kunnr.
+      ".Eliminamos duplicados
+      DELETE ADJACENT DUPLICATES FROM ti_bseg_aux COMPARING kunnr.
+
+
+      ".Consultamos la informacion de los clientes
+      SELECT kunnr, name1, stcd1
+        FROM kna1
+         FOR ALL ENTRIES IN @ti_bseg_aux
+       WHERE kunnr EQ @ti_bseg_aux-kunnr
+        INTO TABLE @DATA(ti_kna1).
+
+      ".recorremos las posiciones del doc
+      LOOP AT i_ti_bseg ASSIGNING <es_bseg>.
+
+        tabix = sy-tabix.
+
+        IF tabix EQ 1.
+
+          IF <es_bseg>-zuonr IS INITIAL.
+
+            es_bseg_subst-xref1 = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+                                                      belnr = <es_bseg>-belnr
+                                                      gjahr = <es_bseg>-gjahr
+                                                      buzei = <es_bseg>-buzei ]-stcd1 OPTIONAL ).
+
+            es_bseg_subst-xref3 = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+                                                     belnr = <es_bseg>-belnr
+                                                     gjahr = <es_bseg>-gjahr
+                                                     buzei = <es_bseg>-buzei ]-name1 OPTIONAL ).
+
+          ELSE.
+            CLEAR: ti_bstkd, ti_contacto.
+            ti_bstkd = VALUE #( ( <es_bseg>-zuonr ) ).
+
+            CALL FUNCTION 'ZSDI1072_DATOS_CONTACTO'
+              EXPORTING
+                i_ti_bstkd    = ti_bstkd
+              IMPORTING
+                e_ti_contacto = ti_contacto.
+
+            DATA(es_contacto) = VALUE #( ti_contacto[ tabix ] OPTIONAL ).
+
+            IF es_contacto-stcd1 IS NOT INITIAL.
+              es_bseg_subst-xref1 = es_contacto-stcd1.
+              CONCATENATE es_contacto-firstname es_contacto-lastname INTO es_bseg_subst-xref3 SEPARATED BY space.
+            ELSE.
+              es_bseg_subst-xref1 = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+                                                        belnr = <es_bseg>-belnr
+                                                        gjahr = <es_bseg>-gjahr
+                                                        buzei = <es_bseg>-buzei ]-stcd1 OPTIONAL ).
+
+              es_bseg_subst-xref3 = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+                                                        belnr = <es_bseg>-belnr
+                                                        gjahr = <es_bseg>-gjahr
+                                                        buzei = <es_bseg>-buzei ]-name1 OPTIONAL ).
+            ENDIF.
+          ENDIF.
+
+          "Modificar la posición sólo si no está vacía
+          MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING xref1 xref3
+                                WHERE tabix EQ tabix.
+
+          ref_1 = es_bseg_subst-xref1.
+          ref_3 = es_bseg_subst-xref3.
+        ELSE.
+
+          ".Obtenemos la clase de documento
+          DATA(cl_doc) = VALUE #( i_ti_bkpf[ bukrs = <es_bseg>-bukrs
+                                             belnr = <es_bseg>-belnr
+                                             gjahr = <es_bseg>-gjahr ]-blart OPTIONAL ).
+
+          ".Verificamos si la clase de doc es de medios de pago
+          IF cl_doc IN gr_cl_doc_med_pago.
+            CLEAR: cuenta.
+
+            TRY.
+                cuenta = |{ <es_bseg>-hkont ALPHA = IN }|.
+                DATA(es_ztfii1014) = ti_ztfii1014_11[ hkont = cuenta ].
+                es_bseg_subst-xref1 = es_ztfii1014-nit.
+                es_bseg_subst-xref3 = es_ztfii1014-cmdtx.
+              CATCH cx_sy_itab_line_not_found.
+
+                ".Obtenemos la informacion del cliente
+                DATA(es_kna1) = VALUE #( ti_kna1[ kunnr = <es_bseg>-kunnr ] OPTIONAL ).
+                IF es_kna1-kunnr IS NOT INITIAL.
+                  es_bseg_subst-xref1 = es_kna1-stcd1.
+                  es_bseg_subst-xref3 = es_kna1-name1.
+                ELSE.
+                  es_bseg_subst-xref1 = ref_1.
+                  es_bseg_subst-xref3 = ref_3.
+                ENDIF.
+            ENDTRY.
+
+          ELSE.
+            es_bseg_subst-xref1 = ref_1.
+            es_bseg_subst-xref3 = ref_3.
+          ENDIF.
+
+          "Modificar la posición sólo si no está vacía
+          MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING xref1 xref3
+                                              WHERE tabix EQ tabix.
+
+        ENDIF.
+
+
+        e_flag = abap_true.
+      ENDLOOP.
+
+    ELSE.
+
+      ".recorremos las posiciones del doc
+      LOOP AT i_ti_bseg ASSIGNING <es_bseg>.
+
+        tabix = sy-tabix.
+
+        CLEAR: ti_bstkd, ti_contacto.
+
+        IF tabix EQ 1.
+          IF <es_bseg>-zuonr IS INITIAL.
+*--------------------------------------------------------------------*
+* Ini LEMORENO  17.11.2022 Se comenta logica BSEC ya que estaba
+*                          limpiando las variables para no prodiversos
+*--------------------------------------------------------------------*
+*            es_bsec = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+*                                 belnr = <es_bseg>-belnr
+*                                 gjahr = <es_bseg>-gjahr
+*                                 buzei = <es_bseg>-buzei ] OPTIONAL ).
+*            es_bseg_subst-xref1 = es_bsec-stcd1.
+*            es_bseg_subst-xref3 = es_bsec-name1.
+
+            es_bseg_subst-xref1 = <es_bseg>-xref1.
+            es_bseg_subst-xref3 = <es_bseg>-xref3.
+*--------------------------------------------------------------------*
+* Fin LEMORENO 17.11.2022
+*--------------------------------------------------------------------*
+
+          ELSE.
+            ti_bstkd = VALUE #( ( <es_bseg>-zuonr ) ).
+
+            CALL FUNCTION 'ZSDI1072_DATOS_CONTACTO'
+              EXPORTING
+                i_ti_bstkd    = ti_bstkd
+              IMPORTING
+                e_ti_contacto = ti_contacto.
+
+            es_contacto = VALUE #( ti_contacto[ tabix ] OPTIONAL ).
+
+            IF es_contacto-stcd1 IS NOT INITIAL.
+              es_bseg_subst-xref1 = es_contacto-stcd1.
+              CONCATENATE es_contacto-firstname es_contacto-lastname INTO es_bseg_subst-xref3 SEPARATED BY space.
+            ELSE.
+*--------------------------------------------------------------------*
+* Ini LEMORENO  17.11.2022 Se comenta logica BSEC ya que estaba
+*                          limpiando las variables para no prodiversos
+*--------------------------------------------------------------------*
+*              es_bsec = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+*                                   belnr = <es_bseg>-belnr
+*                                   gjahr = <es_bseg>-gjahr
+*                                   buzei = <es_bseg>-buzei ] OPTIONAL ).
+*              es_bseg_subst-xref1 = es_bsec-stcd1.
+*              es_bseg_subst-xref3 = es_bsec-name1.
+
+              es_bseg_subst-xref1 = <es_bseg>-xref1.
+              es_bseg_subst-xref3 = <es_bseg>-xref3.
+*--------------------------------------------------------------------*
+* Fin LEMORENO 17.11.2022
+*--------------------------------------------------------------------*
+            ENDIF.
+          ENDIF.
+
+
+          "Modificar la posición sólo si no está vacía
+          MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING xref1 xref3
+                                              WHERE tabix EQ tabix AND xref1 IS INITIAL.
+
+          e_flag = abap_true.
+        ELSE.
+
+          IF lines( c_ti_bseg_subst ) LE 0.
+            CONTINUE.
+          ENDIF.
+
+
+          es_bseg_subst-xref1 = <es_bseg>-xref1.
+          es_bseg_subst-xref3 = <es_bseg>-xref3.
+
+          "Modificar la posición sólo si no está vacía
+          MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING xref1 xref3
+                                              WHERE tabix EQ tabix AND xref1 IS INITIAL.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD sustituir_xblnr.
+
+    CONSTANTS: c_modulo    TYPE zzedmodulo  VALUE 'FI',
+               c_ricefw    TYPE zzedricefw  VALUE 'E1002',
+               c_clase_doc TYPE zzedidparam VALUE 'CLASE_DOC'.
+
+    DATA: clase_doc TYPE rsis_t_range.
+
+    FIELD-SYMBOLS: <fs_bkpfsub> TYPE bkpf_subst.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    DATA(go_parametros) = NEW zclcxr1000_parametros( i_modulo = c_modulo i_ricefw = c_ricefw ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_modulo      = c_modulo
+        i_ricefw      = c_ricefw
+        i_idparam     = c_clase_doc
+      IMPORTING
+        e_ti_valrango = clase_doc
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    IF i_ti_bkpf[ 1 ]-blart IN clase_doc. " Documento de Compensación
+
+      LOOP AT i_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>) WHERE lifnr IS NOT INITIAL.
+
+        IF line_exists( c_ti_bkpfsub[ 1 ] ).
+
+          ASSIGN c_ti_bkpfsub[ 1 ] TO <fs_bkpfsub>.
+
+          <fs_bkpfsub>-xblnr = <fs_bseg>-lifnr.
+          EXIT.
+
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_textos_bseg.
+    DATA:
+      es_bseg_subst TYPE bseg_subst.
+
+    DATA:
+      tabix TYPE sytabix.
+
+    ".Validamos si la transaccion esta permitida para realizar el proceso de sustitucion de los textos
+    CHECK gr_trx_textos_pos IS NOT INITIAL AND
+          g_tcode IN gr_trx_textos_pos.
+
+    ".Validamos que exista informacion
+    CHECK lines( i_ti_bkpf ) GT 0.
+
+    DATA(texto) = VALUE #( c_ti_bseg[ 1 ]-sgtxt OPTIONAL ).
+    DATA(texto_1) = VALUE #( c_ti_bseg[ 1 ]-qsskz  OPTIONAL ).
+    IF texto IS INITIAL AND texto_1 IS NOT INITIAL.
+      "     texto = texto_1.
+      ".El campo Texto Exige una entrada obligatoria.
+      MESSAGE e041(zfi01) DISPLAY LIKE c_w.
+    ELSE.
+
+      LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>).
+
+        tabix = sy-tabix.
+        es_bseg_subst-sgtxt = <fs_bseg>-sgtxt = texto.
+
+        "Modificar la posición sólo si no está vacía
+        MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING sgtxt
+                              WHERE tabix EQ tabix AND sgtxt IS INITIAL.
+
+      ENDLOOP.
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+METHOD sustituir_xref1_xref3_compensa.
+
+  DATA: ti_xausz3 TYPE STANDARD TABLE OF ausz_clr,
+        r_tcode   TYPE RANGE OF zvcxr1000_2-low,
+        r_blart   TYPE RANGE OF zvcxr1000_2-low.
+
+  FIELD-SYMBOLS: <fs_xausz3> TYPE STANDARD TABLE.
+
+  CONSTANTS: c_modulo   TYPE zzedmodulo  VALUE 'FI',
+             c_ricefw   TYPE zzedricefw  VALUE 'E1002',
+             c_tcode    TYPE zzedidparam VALUE 'TCODECOMPE',
+             c_blart    TYPE zzedidparam VALUE 'BLARTCOMPE'.
+
+
+  ".TCODE Válidas
+  go_parametros->get_parametro(
+    EXPORTING
+      i_modulo      = c_modulo
+      i_ricefw      = c_ricefw
+      i_idparam     = c_tcode
+    IMPORTING
+      e_ti_valrango = r_tcode
+    EXCEPTIONS
+      parametro_no_encontrado = 1 ).
+
+  ".BLART Válidos
+  go_parametros->get_parametro(
+    EXPORTING
+      i_modulo      = c_modulo
+      i_ricefw      = c_ricefw
+      i_idparam     = c_blart
+    IMPORTING
+      e_ti_valrango = r_blart
+    EXCEPTIONS
+      parametro_no_encontrado = 1 ).
+
+  CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true
+  AND   sy-tcode IN r_tcode
+  AND   i_ti_bkpf[ 1 ]-blart IN r_blart.
+
+  ASSIGN ('(SAPMF05A)XAUSZ3[]') TO <fs_xausz3>.
+
+  CHECK <fs_xausz3> IS ASSIGNED.
+
+  ti_xausz3 = <fs_xausz3>.
+
+  SELECT b~belnr, b~gjahr, b~buzid, b~xref1, b~xref3
+    FROM @ti_xausz3 AS a
+    INNER JOIN bseg AS b
+      ON b~belnr = a~belnr
+     AND b~gjahr = a~gjahr
+    WHERE b~buzid = 'W'
+    AND   b~xref1 <> @space
+    AND   b~xref3 <> @space
+   INTO TABLE @DATA(ti_docs).
+
+  IF sy-subrc = 0.
+
+    DATA(es_docs) = ti_docs[ 1 ].
+
+    LOOP AT c_ti_bseg_subst ASSIGNING FIELD-SYMBOL(<fs_subst>).
+      <fs_subst>-xref1 = es_docs-xref1.
+      <fs_subst>-xref3 = es_docs-xref3.
+    ENDLOOP.
+
+  ENDIF.
+
+ENDMETHOD.
+ENDCLASS.
+class ZCLFIE1002_VAL_XREF1_XREF3 definition
+  public
+  final
+  create public .
+
+public section.
+
+  types:
+    BEGIN OF gtp_es_datos_tercero,
+        kunnr TYPE kna1-kunnr,
+        lifnr TYPE lfa1-lifnr,
+        name1 TYPE kna1-name1,
+        name2 TYPE kna1-name2,
+        name3 TYPE kna1-name3,
+        name4 TYPE kna1-name4,
+        stcd1 TYPE kna1-stcd1,
+        stenr TYPE lfa1-stenr,
+        ktokk TYPE lfa1-ktokk, ".Adicion Jose Miguel Valencia 25.11.2021
+      END OF gtp_es_datos_tercero .
+  types:
+    gtp_ti_datos_tercero TYPE STANDARD TABLE OF gtp_es_datos_tercero WITH EMPTY KEY .
+  types:
+    gtp_r_nit       TYPE RANGE OF kna1-stcd1 .
+  types:
+    gtp_r_cuenta    TYPE RANGE OF bseg-hkont .
+  types:
+    gtp_r_cliente   TYPE RANGE OF kna1-kunnr .
+  types:
+    gtp_r_proveedor TYPE RANGE OF lfa1-kunnr .
+
+  constants C_RICEFW type ZTCXR1000_1-RICEFW value 'E1002' ##NO_TEXT.
+  constants C_W type CHAR1 value 'W' ##NO_TEXT.
+
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Modificar valores XREF3 de cliente y proveedor segun el NIT ingresado en BSEG-XREF1<br/>
+    "! </p>
+    "! <strong>Identificador:</strong>
+    "! E1002 <br/>
+    "! <strong>Autor:</strong>
+    "! Sebastian Londono
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+    "! \ 15.10.2021  \ S4DK903879 \ Jose Miguel Valencia \ 1301-02  \
+    "! @parameter i_bukrs | Sociedad
+    "! @parameter i_blart | Clase de documento
+    "! @parameter i_tcode | Codigo transaccion
+    "! @parameter c_ti_bseg | tabla interna con datos a modificar
+  class-methods SUSTITUIR_XREF3
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional .
+  class-methods SUSTITUIR_XREF3_CLIENTE
+    importing
+      !I_BLART type BKPF-BLART optional
+    exporting
+      !E_TI_NIT_NO_ENCONTRADO type GTP_R_NIT
+    changing
+      !C_TI_BSEG type BSEG_T .
+  class-methods SUSTITUIR_XREF3_PROVEEDOR
+    importing
+      !I_BLART type BKPF-BLART optional
+    exporting
+      !E_TI_NIT_NO_ENCONTRADO type GTP_R_NIT
+    changing
+      !C_TI_BSEG type BSEG_T .
+  class-methods ASIGNAR_VALORES_GLOBALES
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE .
+  class-methods SUSTITUIR_XREF1_XREF3
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+      !I_TI_BKPF type BKPF_T optional
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XREF_CLIENTE
+    importing
+      !I_BLART type BKPF-BLART optional
+      !I_TI_BKPF type BKPF_T optional
+    exporting
+      !E_FLAG type XFELD
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XREF_PROVEEDOR
+    importing
+      !I_BLART type BKPF-BLART optional
+    exporting
+      !E_FLAG type XFELD
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XREF_PRODIVERSO
+    importing
+      !I_BLART type BKPF-BLART
+      !I_TI_BKPF type BKPF_T
+    exporting
+      !E_FLAG type XFELD
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+    "! Sustitución campo BKPF-BKTXT por BSEG-SGTXT
+    "! @parameter i_ti_bkpf | Cabecera Documento
+    "! @parameter c_ti_bseg | Posiciones Documento
+  class-methods SUSTITUIR_TEXTOS_BSEG
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods CARGAR_PARAMETROS .
+  class-methods SUSTITUIR_XBLNR
+    importing
+      !I_TI_BKPF type BKPF_T
+      !I_TI_BSEG type BSEG_T
+    changing
+      !C_TI_BKPFSUB type BKPF_SUBST_T .
+  class-methods SUSTITUIR_XREF1_XREF3_COMPENSA
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T .
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA: g_bukrs               TYPE bseg-bukrs,
+                g_blart               TYPE bkpf-blart,
+                g_tcode               TYPE sytcode,
+                go_parametros         TYPE REF TO zclcxr1000_parametros,
+                gr_clase_documentos   TYPE RANGE OF bkpf-blart,
+                gr_codigo_transaccion TYPE RANGE OF sytcode,
+                gr_cuentas_cliente    TYPE RANGE OF acdoca-racct,
+                gr_cuentas_proveedor  TYPE RANGE OF acdoca-racct,
+                gr_sociedades         TYPE RANGE OF bseg-bukrs,
+                gr_grpcuentas         TYPE RANGE OF lfa1-ktokk,   ".Grupo de Cuentas Actualizacion XREF1
+                gr_transacciones_xref TYPE RANGE OF sytcode,      ".Codigos Transacciones Actualizacion XREF1 y XREF3
+                gr_trx_textos_pos     TYPE RANGE OF sytcode,      ".Codigos Transacciones Sustitucion Textos Posicion
+                gr_tipo_prodiverso    TYPE RANGE OF char4,        ".Tipos cliente/Proveedor Prodiverso
+                gr_clase_cta          TYPE RANGE OF bseg-koart,   ".Clases de Cuenta
+                gr_cl_doc_med_pago    TYPE RANGE OF bkpf-blart.   ".Clases de Documentos Medio de pago cliente prodiverso
+
+    CLASS-METHODS:
+      consultar_cliente_por_nit
+        IMPORTING
+          VALUE(i_r_nit)            TYPE gtp_r_nit
+        RETURNING
+          VALUE(r_ti_datos_cliente) TYPE gtp_ti_datos_tercero,
+      consultar_proveedor_por_nit
+        IMPORTING
+          VALUE(i_r_nit)              TYPE gtp_r_nit
+        RETURNING
+          VALUE(r_ti_datos_proveedor) TYPE gtp_ti_datos_tercero,
+      ejecutar_validacion
+        RETURNING
+          VALUE(r_rc) TYPE flag,
+      validar_nit_tercero
+        IMPORTING
+          i_r_hkont TYPE gtp_r_cuenta
+        CHANGING
+          c_r_nit   TYPE gtp_r_nit
+          c_ti_bseg TYPE bseg_t,
+
+      consultar_cliente_por_id
+        IMPORTING
+          VALUE(i_r_cliente)        TYPE gtp_r_cliente
+        RETURNING
+          VALUE(r_ti_datos_cliente) TYPE gtp_ti_datos_tercero,
+
+      consultar_proveedor_por_id
+        IMPORTING
+          VALUE(i_r_proveedor)      TYPE gtp_r_proveedor
+        RETURNING
+          VALUE(r_ti_datos_cliente) TYPE gtp_ti_datos_tercero,
+
+      "! Metodo para realizar la sustitucion cuando es cliente tercero
+      "! @parameter i_c_prodiverso | Tipo de cliente/Proverdor prodiverso
+      sustitucion_tercero
+        IMPORTING
+          VALUE(i_c_prodiverso) TYPE char4 OPTIONAL
+          VALUE(i_ti_bseg)      TYPE bseg_t
+          VALUE(i_ti_bsec)      TYPE bsec_t
+          VALUE(i_ti_bkpf)      TYPE bkpf_t OPTIONAL
+        EXPORTING
+          e_flag                TYPE xfeld
+        CHANGING
+          c_ti_bseg_subst       TYPE bseg_subst_t.
+
+ENDCLASS.
+
+
+
+CLASS ZCLFIE1002_VAL_XREF1_XREF3 IMPLEMENTATION.
+
+
+  METHOD consultar_cliente_por_nit.
+
+    CHECK i_r_nit IS NOT INITIAL.
+
+    LOOP AT i_r_nit ASSIGNING FIELD-SYMBOL(<fs_nit>).
+      CONDENSE <fs_nit>-low NO-GAPS.
+      CONDENSE <fs_nit>-high NO-GAPS.
+    ENDLOOP.
+
+    SELECT kunnr, name1, name2, name3, name4, stcd1
+    FROM kna1
+    WHERE stcd1 IN @i_r_nit
+    ORDER BY kunnr ASCENDING
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_cliente.
+
+  ENDMETHOD.
+
+
+  METHOD consultar_proveedor_por_nit.
+
+    CHECK i_r_nit IS NOT INITIAL.
+
+    LOOP AT i_r_nit ASSIGNING FIELD-SYMBOL(<fs_nit>).
+      CONDENSE <fs_nit>-low NO-GAPS.
+      CONDENSE <fs_nit>-high NO-GAPS.
+    ENDLOOP.
+
+    SELECT lifnr, name1, name2, name3, name4, stcd1, stenr
+    FROM lfa1
+    WHERE stcd1 IN @i_r_nit
+    ORDER BY lifnr ASCENDING
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_proveedor.
+
+    IF lines( r_ti_datos_proveedor ) EQ 0.
+      ".Consultamos Nº identificación fiscal p.interlocutor comercial
+      SELECT partner, taxtype, taxnum
+        FROM dfkkbptaxnum
+       WHERE taxnum IN @i_r_nit
+        INTO TABLE @DATA(ti_taxnum).
+      IF lines( ti_taxnum ) GT 0.
+
+        "Creamos un rango con los codigo internos del proveedor(LIFNR)
+        DATA(r_lifnr) = VALUE fip_t_lifnr_range(
+          FOR es_taxnum IN ti_taxnum
+          LET s = 'I'
+              o = 'EQ' IN sign = s
+                          option = o
+        ( low = es_taxnum-partner )
+         ).
+
+        SELECT lifnr, name1, name2, name3, name4, stcd1, stenr
+          FROM lfa1
+         WHERE lifnr IN @r_lifnr
+           AND ktokk IN @gr_grpcuentas
+         ORDER BY lifnr ASCENDING
+          INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_proveedor.
+        IF lines( r_ti_datos_proveedor ) GT 0.
+          "Colocar en el campo stcd1 el valor del nit(i_r_nit)
+          r_ti_datos_proveedor[ 1 ]-stcd1 = i_r_nit[ 1 ]-low.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref3_cliente.
+    DATA: r_nit TYPE RANGE OF kna1-stcd1.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti             = c_ti_bseg
+        i_nombre_columna = 'XREF1'
+      CHANGING
+        c_ti_rango       = r_nit ).
+
+    e_ti_nit_no_encontrado = r_nit.
+
+    validar_nit_tercero(
+      EXPORTING
+        i_r_hkont = gr_cuentas_cliente
+      CHANGING
+        c_r_nit   = r_nit
+        c_ti_bseg = c_ti_bseg ).
+
+    DATA(ti_datos_cliente) = consultar_cliente_por_nit( i_r_nit = r_nit ).
+
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>) WHERE xref1 IS NOT INITIAL.
+
+      CHECK <fs_bseg>-hkont IN gr_cuentas_cliente AND gr_cuentas_cliente IS NOT INITIAL.
+
+      TRY.
+          <fs_bseg>-xref3 = ti_datos_cliente[ stcd1 = <fs_bseg>-xref1 ]-name1.
+          DELETE e_ti_nit_no_encontrado WHERE low = <fs_bseg>-xref1.
+        CATCH cx_sy_itab_line_not_found .
+
+      ENDTRY.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref3_proveedor.
+    DATA: r_nit TYPE RANGE OF kna1-stcd1.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    validar_nit_tercero(
+      EXPORTING
+        i_r_hkont = gr_cuentas_proveedor
+      CHANGING
+        c_r_nit   = r_nit
+        c_ti_bseg = c_ti_bseg ).
+
+    DATA(ti_datos_proveedor) = consultar_proveedor_por_nit( i_r_nit = r_nit ).
+
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>) WHERE xref1 IS NOT INITIAL.
+
+      CHECK <fs_bseg>-hkont IN gr_cuentas_proveedor AND gr_cuentas_proveedor IS NOT INITIAL.
+
+      TRY.
+          <fs_bseg>-xref3 = ti_datos_proveedor[ stcd1 = <fs_bseg>-xref1 ]-name1.
+          DELETE e_ti_nit_no_encontrado WHERE low = <fs_bseg>-xref1.
+        CATCH cx_sy_itab_line_not_found.
+
+      ENDTRY.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref3.
+
+    asignar_valores_globales( i_bukrs = i_bukrs
+                              i_blart = i_blart
+                              i_tcode = i_tcode ).
+
+    cargar_parametros(  ).
+
+    CHECK ejecutar_validacion( ) = abap_true.
+
+    sustituir_xref3_cliente(
+     IMPORTING
+        e_ti_nit_no_encontrado = DATA(ti_nit_no_encontrado)
+     CHANGING
+        c_ti_bseg = c_ti_bseg[] ).
+
+    sustituir_xref3_proveedor(
+      IMPORTING
+        e_ti_nit_no_encontrado = ti_nit_no_encontrado
+      CHANGING
+        c_ti_bseg = c_ti_bseg[] ).
+
+    IF ti_nit_no_encontrado IS NOT INITIAL.
+      MESSAGE e036(zfi01) WITH ti_nit_no_encontrado[ 1 ]-low.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD cargar_parametros.
+
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = c_ricefw ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'CLASEDOC'
+      IMPORTING
+        e_ti_valrango           = gr_clase_documentos
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'COD_TRANSA'
+      IMPORTING
+        e_ti_valrango           = gr_codigo_transaccion
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'CUENTA_CLI'
+      IMPORTING
+        e_ti_valrango           = gr_cuentas_cliente
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'CUENTA_PRV'
+      IMPORTING
+        e_ti_valrango           = gr_cuentas_proveedor
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'SOCIEDADES'
+      IMPORTING
+        e_ti_valrango           = gr_sociedades
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    ".Transacciones actualizar XREF1 y XREF3
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'TCODE_XREF'
+       IMPORTING
+         e_ti_valrango           = gr_transacciones_xref
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Grupo de cuentas actualizar XREF1
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'GRPCUENTA'
+       IMPORTING
+         e_ti_valrango           = gr_grpcuentas
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Transacciones Sustitucion Textos Posicion
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'TRXTEXTOS'
+       IMPORTING
+         e_ti_valrango           = gr_trx_textos_pos
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Tipos Cliente/Proveedor Prodiverso
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'TIPOPRODIV'
+       IMPORTING
+         e_ti_valrango           = gr_tipo_prodiverso
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Clases de Cuenta(KOART)
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'CLASECTA'
+       IMPORTING
+         e_ti_valrango           = gr_clase_cta
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+    ".Clases de Documento Medios de pago cliente prodiverso
+    go_parametros->get_parametro(
+       EXPORTING
+         i_idparam               = 'CLMEDPAGO'
+       IMPORTING
+         e_ti_valrango           = gr_cl_doc_med_pago
+       EXCEPTIONS
+         parametro_no_encontrado = 1 ).
+
+
+
+  ENDMETHOD.
+
+
+  METHOD ejecutar_validacion.
+
+    IF g_blart IN gr_clase_documentos AND g_bukrs IN gr_sociedades AND g_tcode IN gr_codigo_transaccion
+     AND gr_codigo_transaccion IS NOT INITIAL AND gr_clase_documentos IS NOT INITIAL AND gr_sociedades IS NOT INITIAL.
+      r_rc = abap_true.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD asignar_valores_globales.
+    g_blart = i_blart.
+    g_bukrs = i_bukrs.
+    g_tcode = i_tcode.
+  ENDMETHOD.
+
+
+  METHOD validar_nit_tercero.
+
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>) WHERE hkont IN i_r_hkont.
+
+      IF <fs_bseg>-xref1 IS INITIAL.
+        MESSAGE e000(zfi) WITH <fs_bseg>-hkont.
+      ELSE.
+        zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_low            = <fs_bseg>-xref1
+        CHANGING
+          c_ti_rango       = c_r_nit ).
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref1_xref3.
+
+    DATA:
+      proceso_ok TYPE xfeld.
+
+    asignar_valores_globales( i_bukrs = i_bukrs
+                              i_blart = i_blart
+                              i_tcode = i_tcode ).
+
+    sustituir_xref_cliente(
+      EXPORTING
+        i_ti_bkpf = i_ti_bkpf
+      IMPORTING
+        e_flag          = proceso_ok
+      CHANGING
+        c_ti_bseg = c_ti_bseg[]
+        c_ti_bseg_subst = c_ti_bseg_subst[]
+        c_ti_bsec       = c_ti_bsec[]
+        ).
+
+    sustituir_xref_proveedor(
+      IMPORTING
+        e_flag          = proceso_ok
+      CHANGING
+        c_ti_bseg = c_ti_bseg[]
+        c_ti_bseg_subst = c_ti_bseg_subst[]
+        c_ti_bsec       = c_ti_bsec[] ).
+
+    IF proceso_ok NE abap_true.
+      sustituir_xref_prodiverso(
+        EXPORTING
+          i_blart         = i_blart
+          i_ti_bkpf       = i_ti_bkpf
+        IMPORTING
+          e_flag          = proceso_ok
+        CHANGING
+          c_ti_bseg       = c_ti_bseg
+          c_ti_bseg_subst = c_ti_bseg_subst
+          c_ti_bsec       = c_ti_bsec
+      ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref_cliente.
+
+    DATA:
+      r_cliente        TYPE RANGE OF kna1-kunnr,
+      es_datos_tercero TYPE gtp_es_datos_tercero,
+      contador         TYPE sytabix.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    ".Creamos rango del cliente
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti             = c_ti_bseg
+        i_nombre_columna = 'KUNNR'
+      CHANGING
+        c_ti_rango       = r_cliente ).
+
+    IF NOT line_exists( r_cliente[ 1 ] ).
+      EXIT.
+    ENDIF.
+
+    DATA(ti_datos_cliente) = consultar_cliente_por_id( i_r_cliente = r_cliente ).
+    DATA(ti_bseg_aux) = c_ti_bseg.
+    DELETE ti_bseg_aux WHERE kunnr EQ space OR
+                             kunnr IS INITIAL.
+    IF lines( ti_bseg_aux ) EQ 0.
+      EXIT.
+    ELSE.
+      TRY.
+          DATA(cliente) = ti_bseg_aux[ 1 ]-kunnr.
+        CATCH cx_sy_itab_line_not_found .
+      ENDTRY.
+    ENDIF.
+
+    e_flag = abap_true.
+
+    ".recorremos las posiciones del documento
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>).
+
+      TRY.
+          ADD 1 TO contador.
+          IF contador = 1.
+            DATA(es_datos_tercero_pos1) = ti_datos_cliente[ kunnr = cliente ].
+          ENDIF.
+          es_datos_tercero = COND #( WHEN <fs_bseg>-koart EQ 'S' THEN es_datos_tercero_pos1 ELSE ti_datos_cliente[ kunnr = <fs_bseg>-kunnr ] ).
+          <fs_bseg>-xref1 = es_datos_tercero-stcd1.
+          <fs_bseg>-xref3 = es_datos_tercero-name1.
+
+        CATCH cx_sy_itab_line_not_found .
+          CONTINUE.
+*          EXIT.
+      ENDTRY.
+    ENDLOOP.
+
+    IF lines( c_ti_bseg_subst ) GT 0.
+      sustitucion_tercero(
+        EXPORTING
+          i_c_prodiverso  = VALUE #( ti_datos_cliente[ 1 ]-ktokk OPTIONAL )
+          i_ti_bseg       = c_ti_bseg
+          i_ti_bsec       = c_ti_bsec
+          i_ti_bkpf       = i_ti_bkpf
+        CHANGING
+          c_ti_bseg_subst = c_ti_bseg_subst
+      ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref_proveedor.
+    DATA:
+      r_proveedor      TYPE RANGE OF kna1-kunnr,
+      es_datos_tercero TYPE gtp_es_datos_tercero,
+      contador         TYPE sytabix.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    ".Creamos rango del proveedor
+    zclcxr1002_util=>crear_rango(
+    EXPORTING
+      i_ti             = c_ti_bseg
+      i_nombre_columna = 'LIFNR'
+    CHANGING
+      c_ti_rango       = r_proveedor ).
+
+    IF NOT line_exists( r_proveedor[ 1 ] ).
+      EXIT.
+    ENDIF.
+
+    DATA(ti_datos_cliente) = consultar_proveedor_por_id( i_r_proveedor = r_proveedor ).
+    DATA(ti_bseg_aux) = c_ti_bseg.
+    DELETE ti_bseg_aux WHERE lifnr EQ space OR
+                             lifnr IS INITIAL.
+    IF lines( ti_bseg_aux ) EQ 0.
+      EXIT.
+    ELSE.
+      TRY.
+          DATA(proveedor) = ti_bseg_aux[ 1 ]-lifnr.
+        CATCH cx_sy_itab_line_not_found .
+      ENDTRY.
+    ENDIF.
+    e_flag = abap_true.
+    ".recorremos las posiciones del documento
+    LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>).
+      TRY.
+          ADD 1 TO contador.
+
+          IF contador = 1.
+            DATA(es_datos_tercero_pos1) = ti_datos_cliente[ lifnr = proveedor ].
+          ENDIF.
+
+          IF <fs_bseg>-lifnr IS NOT INITIAL.
+            READ TABLE ti_datos_cliente
+              WITH KEY lifnr = <fs_bseg>-lifnr
+              INTO DATA(es_datos_cliente).
+            IF sy-subrc = 0.
+              MOVE-CORRESPONDING es_datos_cliente TO es_datos_tercero_pos1.
+            ENDIF.
+          ENDIF.
+
+          es_datos_tercero = COND #( WHEN <fs_bseg>-koart IN gr_clase_cta THEN es_datos_tercero_pos1 ELSE ti_datos_cliente[ lifnr = <fs_bseg>-lifnr ] ).
+          <fs_bseg>-xref1 = es_datos_tercero-stcd1.
+          <fs_bseg>-xref3 = es_datos_tercero-name1.
+        CATCH cx_sy_itab_line_not_found .
+          CONTINUE.
+*          EXIT.
+      ENDTRY.
+    ENDLOOP.
+
+    IF lines( c_ti_bseg_subst ) GT 0.
+      sustitucion_tercero(
+        EXPORTING
+          i_c_prodiverso  = VALUE #( ti_datos_cliente[ 1 ]-ktokk OPTIONAL )
+          i_ti_bseg       = c_ti_bseg
+          i_ti_bsec       = c_ti_bsec
+        CHANGING
+          c_ti_bseg_subst = c_ti_bseg_subst
+      ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD consultar_cliente_por_id.
+
+    CHECK i_r_cliente IS NOT INITIAL.
+
+    LOOP AT i_r_cliente ASSIGNING FIELD-SYMBOL(<fs_cliente>).
+      CONDENSE <fs_cliente>-low NO-GAPS.
+      CONDENSE <fs_cliente>-high NO-GAPS.
+    ENDLOOP.
+
+    SELECT kunnr, name1, name2, name3, name4, stcd1, ktokd AS ktokk
+      FROM kna1
+     WHERE kunnr IN @i_r_cliente
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_cliente.
+
+*--------------------------------------------------------------------*
+* Ini LEMORENO - Se incluye mecanica para obtener STCD1 de Clientes
+*                del Exterior.
+*--------------------------------------------------------------------*
+    IF lines( r_ti_datos_cliente ) GT 0.
+      ".Validamos si el campo STCD1 esta vacio
+      DATA(r_kunnr) = VALUE gtp_r_cliente(
+        FOR es_aux IN r_ti_datos_cliente
+          WHERE ( ( stcd1 EQ space OR stcd1 EQ '' ) AND
+                    ktokk IN gr_grpcuentas )
+          LET s = 'I'
+              o = 'EQ' IN sign = s
+                          option = o
+        ( low = es_aux-kunnr )
+        ).
+
+      IF lines( r_kunnr ) > 0.
+        ".Consultamos Nº identificación fiscal p.interlocutor comercial
+        SELECT partner, taxtype, taxnum
+          FROM dfkkbptaxnum
+         WHERE partner IN @r_kunnr
+          INTO TABLE @DATA(ti_taxnum).
+        IF lines( ti_taxnum ) GT 0.
+
+          LOOP AT r_ti_datos_cliente ASSIGNING FIELD-SYMBOL(<fs_datos_aux>).
+            IF <fs_datos_aux>-stcd1 IS NOT INITIAL.
+              CONTINUE.
+            ENDIF.
+            TRY.
+                <fs_datos_aux>-stcd1 = ti_taxnum[ partner = <fs_datos_aux>-kunnr ]-taxnum.
+              CATCH cx_sy_itab_line_not_found.
+            ENDTRY.
+
+          ENDLOOP.
+
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+*--------------------------------------------------------------------*
+
+  ENDMETHOD.
+
+
+  METHOD consultar_proveedor_por_id.
+
+    CHECK i_r_proveedor IS NOT INITIAL.
+
+    LOOP AT i_r_proveedor ASSIGNING FIELD-SYMBOL(<fs_proveedor>).
+      CONDENSE <fs_proveedor>-low NO-GAPS.
+      CONDENSE <fs_proveedor>-high NO-GAPS.
+    ENDLOOP.
+
+    SELECT lifnr, name1, name2, name3, name4, stcd1, stenr, ktokk
+      FROM lfa1
+     WHERE lifnr IN @i_r_proveedor
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_datos_cliente.
+    IF lines( r_ti_datos_cliente ) GT 0.
+      ".Validamos si el campo STCD1 esta vacio
+      DATA(r_lifnr) = VALUE gtp_r_proveedor(
+        FOR es_aux IN r_ti_datos_cliente
+          WHERE ( ( stcd1 EQ space OR stcd1 EQ '' ) AND
+                    ktokk IN gr_grpcuentas )
+          LET s = 'I'
+              o = 'EQ' IN sign = s
+                          option = o
+        ( low = es_aux-lifnr )
+        ).
+
+      ".Consultamos Nº identificación fiscal p.interlocutor comercial
+      SELECT partner, taxtype, taxnum
+        FROM dfkkbptaxnum
+       WHERE partner IN @r_lifnr
+        INTO TABLE @DATA(ti_taxnum).
+      IF lines( ti_taxnum ) GT 0.
+
+        LOOP AT r_ti_datos_cliente ASSIGNING FIELD-SYMBOL(<fs_datos_aux>).
+          IF <fs_datos_aux>-stcd1 IS NOT INITIAL.
+            CONTINUE.
+          ENDIF.
+          TRY.
+              <fs_datos_aux>-stcd1 = ti_taxnum[ partner = <fs_datos_aux>-lifnr ]-taxnum.
+            CATCH cx_sy_itab_line_not_found.
+          ENDTRY.
+
+
+        ENDLOOP.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref_prodiverso.
+    DATA:
+      es_bseg_subst TYPE bseg_subst.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    ".Recorremos la cabecera del doc
+    LOOP AT i_ti_bkpf ASSIGNING FIELD-SYMBOL(<fs_bkpf>).
+
+      sustitucion_tercero(
+        EXPORTING
+          i_ti_bseg       = c_ti_bseg
+          i_ti_bsec       = c_ti_bsec
+        IMPORTING
+          e_flag          = e_flag
+        CHANGING
+          c_ti_bseg_subst = c_ti_bseg_subst
+      ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD sustitucion_tercero.
+
+    DATA:
+      rn_cuentas TYPE RANGE OF ztfii1014_11-hkont.
+
+    DATA:
+      ti_bstkd    TYPE  zttsdi1072_2,
+      ti_contacto TYPE  zttsdi1072_1.
+
+    DATA:
+      es_bsec       TYPE bsec,
+      es_bseg_subst TYPE bseg_subst.
+
+    FIELD-SYMBOLS:
+      <es_bseg> TYPE bseg.
+
+
+
+    DATA:
+      tabix  TYPE sytabix,
+      ref_1  TYPE bseg-xref1,
+      ref_3  TYPE bseg-xref3,
+      cuenta TYPE ztfii1014_11-hkont.
+
+    ".Validamos si es cliente/proveedor prodiverso
+    IF gr_tipo_prodiverso[] IS NOT INITIAL AND
+       i_c_prodiverso IS NOT INITIAL AND
+       i_c_prodiverso IN gr_tipo_prodiverso[].
+
+      DATA(ti_bseg_aux) = i_ti_bseg.
+      ".Ordenamos por cuenta
+      SORT ti_bseg_aux BY hkont.
+      ".Eliminamos duplicados
+      DELETE ADJACENT DUPLICATES FROM ti_bseg_aux COMPARING hkont.
+
+      ".Rango con las cuentas
+      rn_cuentas = VALUE #(
+      FOR es_bseg_aux IN ti_bseg_aux
+      ( sign = 'I'
+        option = 'EQ'
+        low = |{ es_bseg_aux-hkont ALPHA = IN }| )
+       ).
+
+      ".Consultamos Relación bancos y ctas. contables
+      SELECT cmdtx, nit, hkont
+        FROM ztfii1014_11
+       WHERE hkont IN @rn_cuentas
+        INTO TABLE @DATA(ti_ztfii1014_11).
+
+      ti_bseg_aux = i_ti_bseg.
+      ".Ordenamos por cliente
+      SORT ti_bseg_aux BY kunnr.
+      ".Eliminamos duplicados
+      DELETE ADJACENT DUPLICATES FROM ti_bseg_aux COMPARING kunnr.
+
+
+      ".Consultamos la informacion de los clientes
+      SELECT kunnr, name1, stcd1
+        FROM kna1
+         FOR ALL ENTRIES IN @ti_bseg_aux
+       WHERE kunnr EQ @ti_bseg_aux-kunnr
+        INTO TABLE @DATA(ti_kna1).
+
+      ".recorremos las posiciones del doc
+      LOOP AT i_ti_bseg ASSIGNING <es_bseg>.
+
+        tabix = sy-tabix.
+
+        IF tabix EQ 1.
+
+          IF <es_bseg>-zuonr IS INITIAL.
+
+            es_bseg_subst-xref1 = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+                                                      belnr = <es_bseg>-belnr
+                                                      gjahr = <es_bseg>-gjahr
+                                                      buzei = <es_bseg>-buzei ]-stcd1 OPTIONAL ).
+
+            es_bseg_subst-xref3 = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+                                                     belnr = <es_bseg>-belnr
+                                                     gjahr = <es_bseg>-gjahr
+                                                     buzei = <es_bseg>-buzei ]-name1 OPTIONAL ).
+
+          ELSE.
+            CLEAR: ti_bstkd, ti_contacto.
+            ti_bstkd = VALUE #( ( <es_bseg>-zuonr ) ).
+
+            CALL FUNCTION 'ZSDI1072_DATOS_CONTACTO'
+              EXPORTING
+                i_ti_bstkd    = ti_bstkd
+              IMPORTING
+                e_ti_contacto = ti_contacto.
+
+            DATA(es_contacto) = VALUE #( ti_contacto[ tabix ] OPTIONAL ).
+
+            IF es_contacto-stcd1 IS NOT INITIAL.
+              es_bseg_subst-xref1 = es_contacto-stcd1.
+              CONCATENATE es_contacto-firstname es_contacto-lastname INTO es_bseg_subst-xref3 SEPARATED BY space.
+            ELSE.
+              es_bseg_subst-xref1 = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+                                                        belnr = <es_bseg>-belnr
+                                                        gjahr = <es_bseg>-gjahr
+                                                        buzei = <es_bseg>-buzei ]-stcd1 OPTIONAL ).
+
+              es_bseg_subst-xref3 = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+                                                        belnr = <es_bseg>-belnr
+                                                        gjahr = <es_bseg>-gjahr
+                                                        buzei = <es_bseg>-buzei ]-name1 OPTIONAL ).
+            ENDIF.
+          ENDIF.
+
+          "Modificar la posición sólo si no está vacía
+          MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING xref1 xref3
+                                WHERE tabix EQ tabix.
+
+          ref_1 = es_bseg_subst-xref1.
+          ref_3 = es_bseg_subst-xref3.
+        ELSE.
+
+          ".Obtenemos la clase de documento
+          DATA(cl_doc) = VALUE #( i_ti_bkpf[ bukrs = <es_bseg>-bukrs
+                                             belnr = <es_bseg>-belnr
+                                             gjahr = <es_bseg>-gjahr ]-blart OPTIONAL ).
+
+          ".Verificamos si la clase de doc es de medios de pago
+          IF cl_doc IN gr_cl_doc_med_pago.
+            CLEAR: cuenta.
+
+            TRY.
+                cuenta = |{ <es_bseg>-hkont ALPHA = IN }|.
+                DATA(es_ztfii1014) = ti_ztfii1014_11[ hkont = cuenta ].
+                es_bseg_subst-xref1 = es_ztfii1014-nit.
+                es_bseg_subst-xref3 = es_ztfii1014-cmdtx.
+              CATCH cx_sy_itab_line_not_found.
+
+                ".Obtenemos la informacion del cliente
+                DATA(es_kna1) = VALUE #( ti_kna1[ kunnr = <es_bseg>-kunnr ] OPTIONAL ).
+                IF es_kna1-kunnr IS NOT INITIAL.
+                  es_bseg_subst-xref1 = es_kna1-stcd1.
+                  es_bseg_subst-xref3 = es_kna1-name1.
+                ELSE.
+                  es_bseg_subst-xref1 = ref_1.
+                  es_bseg_subst-xref3 = ref_3.
+                ENDIF.
+            ENDTRY.
+
+          ELSE.
+            es_bseg_subst-xref1 = ref_1.
+            es_bseg_subst-xref3 = ref_3.
+          ENDIF.
+
+          "Modificar la posición sólo si no está vacía
+          MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING xref1 xref3
+                                              WHERE tabix EQ tabix.
+
+        ENDIF.
+
+
+        e_flag = abap_true.
+      ENDLOOP.
+
+    ELSE.
+
+      ".recorremos las posiciones del doc
+      LOOP AT i_ti_bseg ASSIGNING <es_bseg>.
+
+        tabix = sy-tabix.
+
+        CLEAR: ti_bstkd, ti_contacto.
+
+        IF tabix EQ 1.
+          IF <es_bseg>-zuonr IS INITIAL.
+*--------------------------------------------------------------------*
+* Ini LEMORENO  17.11.2022 Se comenta logica BSEC ya que estaba
+*                          limpiando las variables para no prodiversos
+*--------------------------------------------------------------------*
+*            es_bsec = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+*                                 belnr = <es_bseg>-belnr
+*                                 gjahr = <es_bseg>-gjahr
+*                                 buzei = <es_bseg>-buzei ] OPTIONAL ).
+*            es_bseg_subst-xref1 = es_bsec-stcd1.
+*            es_bseg_subst-xref3 = es_bsec-name1.
+
+            es_bseg_subst-xref1 = <es_bseg>-xref1.
+            es_bseg_subst-xref3 = <es_bseg>-xref3.
+*--------------------------------------------------------------------*
+* Fin LEMORENO 17.11.2022
+*--------------------------------------------------------------------*
+
+          ELSE.
+            ti_bstkd = VALUE #( ( <es_bseg>-zuonr ) ).
+
+            CALL FUNCTION 'ZSDI1072_DATOS_CONTACTO'
+              EXPORTING
+                i_ti_bstkd    = ti_bstkd
+              IMPORTING
+                e_ti_contacto = ti_contacto.
+
+            es_contacto = VALUE #( ti_contacto[ tabix ] OPTIONAL ).
+
+            IF es_contacto-stcd1 IS NOT INITIAL.
+              es_bseg_subst-xref1 = es_contacto-stcd1.
+              CONCATENATE es_contacto-firstname es_contacto-lastname INTO es_bseg_subst-xref3 SEPARATED BY space.
+            ELSE.
+*--------------------------------------------------------------------*
+* Ini LEMORENO  17.11.2022 Se comenta logica BSEC ya que estaba
+*                          limpiando las variables para no prodiversos
+*--------------------------------------------------------------------*
+*              es_bsec = VALUE #( i_ti_bsec[ bukrs = <es_bseg>-bukrs
+*                                   belnr = <es_bseg>-belnr
+*                                   gjahr = <es_bseg>-gjahr
+*                                   buzei = <es_bseg>-buzei ] OPTIONAL ).
+*              es_bseg_subst-xref1 = es_bsec-stcd1.
+*              es_bseg_subst-xref3 = es_bsec-name1.
+
+              es_bseg_subst-xref1 = <es_bseg>-xref1.
+              es_bseg_subst-xref3 = <es_bseg>-xref3.
+*--------------------------------------------------------------------*
+* Fin LEMORENO 17.11.2022
+*--------------------------------------------------------------------*
+            ENDIF.
+          ENDIF.
+
+
+          "Modificar la posición sólo si no está vacía
+          MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING xref1 xref3
+                                              WHERE tabix EQ tabix AND xref1 IS INITIAL.
+
+          e_flag = abap_true.
+        ELSE.
+
+          IF lines( c_ti_bseg_subst ) LE 0.
+            CONTINUE.
+          ENDIF.
+
+
+          es_bseg_subst-xref1 = <es_bseg>-xref1.
+          es_bseg_subst-xref3 = <es_bseg>-xref3.
+
+          "Modificar la posición sólo si no está vacía
+          MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING xref1 xref3
+                                              WHERE tabix EQ tabix AND xref1 IS INITIAL.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD sustituir_xblnr.
+
+    CONSTANTS: c_modulo    TYPE zzedmodulo  VALUE 'FI',
+               c_ricefw    TYPE zzedricefw  VALUE 'E1002',
+               c_clase_doc TYPE zzedidparam VALUE 'CLASE_DOC'.
+
+    DATA: clase_doc TYPE rsis_t_range.
+
+    FIELD-SYMBOLS: <fs_bkpfsub> TYPE bkpf_subst.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true.
+
+    DATA(go_parametros) = NEW zclcxr1000_parametros( i_modulo = c_modulo i_ricefw = c_ricefw ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_modulo      = c_modulo
+        i_ricefw      = c_ricefw
+        i_idparam     = c_clase_doc
+      IMPORTING
+        e_ti_valrango = clase_doc
+      EXCEPTIONS
+        parametro_no_encontrado = 1 ).
+
+    IF i_ti_bkpf[ 1 ]-blart IN clase_doc. " Documento de Compensación
+
+      LOOP AT i_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>) WHERE lifnr IS NOT INITIAL.
+
+        IF line_exists( c_ti_bkpfsub[ 1 ] ).
+
+          ASSIGN c_ti_bkpfsub[ 1 ] TO <fs_bkpfsub>.
+
+          <fs_bkpfsub>-xblnr = <fs_bseg>-lifnr.
+          EXIT.
+
+        ENDIF.
+
+      ENDLOOP.
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_textos_bseg.
+    DATA:
+      es_bseg_subst TYPE bseg_subst.
+
+    DATA:
+      tabix TYPE sytabix.
+
+    ".Validamos si la transaccion esta permitida para realizar el proceso de sustitucion de los textos
+    CHECK gr_trx_textos_pos IS NOT INITIAL AND
+          g_tcode IN gr_trx_textos_pos.
+
+    ".Validamos que exista informacion
+    CHECK lines( i_ti_bkpf ) GT 0.
+
+    DATA(texto) = VALUE #( c_ti_bseg[ 1 ]-sgtxt OPTIONAL ).
+    DATA(texto_1) = VALUE #( c_ti_bseg[ 1 ]-qsskz  OPTIONAL ).
+    IF texto IS INITIAL AND texto_1 IS NOT INITIAL.
+      "     texto = texto_1.
+      ".El campo Texto Exige una entrada obligatoria.
+      MESSAGE e041(zfi01) DISPLAY LIKE c_w.
+    ELSE.
+
+      LOOP AT c_ti_bseg ASSIGNING FIELD-SYMBOL(<fs_bseg>).
+
+        tabix = sy-tabix.
+        es_bseg_subst-sgtxt = <fs_bseg>-sgtxt = texto.
+
+        "Modificar la posición sólo si no está vacía
+        MODIFY c_ti_bseg_subst FROM es_bseg_subst TRANSPORTING sgtxt
+                              WHERE tabix EQ tabix AND sgtxt IS INITIAL.
+
+      ENDLOOP.
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+METHOD sustituir_xref1_xref3_compensa.
+
+  DATA: ti_xausz3 TYPE STANDARD TABLE OF ausz_clr,
+        r_tcode   TYPE RANGE OF zvcxr1000_2-low,
+        r_blart   TYPE RANGE OF zvcxr1000_2-low.
+
+  FIELD-SYMBOLS: <fs_xausz3> TYPE STANDARD TABLE.
+
+  CONSTANTS: c_modulo   TYPE zzedmodulo  VALUE 'FI',
+             c_ricefw   TYPE zzedricefw  VALUE 'E1002',
+             c_tcode    TYPE zzedidparam VALUE 'TCODECOMPE',
+             c_blart    TYPE zzedidparam VALUE 'BLARTCOMPE'.
+
+
+  ".TCODE Válidas
+  go_parametros->get_parametro(
+    EXPORTING
+      i_modulo      = c_modulo
+      i_ricefw      = c_ricefw
+      i_idparam     = c_tcode
+    IMPORTING
+      e_ti_valrango = r_tcode
+    EXCEPTIONS
+      parametro_no_encontrado = 1 ).
+
+  ".BLART Válidos
+  go_parametros->get_parametro(
+    EXPORTING
+      i_modulo      = c_modulo
+      i_ricefw      = c_ricefw
+      i_idparam     = c_blart
+    IMPORTING
+      e_ti_valrango = r_blart
+    EXCEPTIONS
+      parametro_no_encontrado = 1 ).
+
+  CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E1002' ) = abap_true
+  AND   sy-tcode IN r_tcode
+  AND   i_ti_bkpf[ 1 ]-blart IN r_blart.
+
+  ASSIGN ('(SAPMF05A)XAUSZ3[]') TO <fs_xausz3>.
+
+  CHECK <fs_xausz3> IS ASSIGNED.
+
+  ti_xausz3 = <fs_xausz3>.
+
+  SELECT b~belnr, b~gjahr, b~buzid, b~xref1, b~xref3
+    FROM @ti_xausz3 AS a
+    INNER JOIN bseg AS b
+      ON b~belnr = a~belnr
+     AND b~gjahr = a~gjahr
+    WHERE b~buzid = 'W'
+    AND   b~xref1 <> @space
+    AND   b~xref3 <> @space
+   INTO TABLE @DATA(ti_docs).
+
+  IF sy-subrc = 0.
+
+    DATA(es_docs) = ti_docs[ 1 ].
+
+    LOOP AT c_ti_bseg_subst ASSIGNING FIELD-SYMBOL(<fs_subst>).
+      <fs_subst>-xref1 = es_docs-xref1.
+      <fs_subst>-xref3 = es_docs-xref3.
+    ENDLOOP.
+
+  ENDIF.
+
+ENDMETHOD.
+ENDCLASS.

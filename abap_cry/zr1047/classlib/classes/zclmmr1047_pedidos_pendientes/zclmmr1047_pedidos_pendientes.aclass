@@ -1,0 +1,710 @@
+CLASS zclmmr1047_pedidos_pendientes DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_estado_mrp         TYPE ztmmr1047_1-fashion_mrp_status VALUE 'Z',
+               gc_elemento_requerido TYPE ztmmr1047_1-requirement_element VALUE 'VJ',
+               gc_j                  TYPE vbfa-vbtyp_v VALUE 'J',   ".Entrega
+               gc_u                  TYPE vbfa-vbtyp_n VALUE 'U'.   ".Proforma
+
+
+*    CLASS-DATA:
+*      go_parametros      TYPE REF TO zclcxr1000_parametros,
+*      ges_parametros_app TYPE gtp_parametros_app.
+
+    TYPES: BEGIN OF gtp_es_parametros,
+             vbeln  TYPE likp-vbeln,
+             posnr  TYPE lips-posnr,
+             vkorg  TYPE likp-vkorg,
+             wbstk  TYPE likp-wbstk,
+             fkstk  TYPE likp-fkstk,
+             erdat  TYPE likp-erdat,
+             werks  TYPE werks_d,
+             matnr  TYPE matnr,
+             mtart  TYPE mtart,
+             meins  TYPE lips-meins,
+             lfimg  TYPE lips-lfimg,
+             vdatu  TYPE vbak-vdatu,
+             kunag  TYPE likp-kunag,
+             vgbel  TYPE lips-vgbel,
+             waerk  TYPE vbap-waerk,
+             kwmeng TYPE vbap-kwmeng,
+             netwr  TYPE vbap-netwr,
+             mstae  TYPE mstae,
+             vmsta  TYPE vmsta,
+             berid  TYPE berid,
+             dismm  TYPE dismm,
+             lgort  TYPE lgort_d,
+           END OF gtp_es_parametros,
+
+           BEGIN OF gtp_parametros_app,
+             ti_r_clentrega_pro TYPE RANGE OF likp-lfart,  ".Clase de entrega con proforma
+           END OF gtp_parametros_app,
+
+           gtp_r_fecha             TYPE RANGE OF likp-erdat,
+
+           gtp_ti_datos_entrega    TYPE STANDARD TABLE OF gtp_es_parametros WITH EMPTY KEY,
+           gtp_ti_pedido_pendiente TYPE STANDARD TABLE OF ztmmr1047_1 WITH EMPTY KEY.
+
+    CLASS-DATA: ges_parametros     TYPE gtp_es_parametros,
+                go_parametros      TYPE REF TO zclcxr1000_parametros,
+                ges_parametros_app TYPE gtp_parametros_app.
+
+    DATA: go_log              TYPE REF TO zclcxr1002_log_aplicacion.
+
+    METHODS:
+      generar_pedidos_pendientes
+        IMPORTING
+          i_r_fecha_entrega_desde TYPE gtp_r_fecha
+          i_r_org_venta           TYPE STANDARD TABLE
+          i_r_est_movimiento      TYPE STANDARD TABLE
+          i_r_est_factura         TYPE STANDARD TABLE
+          i_r_centro              TYPE STANDARD TABLE
+          i_ejecutar_en_test      TYPE flag
+        RETURNING
+          VALUE(r_ti_entregas)    TYPE gtp_ti_datos_entrega,
+      consultar_entregas
+        IMPORTING
+          i_r_fecha_entrega_desde    TYPE gtp_r_fecha
+          i_r_org_venta              TYPE STANDARD TABLE
+          i_r_centro                 TYPE STANDARD TABLE
+          i_r_est_movimiento         TYPE STANDARD TABLE
+          i_r_est_factura            TYPE STANDARD TABLE
+        EXPORTING
+          VALUE(e_ti_entregas)       TYPE gtp_ti_datos_entrega
+          e_ti_pedidos_pendientes_db TYPE gtp_ti_pedido_pendiente,
+      mapear_tbl_pedidos_pendientes
+        IMPORTING
+          i_ti_pedidos_pendientes_db TYPE gtp_ti_pedido_pendiente
+        CHANGING
+          c_ti_entrega               TYPE gtp_ti_datos_entrega
+          c_ti_pedido_pendiente      TYPE gtp_ti_pedido_pendiente.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS: grabar_pedidos_pendientes
+      CHANGING
+        c_ti_pedido_pendiente TYPE gtp_ti_pedido_pendiente,
+
+      "! Obtener los parametros del programa
+      obtener_parametros,
+
+      "! Metodo para donde se valida si la entrega tiene proforma generada
+      "! @parameter i_ti_entregas |Informacion de las Entregas
+      "! @parameter r_ti_entregas |Informacion de las Entregas SIN Proforma
+      validar_proforma_entrega
+        IMPORTING
+                  i_ti_entregas        TYPE gtp_ti_datos_entrega
+        RETURNING VALUE(r_ti_entregas) TYPE gtp_ti_datos_entrega.
+ENDCLASS.
+
+
+
+CLASS zclmmr1047_pedidos_pendientes IMPLEMENTATION.
+
+  METHOD consultar_entregas.
+
+    DATA: r_materiales TYPE RANGE OF lips-matnr.
+
+    ASSIGN i_r_fecha_entrega_desde[ 1 ]-low TO FIELD-SYMBOL(<fs_fecha_desde_entrega>).
+
+    "Consultar entregas
+    SELECT
+    FROM likp AS _entrega
+    INNER JOIN lips AS _entrega_posicion ON
+    _entrega_posicion~vbeln = _entrega~vbeln
+    INNER JOIN isddocprocflow AS _pedido_entrega ON
+    _pedido_entrega~subsequentdocument = _entrega_posicion~vbeln
+    AND _pedido_entrega~subsequentdocumentitem = _entrega_posicion~posnr
+    AND _pedido_entrega~precedingdocumentcategory = 'C'
+    LEFT JOIN vbak AS _pedido ON
+    _pedido~vbeln = _pedido_entrega~precedingdocument
+    LEFT JOIN vbap AS _pedido_posicion ON
+    _pedido_posicion~vbeln = _pedido_entrega~precedingdocument
+    AND _pedido_posicion~posnr = _pedido_entrega~precedingdocumentitem
+    FIELDS _entrega~vbeln, _entrega_posicion~posnr, _entrega~erdat, _entrega_posicion~matnr, _entrega_posicion~werks, _entrega~kunag,
+           _entrega_posicion~meins, _entrega_posicion~lfimg, _entrega_posicion~vgbel,
+           _pedido_posicion~waerk, _pedido_posicion~netwr, _pedido_posicion~kwmeng, _pedido~vdatu
+    WHERE _entrega~erdat >= @<fs_fecha_desde_entrega>
+    AND _entrega~vkorg IN @i_r_org_venta
+    AND _entrega~wbstk IN @i_r_est_movimiento
+    AND _entrega~fkstk IN @i_r_est_factura
+    AND _entrega_posicion~werks IN @i_r_centro
+    AND _entrega_posicion~uecha NE @space
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_entregas.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                           = e_ti_entregas
+        i_nombre_columna               = 'MATNR'
+        i_no_ordenar                   = abap_true
+        i_no_eliminar_duplicados       = abap_true
+      CHANGING
+        c_ti_rango                     = r_materiales  ).
+
+    SORT r_materiales BY low.
+    DELETE ADJACENT DUPLICATES FROM r_materiales COMPARING low.
+
+    CHECK r_materiales IS NOT INITIAL.
+    "Recuperar consecutivo para articulo
+    SELECT
+    FROM ztmmr1047_1
+    FIELDS article, plant, posnr
+    WHERE article IN @r_materiales
+    AND   plant   IN @i_r_centro
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_pedidos_pendientes_db.
+
+    SORT e_ti_pedidos_pendientes_db BY article plant posnr DESCENDING.
+    DELETE ADJACENT DUPLICATES FROM e_ti_pedidos_pendientes_db COMPARING article plant.
+
+  ENDMETHOD.
+
+  METHOD mapear_tbl_pedidos_pendientes.
+
+    DATA posnr TYPE posnr.
+
+    LOOP AT c_ti_entrega REFERENCE INTO DATA(r_es_entrega)
+                         GROUP BY ( article = r_es_entrega->matnr plant = r_es_entrega->werks ).
+
+      posnr = VALUE #( i_ti_pedidos_pendientes_db[ article = r_es_entrega->matnr plant = r_es_entrega->werks ]-posnr OPTIONAL ).
+
+      posnr += 10.
+
+      LOOP AT GROUP r_es_entrega ASSIGNING FIELD-SYMBOL(<fs_es_entrega>).
+
+        APPEND INITIAL LINE TO c_ti_pedido_pendiente ASSIGNING FIELD-SYMBOL(<fs_es_pedido_pendiente>).
+
+        <fs_es_pedido_pendiente> = VALUE #( article = r_es_entrega->matnr plant = r_es_entrega->werks
+                                            posnr   = posnr
+                                            uom     = r_es_entrega->meins quantity = r_es_entrega->lfimg
+                                            fashion_mrp_status = gc_estado_mrp
+                                            moneda = r_es_entrega->waerk
+                                            monto  = COND #( WHEN r_es_entrega->kwmeng <> 0 THEN
+                                                              r_es_entrega->netwr / r_es_entrega->kwmeng
+                                                             ELSE 0 )
+                                            requirement_element      = gc_elemento_requerido
+                                            requirement_element_item = r_es_entrega->posnr
+                                            requirement_no           = r_es_entrega->vbeln
+                                            delivery_date            = r_es_entrega->erdat
+                                            delivery_pref_date       = r_es_entrega->vdatu
+                                            erdat                    = r_es_entrega->erdat
+                                            customer_no              = r_es_entrega->kunag
+                                          ).
+
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD generar_pedidos_pendientes.
+
+    DATA: ti_pedido_pendiente TYPE gtp_ti_pedido_pendiente.
+
+    ".Obtenemos los parametros
+    obtener_parametros( ).      ".adicion Jose Miguel Valencia 24.04.2023
+
+    go_log =  zclcxr1002_log_aplicacion=>get_instancia( ).
+    go_log->remover_mensage( ).
+
+    consultar_entregas( EXPORTING
+                            i_r_fecha_entrega_desde = i_r_fecha_entrega_desde
+                            i_r_org_venta           = i_r_org_venta
+                            i_r_centro              = i_r_centro
+                            i_r_est_movimiento      = i_r_est_movimiento
+                            i_r_est_factura         = i_r_est_factura
+                        IMPORTING
+                            e_ti_entregas = DATA(ti_entregas)
+                            e_ti_pedidos_pendientes_db = DATA(ti_pedidos_pendientes_db) ).
+
+    DATA(ti_entregas_sin_proforma) = validar_proforma_entrega( ti_entregas ).  ".adicion Jose Miguel Valencia 24.04.2023
+
+    IF lines( ti_entregas_sin_proforma ) GT 0.  ".adicion Jose Miguel Valencia 24.04.2023
+      mapear_tbl_pedidos_pendientes(
+        EXPORTING
+          i_ti_pedidos_pendientes_db = ti_pedidos_pendientes_db
+        CHANGING
+          c_ti_entrega          = ti_entregas_sin_proforma
+          c_ti_pedido_pendiente = ti_pedido_pendiente  ).
+    ELSE.
+      mapear_tbl_pedidos_pendientes(
+        EXPORTING
+          i_ti_pedidos_pendientes_db = ti_pedidos_pendientes_db
+        CHANGING
+          c_ti_entrega          = ti_entregas
+          c_ti_pedido_pendiente = ti_pedido_pendiente  ).
+    ENDIF.
+
+    IF i_ejecutar_en_test = abap_false.
+      grabar_pedidos_pendientes(
+          CHANGING
+              c_ti_pedido_pendiente = ti_pedido_pendiente ).
+
+      go_log->mostrar_log( i_ventana_emergente = abap_true ).
+
+    ELSE.
+      TRY.
+          DATA(ti_catalogo) = zclcxr1002_util=>construir_catalogo( i_ti         = ti_pedido_pendiente
+                                                                   i_cfieldname = 'MONEDA' ).
+        CATCH cx_dynamic_check cx_static_check.
+      ENDTRY.
+      CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+        EXPORTING
+          i_ti_datos    = REF #( ti_pedido_pendiente )
+          i_ti_catalogo = ti_catalogo.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD grabar_pedidos_pendientes.
+
+    TRY.
+        INSERT ztmmr1047_1 FROM TABLE c_ti_pedido_pendiente.
+      CATCH cx_sy_open_sql_db INTO DATA(o_cx).
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+    ENDTRY.
+
+    IF sy-subrc EQ 0.
+      COMMIT WORK AND WAIT.
+      go_log->set_es_log( i_es = VALUE #( id = '/ACCGO/TSDB' number = '047' type = 'S' message_v1 = lines( c_ti_pedido_pendiente )
+                                          message_v2 = 'ZTMMR1047_1' ) ).
+    ELSE.
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD validar_proforma_entrega.
+
+    DATA(ti_entregas) = i_ti_entregas.
+
+    ".Validamos si existe informacion de las entregas
+    CHECK lines( ti_entregas ) GT 0 AND
+          ges_parametros_app-ti_r_clentrega_pro[] IS NOT INITIAL.
+
+    SORT ti_entregas BY vbeln.
+    DELETE ADJACENT DUPLICATES FROM ti_entregas COMPARING vbeln.
+
+    ".Consultamos las entreas que tienen proforma
+    SELECT t1~vbelv, t1~vbeln
+      FROM vbfa AS t1 INNER JOIN likp AS t2 ON t1~vbelv EQ t2~vbeln
+       FOR ALL ENTRIES IN @ti_entregas
+     WHERE t1~vbelv EQ @ti_entregas-vbeln
+       AND t1~vbtyp_n EQ @gc_u  ".Proforma
+       AND t1~vbtyp_v EQ @gc_j  ".Entrega
+       AND t2~lfart   IN @ges_parametros_app-ti_r_clentrega_pro
+      INTO TABLE @DATA(ti_entregas_proforma).
+
+    ".Verificamos si existen entregas con proforma generada
+    CHECK lines( ti_entregas_proforma ) GT 0.
+
+    ".Recorremos las entregas
+    LOOP AT i_ti_entregas INTO DATA(es_entregas).
+
+      IF line_exists( ti_entregas_proforma[ vbelv = es_entregas-vbeln ] ).
+        CONTINUE.
+      ENDIF.
+
+      ".Entregas sin proforma generada
+      APPEND es_entregas TO r_ti_entregas.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD obtener_parametros.
+*&----------------------------------------------------------------------*
+*&     Definición de constantes
+*&----------------------------------------------------------------------*
+    CONSTANTS:
+      c_modulo        TYPE ztcxr1000_1-modulo  VALUE 'MM',
+      c_ricefw        TYPE ztcxr1000_1-ricefw  VALUE 'R1047',
+      c_clentrega_pro TYPE ztcxr1000_1-idparam VALUE 'CLENTREPRO'.
+
+*&----------------------------------------------------------------------*
+*&     Definición de estructuras
+*&----------------------------------------------------------------------*
+    DATA:
+      es_bapiret2 TYPE bapiret2.
+
+*&----------------------------------------------------------------------*
+*&     Definición de variables
+*&----------------------------------------------------------------------*
+    DATA:
+      message TYPE string.
+
+    ".Creamos instancia
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = c_modulo
+                                               i_ricefw = c_ricefw ).
+
+    ".Clases Doc Entrega con proforma generada
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = c_clentrega_pro
+      IMPORTING
+        e_ti_valrango           = ges_parametros_app-ti_r_clentrega_pro
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2
+    ).
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclmmr1047_pedidos_pendientes DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_estado_mrp         TYPE ztmmr1047_1-fashion_mrp_status VALUE 'Z',
+               gc_elemento_requerido TYPE ztmmr1047_1-requirement_element VALUE 'VJ',
+               gc_j                  TYPE vbfa-vbtyp_v VALUE 'J',   ".Entrega
+               gc_u                  TYPE vbfa-vbtyp_n VALUE 'U'.   ".Proforma
+
+
+*    CLASS-DATA:
+*      go_parametros      TYPE REF TO zclcxr1000_parametros,
+*      ges_parametros_app TYPE gtp_parametros_app.
+
+    TYPES: BEGIN OF gtp_es_parametros,
+             vbeln  TYPE likp-vbeln,
+             posnr  TYPE lips-posnr,
+             vkorg  TYPE likp-vkorg,
+             wbstk  TYPE likp-wbstk,
+             fkstk  TYPE likp-fkstk,
+             erdat  TYPE likp-erdat,
+             werks  TYPE werks_d,
+             matnr  TYPE matnr,
+             mtart  TYPE mtart,
+             meins  TYPE lips-meins,
+             lfimg  TYPE lips-lfimg,
+             vdatu  TYPE vbak-vdatu,
+             kunag  TYPE likp-kunag,
+             vgbel  TYPE lips-vgbel,
+             waerk  TYPE vbap-waerk,
+             kwmeng TYPE vbap-kwmeng,
+             netwr  TYPE vbap-netwr,
+             mstae  TYPE mstae,
+             vmsta  TYPE vmsta,
+             berid  TYPE berid,
+             dismm  TYPE dismm,
+             lgort  TYPE lgort_d,
+           END OF gtp_es_parametros,
+
+           BEGIN OF gtp_parametros_app,
+             ti_r_clentrega_pro TYPE RANGE OF likp-lfart,  ".Clase de entrega con proforma
+           END OF gtp_parametros_app,
+
+           gtp_r_fecha             TYPE RANGE OF likp-erdat,
+
+           gtp_ti_datos_entrega    TYPE STANDARD TABLE OF gtp_es_parametros WITH EMPTY KEY,
+           gtp_ti_pedido_pendiente TYPE STANDARD TABLE OF ztmmr1047_1 WITH EMPTY KEY.
+
+    CLASS-DATA: ges_parametros     TYPE gtp_es_parametros,
+                go_parametros      TYPE REF TO zclcxr1000_parametros,
+                ges_parametros_app TYPE gtp_parametros_app.
+
+    DATA: go_log              TYPE REF TO zclcxr1002_log_aplicacion.
+
+    METHODS:
+      generar_pedidos_pendientes
+        IMPORTING
+          i_r_fecha_entrega_desde TYPE gtp_r_fecha
+          i_r_org_venta           TYPE STANDARD TABLE
+          i_r_est_movimiento      TYPE STANDARD TABLE
+          i_r_est_factura         TYPE STANDARD TABLE
+          i_r_centro              TYPE STANDARD TABLE
+          i_ejecutar_en_test      TYPE flag
+        RETURNING
+          VALUE(r_ti_entregas)    TYPE gtp_ti_datos_entrega,
+      consultar_entregas
+        IMPORTING
+          i_r_fecha_entrega_desde    TYPE gtp_r_fecha
+          i_r_org_venta              TYPE STANDARD TABLE
+          i_r_centro                 TYPE STANDARD TABLE
+          i_r_est_movimiento         TYPE STANDARD TABLE
+          i_r_est_factura            TYPE STANDARD TABLE
+        EXPORTING
+          VALUE(e_ti_entregas)       TYPE gtp_ti_datos_entrega
+          e_ti_pedidos_pendientes_db TYPE gtp_ti_pedido_pendiente,
+      mapear_tbl_pedidos_pendientes
+        IMPORTING
+          i_ti_pedidos_pendientes_db TYPE gtp_ti_pedido_pendiente
+        CHANGING
+          c_ti_entrega               TYPE gtp_ti_datos_entrega
+          c_ti_pedido_pendiente      TYPE gtp_ti_pedido_pendiente.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS: grabar_pedidos_pendientes
+      CHANGING
+        c_ti_pedido_pendiente TYPE gtp_ti_pedido_pendiente,
+
+      "! Obtener los parametros del programa
+      obtener_parametros,
+
+      "! Metodo para donde se valida si la entrega tiene proforma generada
+      "! @parameter i_ti_entregas |Informacion de las Entregas
+      "! @parameter r_ti_entregas |Informacion de las Entregas SIN Proforma
+      validar_proforma_entrega
+        IMPORTING
+                  i_ti_entregas        TYPE gtp_ti_datos_entrega
+        RETURNING VALUE(r_ti_entregas) TYPE gtp_ti_datos_entrega.
+ENDCLASS.
+
+
+
+CLASS zclmmr1047_pedidos_pendientes IMPLEMENTATION.
+
+  METHOD consultar_entregas.
+
+    DATA: r_materiales TYPE RANGE OF lips-matnr.
+
+    ASSIGN i_r_fecha_entrega_desde[ 1 ]-low TO FIELD-SYMBOL(<fs_fecha_desde_entrega>).
+
+    "Consultar entregas
+    SELECT
+    FROM likp AS _entrega
+    INNER JOIN lips AS _entrega_posicion ON
+    _entrega_posicion~vbeln = _entrega~vbeln
+    INNER JOIN isddocprocflow AS _pedido_entrega ON
+    _pedido_entrega~subsequentdocument = _entrega_posicion~vbeln
+    AND _pedido_entrega~subsequentdocumentitem = _entrega_posicion~posnr
+    AND _pedido_entrega~precedingdocumentcategory = 'C'
+    LEFT JOIN vbak AS _pedido ON
+    _pedido~vbeln = _pedido_entrega~precedingdocument
+    LEFT JOIN vbap AS _pedido_posicion ON
+    _pedido_posicion~vbeln = _pedido_entrega~precedingdocument
+    AND _pedido_posicion~posnr = _pedido_entrega~precedingdocumentitem
+    FIELDS _entrega~vbeln, _entrega_posicion~posnr, _entrega~erdat, _entrega_posicion~matnr, _entrega_posicion~werks, _entrega~kunag,
+           _entrega_posicion~meins, _entrega_posicion~lfimg, _entrega_posicion~vgbel,
+           _pedido_posicion~waerk, _pedido_posicion~netwr, _pedido_posicion~kwmeng, _pedido~vdatu
+    WHERE _entrega~erdat >= @<fs_fecha_desde_entrega>
+    AND _entrega~vkorg IN @i_r_org_venta
+    AND _entrega~wbstk IN @i_r_est_movimiento
+    AND _entrega~fkstk IN @i_r_est_factura
+    AND _entrega_posicion~werks IN @i_r_centro
+    AND _entrega_posicion~uecha NE @space
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_entregas.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                           = e_ti_entregas
+        i_nombre_columna               = 'MATNR'
+        i_no_ordenar                   = abap_true
+        i_no_eliminar_duplicados       = abap_true
+      CHANGING
+        c_ti_rango                     = r_materiales  ).
+
+    SORT r_materiales BY low.
+    DELETE ADJACENT DUPLICATES FROM r_materiales COMPARING low.
+
+    CHECK r_materiales IS NOT INITIAL.
+    "Recuperar consecutivo para articulo
+    SELECT
+    FROM ztmmr1047_1
+    FIELDS article, plant, posnr
+    WHERE article IN @r_materiales
+    AND   plant   IN @i_r_centro
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_pedidos_pendientes_db.
+
+    SORT e_ti_pedidos_pendientes_db BY article plant posnr DESCENDING.
+    DELETE ADJACENT DUPLICATES FROM e_ti_pedidos_pendientes_db COMPARING article plant.
+
+  ENDMETHOD.
+
+  METHOD mapear_tbl_pedidos_pendientes.
+
+    DATA posnr TYPE posnr.
+
+    LOOP AT c_ti_entrega REFERENCE INTO DATA(r_es_entrega)
+                         GROUP BY ( article = r_es_entrega->matnr plant = r_es_entrega->werks ).
+
+      posnr = VALUE #( i_ti_pedidos_pendientes_db[ article = r_es_entrega->matnr plant = r_es_entrega->werks ]-posnr OPTIONAL ).
+
+      posnr += 10.
+
+      LOOP AT GROUP r_es_entrega ASSIGNING FIELD-SYMBOL(<fs_es_entrega>).
+
+        APPEND INITIAL LINE TO c_ti_pedido_pendiente ASSIGNING FIELD-SYMBOL(<fs_es_pedido_pendiente>).
+
+        <fs_es_pedido_pendiente> = VALUE #( article = r_es_entrega->matnr plant = r_es_entrega->werks
+                                            posnr   = posnr
+                                            uom     = r_es_entrega->meins quantity = r_es_entrega->lfimg
+                                            fashion_mrp_status = gc_estado_mrp
+                                            moneda = r_es_entrega->waerk
+                                            monto  = COND #( WHEN r_es_entrega->kwmeng <> 0 THEN
+                                                              r_es_entrega->netwr / r_es_entrega->kwmeng
+                                                             ELSE 0 )
+                                            requirement_element      = gc_elemento_requerido
+                                            requirement_element_item = r_es_entrega->posnr
+                                            requirement_no           = r_es_entrega->vbeln
+                                            delivery_date            = r_es_entrega->erdat
+                                            delivery_pref_date       = r_es_entrega->vdatu
+                                            erdat                    = r_es_entrega->erdat
+                                            customer_no              = r_es_entrega->kunag
+                                          ).
+
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD generar_pedidos_pendientes.
+
+    DATA: ti_pedido_pendiente TYPE gtp_ti_pedido_pendiente.
+
+    ".Obtenemos los parametros
+    obtener_parametros( ).      ".adicion Jose Miguel Valencia 24.04.2023
+
+    go_log =  zclcxr1002_log_aplicacion=>get_instancia( ).
+    go_log->remover_mensage( ).
+
+    consultar_entregas( EXPORTING
+                            i_r_fecha_entrega_desde = i_r_fecha_entrega_desde
+                            i_r_org_venta           = i_r_org_venta
+                            i_r_centro              = i_r_centro
+                            i_r_est_movimiento      = i_r_est_movimiento
+                            i_r_est_factura         = i_r_est_factura
+                        IMPORTING
+                            e_ti_entregas = DATA(ti_entregas)
+                            e_ti_pedidos_pendientes_db = DATA(ti_pedidos_pendientes_db) ).
+
+    DATA(ti_entregas_sin_proforma) = validar_proforma_entrega( ti_entregas ).  ".adicion Jose Miguel Valencia 24.04.2023
+
+    IF lines( ti_entregas_sin_proforma ) GT 0.  ".adicion Jose Miguel Valencia 24.04.2023
+      mapear_tbl_pedidos_pendientes(
+        EXPORTING
+          i_ti_pedidos_pendientes_db = ti_pedidos_pendientes_db
+        CHANGING
+          c_ti_entrega          = ti_entregas_sin_proforma
+          c_ti_pedido_pendiente = ti_pedido_pendiente  ).
+    ELSE.
+      mapear_tbl_pedidos_pendientes(
+        EXPORTING
+          i_ti_pedidos_pendientes_db = ti_pedidos_pendientes_db
+        CHANGING
+          c_ti_entrega          = ti_entregas
+          c_ti_pedido_pendiente = ti_pedido_pendiente  ).
+    ENDIF.
+
+    IF i_ejecutar_en_test = abap_false.
+      grabar_pedidos_pendientes(
+          CHANGING
+              c_ti_pedido_pendiente = ti_pedido_pendiente ).
+
+      go_log->mostrar_log( i_ventana_emergente = abap_true ).
+
+    ELSE.
+      TRY.
+          DATA(ti_catalogo) = zclcxr1002_util=>construir_catalogo( i_ti         = ti_pedido_pendiente
+                                                                   i_cfieldname = 'MONEDA' ).
+        CATCH cx_dynamic_check cx_static_check.
+      ENDTRY.
+      CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+        EXPORTING
+          i_ti_datos    = REF #( ti_pedido_pendiente )
+          i_ti_catalogo = ti_catalogo.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD grabar_pedidos_pendientes.
+
+    TRY.
+        INSERT ztmmr1047_1 FROM TABLE c_ti_pedido_pendiente.
+      CATCH cx_sy_open_sql_db INTO DATA(o_cx).
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+    ENDTRY.
+
+    IF sy-subrc EQ 0.
+      COMMIT WORK AND WAIT.
+      go_log->set_es_log( i_es = VALUE #( id = '/ACCGO/TSDB' number = '047' type = 'S' message_v1 = lines( c_ti_pedido_pendiente )
+                                          message_v2 = 'ZTMMR1047_1' ) ).
+    ELSE.
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD validar_proforma_entrega.
+
+    DATA(ti_entregas) = i_ti_entregas.
+
+    ".Validamos si existe informacion de las entregas
+    CHECK lines( ti_entregas ) GT 0 AND
+          ges_parametros_app-ti_r_clentrega_pro[] IS NOT INITIAL.
+
+    SORT ti_entregas BY vbeln.
+    DELETE ADJACENT DUPLICATES FROM ti_entregas COMPARING vbeln.
+
+    ".Consultamos las entreas que tienen proforma
+    SELECT t1~vbelv, t1~vbeln
+      FROM vbfa AS t1 INNER JOIN likp AS t2 ON t1~vbelv EQ t2~vbeln
+       FOR ALL ENTRIES IN @ti_entregas
+     WHERE t1~vbelv EQ @ti_entregas-vbeln
+       AND t1~vbtyp_n EQ @gc_u  ".Proforma
+       AND t1~vbtyp_v EQ @gc_j  ".Entrega
+       AND t2~lfart   IN @ges_parametros_app-ti_r_clentrega_pro
+      INTO TABLE @DATA(ti_entregas_proforma).
+
+    ".Verificamos si existen entregas con proforma generada
+    CHECK lines( ti_entregas_proforma ) GT 0.
+
+    ".Recorremos las entregas
+    LOOP AT i_ti_entregas INTO DATA(es_entregas).
+
+      IF line_exists( ti_entregas_proforma[ vbelv = es_entregas-vbeln ] ).
+        CONTINUE.
+      ENDIF.
+
+      ".Entregas sin proforma generada
+      APPEND es_entregas TO r_ti_entregas.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD obtener_parametros.
+*&----------------------------------------------------------------------*
+*&     Definición de constantes
+*&----------------------------------------------------------------------*
+    CONSTANTS:
+      c_modulo        TYPE ztcxr1000_1-modulo  VALUE 'MM',
+      c_ricefw        TYPE ztcxr1000_1-ricefw  VALUE 'R1047',
+      c_clentrega_pro TYPE ztcxr1000_1-idparam VALUE 'CLENTREPRO'.
+
+*&----------------------------------------------------------------------*
+*&     Definición de estructuras
+*&----------------------------------------------------------------------*
+    DATA:
+      es_bapiret2 TYPE bapiret2.
+
+*&----------------------------------------------------------------------*
+*&     Definición de variables
+*&----------------------------------------------------------------------*
+    DATA:
+      message TYPE string.
+
+    ".Creamos instancia
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = c_modulo
+                                               i_ricefw = c_ricefw ).
+
+    ".Clases Doc Entrega con proforma generada
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = c_clentrega_pro
+      IMPORTING
+        e_ti_valrango           = ges_parametros_app-ti_r_clentrega_pro
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2
+    ).
+  ENDMETHOD.
+
+ENDCLASS.

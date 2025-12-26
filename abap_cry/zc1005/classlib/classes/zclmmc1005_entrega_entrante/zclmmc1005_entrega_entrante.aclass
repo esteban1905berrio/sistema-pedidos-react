@@ -1,0 +1,566 @@
+class ZCLMMC1005_ENTREGA_ENTRANTE definition
+  public
+  final
+  create public .
+
+public section.
+
+  class-methods LIMPIAR_ALMACEN
+    changing
+      !C_TI_XMCEKPO type MMDA_PUR_TTY_XMCEKPO .
+  class-methods CREAR_LOTE
+    importing
+      !I_VBELN type EKES-VBELN
+      !I_VBELP type EKES-VBELP .
+  class-methods ASIGNAR_LOTE
+    importing
+      !IS_INTERFACE_INTERNAL type LESHP_DELIVERY_CREATE
+    changing
+      !CS_KOMDLGN type KOMDLGN .
+  class-methods LIMPIAR_ALMACEN_LIKP
+    changing
+      !C_T_LIPS type VA_LIPSVB_T .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLMMC1005_ENTREGA_ENTRANTE IMPLEMENTATION.
+
+
+  METHOD limpiar_almacen.
+
+    DATA: es_t320      TYPE t320.
+    DATA:
+      lo_param TYPE REF TO zclcxr1000_parametros,
+      ti_tcode TYPE RANGE OF sy-tcode.
+
+    CONSTANTS:
+      BEGIN OF lc_constantes,
+        modulo    TYPE ztcxr1000_1-modulo   VALUE 'MM',
+        ricefw    TYPE ztcxr1000_1-ricefw   VALUE 'C1005',
+        tcode_amp TYPE ztcxr1000_1-idparam  VALUE 'TCODE_AMP',
+        vl31n     TYPE syst_tcode           VALUE 'VL31N',
+      END OF lc_constantes.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'C1005' ) = abap_true.
+
+    "traemos las constantes
+    lo_param = NEW zclcxr1000_parametros(
+                    i_modulo = lc_constantes-modulo
+                    i_ricefw = lc_constantes-ricefw ).
+
+    "Se recuperan los parámetros TCODE
+    lo_param->get_parametro(
+      EXPORTING
+        i_idparam               = lc_constantes-tcode_amp
+      IMPORTING
+        e_ti_valrango           = ti_tcode
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+    IF sy-subrc <> 0.
+      CLEAR: ti_tcode.
+    ENDIF.
+
+    DELETE ti_tcode WHERE low = lc_constantes-vl31n.
+
+    IF sy-tcode IN ti_tcode AND
+       ti_tcode IS NOT INITIAL.
+      IMPORT es_t320
+        TO   es_t320
+        FROM SHARED MEMORY indx(aa) ID 'ES_T320'.
+      "Si ingresa es por que es EWM
+      IF es_t320 IS NOT INITIAL.
+        LOOP AT c_ti_xmcekpo[] ASSIGNING FIELD-SYMBOL(<fs_ekpo>).
+          CLEAR: <fs_ekpo>-lgort.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD asignar_lote.
+*&---------------------------------------------------------------------*
+*& Include          ZXV50RCREAU03
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador: C1005
+* Tipo Objeto  : Include de ampliación
+* Descripción  : Ampliación para asignar lote
+* Autor Prog.  : Juan Pablo Vélez Valencia - Consultor ABAP/HANA
+* Fecha Creac. : 2023.04.27
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 2023.04.27   S4DK918522    JPVELEZV           Version Inicial
+*----------------------------------------------------------------------*
+* Modificaciones:
+*----------------------------------------------------------------------*
+
+    DATA:
+      lo_param TYPE REF TO zclcxr1000_parametros,
+      ti_tcode TYPE RANGE OF sy-tcode.
+
+    CONSTANTS:
+      BEGIN OF lc_constantes,
+        modulo    TYPE ztcxr1000_1-modulo   VALUE 'MM',
+        ricefw    TYPE ztcxr1000_1-ricefw   VALUE 'C1005',
+        tcode_amp TYPE ztcxr1000_1-idparam  VALUE 'TCODE_AMP',
+      END OF lc_constantes.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'C1005' ) = abap_true.
+
+    "traemos las constantes
+    lo_param = NEW zclcxr1000_parametros(
+                    i_modulo = lc_constantes-modulo
+                    i_ricefw = lc_constantes-ricefw ).
+
+    "Se recuperan los parámetros TCODE
+    lo_param->get_parametro(
+      EXPORTING
+        i_idparam               = lc_constantes-tcode_amp
+      IMPORTING
+        e_ti_valrango           = ti_tcode
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+    IF sy-subrc <> 0.
+      CLEAR: ti_tcode.
+    ENDIF.
+
+    IF sy-tcode IN ti_tcode.
+      IF cs_komdlgn-charg IS INITIAL AND
+         is_interface_internal-batch IS NOT INITIAL.
+        cs_komdlgn-charg = is_interface_internal-batch.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD crear_lote.
+*&---------------------------------------------------------------------*
+*& Include          ZXM06U29
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador: E01078
+* Tipo Objeto  : Include de ampliación
+* Descripción  : Ampliación Creación de Lote (VL31n)
+* Autor Prog.  : Juan Pablo Vélez Valencia - Consultor ABAP/HANA
+* Fecha Creac. : 2022.10.06
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 2022.10.06   S4DK916228    JPVELEZV           Version Inicial
+* 2023.03.09   S4DK918522    JPVELEZV           Version @0001
+*----------------------------------------------------------------------*
+* Modificaciones:
+* @0001: Se ajusta ampliación para que aplique con el estándar de implementación
+*         de ampliaciónes de Crystal
+*----------------------------------------------------------------------*
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E01078' ) = abap_true.
+
+    DATA:
+      material_lote      TYPE bapibatchkey-material,
+      lote               TYPE bapibatchkey-batch,
+      plant              TYPE bapibatchkey-plant,
+      lgort              TYPE bapibatchstoloc-stge_loc,
+      es_bapibatchctrl   TYPE bapibatchctrl,
+      es_batchattributes TYPE bapibatchatt,
+      ti_return          TYPE STANDARD TABLE OF bapiret2.
+
+    SELECT vbeln, posnr, matnr, werks, lgort, charg, sgt_rcat, sgt_scat
+      FROM lips
+      WHERE
+        vbeln = @i_vbeln AND
+        posnr = @i_vbelp
+      INTO TABLE @DATA(ti_lips).
+
+    IF ti_lips IS NOT INITIAL.
+      "Consultamos si existe el lote
+      SELECT matnr, werks, charg
+       FROM mcha
+        FOR ALL ENTRIES IN @ti_lips
+       WHERE
+         matnr = @ti_lips-matnr AND
+         werks = @ti_lips-werks AND
+         charg = @ti_lips-charg
+       INTO TABLE @DATA(ti_mcha).
+
+      "Si no existe lote entonces crear
+      IF sy-subrc <> 0.
+        READ TABLE ti_lips INTO DATA(es_lips) INDEX 1.
+
+        MOVE es_lips-matnr TO material_lote.
+        MOVE es_lips-sgt_scat TO lote.
+        MOVE es_lips-werks TO plant.
+*    MOVE es_lips-lgort TO lgort.
+
+        es_bapibatchctrl-class_num  = 'ZFIFO'.
+        es_bapibatchctrl-doclassify = 'X'.
+
+        es_batchattributes-stk_segment = es_lips-sgt_scat.
+
+        "Vamos a crear el lote
+        CALL FUNCTION 'BAPI_BATCH_CREATE'
+          STARTING NEW TASK 'UPDATE'
+          DESTINATION 'NONE'
+          EXPORTING
+            material             = material_lote
+            batch                = lote
+            plant                = plant
+            batchcontrolfields   = es_bapibatchctrl
+            batchattributes      = es_batchattributes
+            batchstoragelocation = lgort
+          TABLES
+            return               = ti_return.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD limpiar_almacen_likp.
+    DATA: es_t320      TYPE t320.
+
+    DATA:
+      lo_param TYPE REF TO zclcxr1000_parametros,
+      ti_tcode TYPE RANGE OF sy-tcode.
+
+    CONSTANTS:
+      BEGIN OF lc_constantes,
+        modulo    TYPE ztcxr1000_1-modulo   VALUE 'MM',
+        ricefw    TYPE ztcxr1000_1-ricefw   VALUE 'C1005',
+        tcode_amp TYPE ztcxr1000_1-idparam  VALUE 'TCODE_AMP',
+        vl31n     TYPE syst_tcode           VALUE 'VL31N',
+      END OF lc_constantes.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'C1005' ) = abap_true.
+
+    "traemos las constantes
+    lo_param = NEW zclcxr1000_parametros(
+                    i_modulo = lc_constantes-modulo
+                    i_ricefw = lc_constantes-ricefw ).
+
+    "Se recuperan los parámetros TCODE
+    lo_param->get_parametro(
+      EXPORTING
+        i_idparam               = lc_constantes-tcode_amp
+      IMPORTING
+        e_ti_valrango           = ti_tcode
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+    IF sy-subrc <> 0.
+      CLEAR: ti_tcode.
+    ENDIF.
+
+    DELETE ti_tcode WHERE low = lc_constantes-vl31n.
+
+    IF sy-tcode IN ti_tcode AND
+       ti_tcode IS NOT INITIAL.
+      IMPORT es_t320
+        TO   es_t320
+        FROM SHARED MEMORY indx(aa) ID 'ES_T320'.
+      "Si ingresa es por que es EWM
+      IF es_t320 IS NOT INITIAL.
+        LOOP AT c_t_lips ASSIGNING FIELD-SYMBOL(<es_lips>).
+          CLEAR: <es_lips>-lgort.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+class ZCLMMC1005_ENTREGA_ENTRANTE definition
+  public
+  final
+  create public .
+
+public section.
+
+  class-methods LIMPIAR_ALMACEN
+    changing
+      !C_TI_XMCEKPO type MMDA_PUR_TTY_XMCEKPO .
+  class-methods CREAR_LOTE
+    importing
+      !I_VBELN type EKES-VBELN
+      !I_VBELP type EKES-VBELP .
+  class-methods ASIGNAR_LOTE
+    importing
+      !IS_INTERFACE_INTERNAL type LESHP_DELIVERY_CREATE
+    changing
+      !CS_KOMDLGN type KOMDLGN .
+  class-methods LIMPIAR_ALMACEN_LIKP
+    changing
+      !C_T_LIPS type VA_LIPSVB_T .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLMMC1005_ENTREGA_ENTRANTE IMPLEMENTATION.
+
+
+  METHOD limpiar_almacen.
+
+    DATA: es_t320      TYPE t320.
+    DATA:
+      lo_param TYPE REF TO zclcxr1000_parametros,
+      ti_tcode TYPE RANGE OF sy-tcode.
+
+    CONSTANTS:
+      BEGIN OF lc_constantes,
+        modulo    TYPE ztcxr1000_1-modulo   VALUE 'MM',
+        ricefw    TYPE ztcxr1000_1-ricefw   VALUE 'C1005',
+        tcode_amp TYPE ztcxr1000_1-idparam  VALUE 'TCODE_AMP',
+        vl31n     TYPE syst_tcode           VALUE 'VL31N',
+      END OF lc_constantes.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'C1005' ) = abap_true.
+
+    "traemos las constantes
+    lo_param = NEW zclcxr1000_parametros(
+                    i_modulo = lc_constantes-modulo
+                    i_ricefw = lc_constantes-ricefw ).
+
+    "Se recuperan los parámetros TCODE
+    lo_param->get_parametro(
+      EXPORTING
+        i_idparam               = lc_constantes-tcode_amp
+      IMPORTING
+        e_ti_valrango           = ti_tcode
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+    IF sy-subrc <> 0.
+      CLEAR: ti_tcode.
+    ENDIF.
+
+    DELETE ti_tcode WHERE low = lc_constantes-vl31n.
+
+    IF sy-tcode IN ti_tcode AND
+       ti_tcode IS NOT INITIAL.
+      IMPORT es_t320
+        TO   es_t320
+        FROM SHARED MEMORY indx(aa) ID 'ES_T320'.
+      "Si ingresa es por que es EWM
+      IF es_t320 IS NOT INITIAL.
+        LOOP AT c_ti_xmcekpo[] ASSIGNING FIELD-SYMBOL(<fs_ekpo>).
+          CLEAR: <fs_ekpo>-lgort.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD asignar_lote.
+*&---------------------------------------------------------------------*
+*& Include          ZXV50RCREAU03
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador: C1005
+* Tipo Objeto  : Include de ampliación
+* Descripción  : Ampliación para asignar lote
+* Autor Prog.  : Juan Pablo Vélez Valencia - Consultor ABAP/HANA
+* Fecha Creac. : 2023.04.27
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 2023.04.27   S4DK918522    JPVELEZV           Version Inicial
+*----------------------------------------------------------------------*
+* Modificaciones:
+*----------------------------------------------------------------------*
+
+    DATA:
+      lo_param TYPE REF TO zclcxr1000_parametros,
+      ti_tcode TYPE RANGE OF sy-tcode.
+
+    CONSTANTS:
+      BEGIN OF lc_constantes,
+        modulo    TYPE ztcxr1000_1-modulo   VALUE 'MM',
+        ricefw    TYPE ztcxr1000_1-ricefw   VALUE 'C1005',
+        tcode_amp TYPE ztcxr1000_1-idparam  VALUE 'TCODE_AMP',
+      END OF lc_constantes.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'C1005' ) = abap_true.
+
+    "traemos las constantes
+    lo_param = NEW zclcxr1000_parametros(
+                    i_modulo = lc_constantes-modulo
+                    i_ricefw = lc_constantes-ricefw ).
+
+    "Se recuperan los parámetros TCODE
+    lo_param->get_parametro(
+      EXPORTING
+        i_idparam               = lc_constantes-tcode_amp
+      IMPORTING
+        e_ti_valrango           = ti_tcode
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+    IF sy-subrc <> 0.
+      CLEAR: ti_tcode.
+    ENDIF.
+
+    IF sy-tcode IN ti_tcode.
+      IF cs_komdlgn-charg IS INITIAL AND
+         is_interface_internal-batch IS NOT INITIAL.
+        cs_komdlgn-charg = is_interface_internal-batch.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD crear_lote.
+*&---------------------------------------------------------------------*
+*& Include          ZXM06U29
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador: E01078
+* Tipo Objeto  : Include de ampliación
+* Descripción  : Ampliación Creación de Lote (VL31n)
+* Autor Prog.  : Juan Pablo Vélez Valencia - Consultor ABAP/HANA
+* Fecha Creac. : 2022.10.06
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 2022.10.06   S4DK916228    JPVELEZV           Version Inicial
+* 2023.03.09   S4DK918522    JPVELEZV           Version @0001
+*----------------------------------------------------------------------*
+* Modificaciones:
+* @0001: Se ajusta ampliación para que aplique con el estándar de implementación
+*         de ampliaciónes de Crystal
+*----------------------------------------------------------------------*
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'E01078' ) = abap_true.
+
+    DATA:
+      material_lote      TYPE bapibatchkey-material,
+      lote               TYPE bapibatchkey-batch,
+      plant              TYPE bapibatchkey-plant,
+      lgort              TYPE bapibatchstoloc-stge_loc,
+      es_bapibatchctrl   TYPE bapibatchctrl,
+      es_batchattributes TYPE bapibatchatt,
+      ti_return          TYPE STANDARD TABLE OF bapiret2.
+
+    SELECT vbeln, posnr, matnr, werks, lgort, charg, sgt_rcat, sgt_scat
+      FROM lips
+      WHERE
+        vbeln = @i_vbeln AND
+        posnr = @i_vbelp
+      INTO TABLE @DATA(ti_lips).
+
+    IF ti_lips IS NOT INITIAL.
+      "Consultamos si existe el lote
+      SELECT matnr, werks, charg
+       FROM mcha
+        FOR ALL ENTRIES IN @ti_lips
+       WHERE
+         matnr = @ti_lips-matnr AND
+         werks = @ti_lips-werks AND
+         charg = @ti_lips-charg
+       INTO TABLE @DATA(ti_mcha).
+
+      "Si no existe lote entonces crear
+      IF sy-subrc <> 0.
+        READ TABLE ti_lips INTO DATA(es_lips) INDEX 1.
+
+        MOVE es_lips-matnr TO material_lote.
+        MOVE es_lips-sgt_scat TO lote.
+        MOVE es_lips-werks TO plant.
+*    MOVE es_lips-lgort TO lgort.
+
+        es_bapibatchctrl-class_num  = 'ZFIFO'.
+        es_bapibatchctrl-doclassify = 'X'.
+
+        es_batchattributes-stk_segment = es_lips-sgt_scat.
+
+        "Vamos a crear el lote
+        CALL FUNCTION 'BAPI_BATCH_CREATE'
+          STARTING NEW TASK 'UPDATE'
+          DESTINATION 'NONE'
+          EXPORTING
+            material             = material_lote
+            batch                = lote
+            plant                = plant
+            batchcontrolfields   = es_bapibatchctrl
+            batchattributes      = es_batchattributes
+            batchstoragelocation = lgort
+          TABLES
+            return               = ti_return.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD limpiar_almacen_likp.
+    DATA: es_t320      TYPE t320.
+
+    DATA:
+      lo_param TYPE REF TO zclcxr1000_parametros,
+      ti_tcode TYPE RANGE OF sy-tcode.
+
+    CONSTANTS:
+      BEGIN OF lc_constantes,
+        modulo    TYPE ztcxr1000_1-modulo   VALUE 'MM',
+        ricefw    TYPE ztcxr1000_1-ricefw   VALUE 'C1005',
+        tcode_amp TYPE ztcxr1000_1-idparam  VALUE 'TCODE_AMP',
+        vl31n     TYPE syst_tcode           VALUE 'VL31N',
+      END OF lc_constantes.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'C1005' ) = abap_true.
+
+    "traemos las constantes
+    lo_param = NEW zclcxr1000_parametros(
+                    i_modulo = lc_constantes-modulo
+                    i_ricefw = lc_constantes-ricefw ).
+
+    "Se recuperan los parámetros TCODE
+    lo_param->get_parametro(
+      EXPORTING
+        i_idparam               = lc_constantes-tcode_amp
+      IMPORTING
+        e_ti_valrango           = ti_tcode
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+    IF sy-subrc <> 0.
+      CLEAR: ti_tcode.
+    ENDIF.
+
+    DELETE ti_tcode WHERE low = lc_constantes-vl31n.
+
+    IF sy-tcode IN ti_tcode AND
+       ti_tcode IS NOT INITIAL.
+      IMPORT es_t320
+        TO   es_t320
+        FROM SHARED MEMORY indx(aa) ID 'ES_T320'.
+      "Si ingresa es por que es EWM
+      IF es_t320 IS NOT INITIAL.
+        LOOP AT c_t_lips ASSIGNING FIELD-SYMBOL(<es_lips>).
+          CLEAR: <es_lips>-lgort.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.

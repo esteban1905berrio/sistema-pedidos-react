@@ -1,0 +1,190 @@
+FUNCTION zcx_trace_transaction
+  IMPORTING
+    VALUE(iv_transaction) TYPE tcode
+    VALUE(iv_variant) TYPE variant OPTIONAL
+    VALUE(it_bdc_data) TYPE bdcdata_tab OPTIONAL
+    VALUE(iv_trace_sql) TYPE char1 DEFAULT abap_true
+    VALUE(iv_trace_buffer) TYPE char1 DEFAULT abap_false
+    VALUE(iv_trace_enqueue) TYPE char1 DEFAULT abap_false
+    VALUE(iv_with_call_stack) TYPE char1 DEFAULT abap_true
+    VALUE(iv_max_records) TYPE i DEFAULT 1000
+  EXPORTING
+    VALUE(ev_trace_duration_ms) TYPE i
+    VALUE(ev_total_statements) TYPE i
+    VALUE(ev_tables_count) TYPE i
+    VALUE(ev_detailed_records_json) TYPE string
+    VALUE(ev_call_stack_json) TYPE string
+    VALUE(ev_table_access_json) TYPE string
+    VALUE(ev_error_message) TYPE string
+  EXCEPTIONS
+    no_authority
+    activation_error
+    execution_error
+    deactivation_error
+    read_error.
+
+
+
+  DATA: ls_trace_types   TYPE st05_api_trace_types,
+        ls_trace_types_2 TYPE st05_trace_types,
+        ls_trace_filter  TYPE st05_api_trace_filter,
+        ls_interval      TYPE st05_trace_interval,
+        lt_detailed      TYPE st05_detailed_record_table,
+        lt_call_stack    TYPE st05_kernel_call_stack,
+        lt_table_access  TYPE st05_table_access_record_table,
+        lt_messages      TYPE tab_bdcmsgcoll,
+        lt_bdc_dummy     TYPE bdcdata_tab,
+        ls_bdc           TYPE bdcdata,
+        lv_start_date    TYPE sy-datum,
+        lv_start_time    TYPE sy-uzeit,
+        lv_end_date      TYPE sy-datum,
+        lv_end_time      TYPE sy-uzeit,
+        lv_program       TYPE sy-repid,
+        lv_subrc         TYPE sy-subrc.
+
+  " 1. Capture start time
+  lv_start_date = sy-datum.
+  lv_start_time = sy-uzeit.
+
+  " 2. Configure trace types
+  IF iv_trace_sql = abap_true.
+    ls_trace_types-sql_on = 'X'.
+  ENDIF.
+  IF iv_trace_buffer = abap_true.
+    ls_trace_types-buf_on = 'X'.
+  ENDIF.
+  IF iv_trace_enqueue = abap_true.
+    ls_trace_types-enq_on = 'X'.
+  ENDIF.
+
+  " 3. Configure filter (current user only)
+  ls_trace_filter-trace_user = sy-uname.
+  ls_trace_filter-client = sy-mandt.
+  IF iv_with_call_stack = abap_true.
+    ls_trace_filter-stack_trace_on = 'X'.
+  ENDIF.
+
+  " 4. Activate trace
+  CALL FUNCTION 'ST05_ACTIVATE_TRACE'
+    EXPORTING
+      trace_types  = ls_trace_types
+      trace_filter = ls_trace_filter
+    EXCEPTIONS
+      no_authority       = 1
+      missing_trace_type = 2
+      activation_error   = 3
+      OTHERS             = 4.
+
+  IF sy-subrc <> 0.
+    ev_error_message = |Trace activation failed: sy-subrc={ sy-subrc }|.
+    RAISE activation_error.
+  ENDIF.
+
+  " 5. Execute transaction
+  IF it_bdc_data IS NOT INITIAL.
+    " Execute with BDC data provided
+    CALL TRANSACTION iv_transaction
+      USING it_bdc_data
+      MODE 'N'
+      UPDATE 'S'
+      MESSAGES INTO lt_messages.
+    lv_subrc = sy-subrc.
+
+  ELSEIF iv_variant IS NOT INITIAL.
+    " Get program from transaction and submit with variant
+    SELECT SINGLE pgmna FROM tstc INTO lv_program
+      WHERE tcode = iv_transaction.
+
+    IF sy-subrc = 0 AND lv_program IS NOT INITIAL.
+      SUBMIT (lv_program)
+        USING SELECTION-SET iv_variant
+        AND RETURN.
+      lv_subrc = sy-subrc.
+    ELSE.
+      ev_error_message = |Program not found for transaction { iv_transaction }|.
+      CALL FUNCTION 'ST05_DEACTIVATE_TRACE'
+        EXPORTING
+          trace_types = ls_trace_types.
+      RAISE execution_error.
+    ENDIF.
+
+  ELSE.
+    " Execute transaction with minimal BDC (just start screen)
+    ls_bdc-program = 'DUMMY'.
+    ls_bdc-dynpro = '0100'.
+    ls_bdc-dynbegin = 'X'.
+    APPEND ls_bdc TO lt_bdc_dummy.
+
+    CALL TRANSACTION iv_transaction
+      USING lt_bdc_dummy
+      MODE 'N'
+      UPDATE 'S'
+      MESSAGES INTO lt_messages.
+    lv_subrc = sy-subrc.
+  ENDIF.
+
+  " 6. Capture end time
+  lv_end_date = sy-datum.
+  lv_end_time = sy-uzeit.
+
+  " 7. Deactivate trace
+  CALL FUNCTION 'ST05_DEACTIVATE_TRACE'
+    EXPORTING
+      trace_types = ls_trace_types
+    EXCEPTIONS
+      OTHERS = 1.
+
+  IF sy-subrc <> 0.
+    ev_error_message = |Trace deactivation failed: sy-subrc={ sy-subrc }|.
+    RAISE deactivation_error.
+  ENDIF.
+
+  " 8. Configure read interval
+  ls_interval-start_date = lv_start_date.
+  ls_interval-start_time = lv_start_time.
+  ls_interval-end_date   = lv_end_date.
+  ls_interval-end_time   = lv_end_time.
+
+  " 9. Read trace results
+  CALL FUNCTION 'ST05_GET_TRACE_TABLES'
+    EXPORTING
+      trace_types               = ls_trace_types_2
+      trace_interval            = ls_interval
+      kind                      = 'DET+'
+      accept_incomplete_trace   = 'X'
+    IMPORTING
+      detailed_record_table     = lt_detailed
+      kernel_call_stack         = lt_call_stack
+      table_access_record_table = lt_table_access
+    EXCEPTIONS
+      OTHERS = 1.
+
+  IF sy-subrc <> 0.
+    ev_error_message = |Trace read failed: sy-subrc={ sy-subrc }|.
+    RAISE read_error.
+  ENDIF.
+
+  " 10. Apply max records limit
+  IF iv_max_records > 0 AND lines( lt_detailed ) > iv_max_records.
+    DELETE lt_detailed FROM ( iv_max_records + 1 ).
+  ENDIF.
+
+  " 11. Serialize to JSON using /ui2/cl_json
+  ev_detailed_records_json = /ui2/cl_json=>serialize(
+    data        = lt_detailed
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+  ev_call_stack_json = /ui2/cl_json=>serialize(
+    data        = lt_call_stack
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+  ev_table_access_json = /ui2/cl_json=>serialize(
+    data        = lt_table_access
+    pretty_name = /ui2/cl_json=>pretty_mode-low_case ).
+
+  " 12. Calculate metrics
+  ev_trace_duration_ms = ( lv_end_time - lv_start_time ) * 1000.
+  ev_total_statements = lines( lt_detailed ).
+  ev_tables_count = lines( lt_table_access ).
+
+ENDFUNCTION.

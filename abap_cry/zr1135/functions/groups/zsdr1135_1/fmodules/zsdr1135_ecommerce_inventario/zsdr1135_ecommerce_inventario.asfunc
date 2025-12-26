@@ -1,0 +1,53 @@
+FUNCTION zsdr1135_ecommerce_inventario
+  IMPORTING
+    VALUE(plant) LIKE bapimatvp-werks
+    VALUE(material) TYPE matnr18 OPTIONAL
+    VALUE(unit) LIKE bapiadmm-unit
+    VALUE(check_rule) LIKE bapit441v-prreg OPTIONAL
+    VALUE(stge_loc) LIKE bapicm61v-lgort OPTIONAL
+    VALUE(batch) LIKE bapicm61v-charg OPTIONAL
+    VALUE(customer) LIKE bapiknvvky-customer OPTIONAL
+    VALUE(doc_number) LIKE bapisdhead-doc_number OPTIONAL
+    VALUE(itm_number) LIKE bapisditm-itm_number OPTIONAL
+    VALUE(wbs_elem) LIKE bapisditm-wbs_elem OPTIONAL
+    VALUE(stock_ind) LIKE bapicm61v-sobkz OPTIONAL
+    VALUE(dec_for_rounding) LIKE bapicm61m-andec OPTIONAL
+    VALUE(dec_for_rounding_x) TYPE bapiupdate OPTIONAL
+    VALUE(read_atp_lock) LIKE bapicm61v-vfpst OPTIONAL
+    VALUE(read_atp_lock_x) TYPE bapiupdate OPTIONAL
+    VALUE(material_evg) TYPE bapimgvmatnr OPTIONAL
+    VALUE(sgt_rcat) LIKE bapisditm-req_segment OPTIONAL
+    VALUE(material_long) TYPE matnr40 OPTIONAL
+    VALUE(req_seg_long) TYPE bapisditm-req_seg_long OPTIONAL
+  EXPORTING
+    VALUE(endleadtme) LIKE bapicm61m-wzter
+    VALUE(av_qty_plt) LIKE bapicm61v-wkbst
+    VALUE(dialogflag) LIKE bapicm61v-diafl
+    VALUE(return) LIKE bapireturn
+  TABLES
+    wmdvsx LIKE bapiwmdvs
+    wmdvex LIKE bapiwmdve.
+
+
+
+  DATA: ti_inventario_ecommerce TYPE zttdi1130_1,
+        r_material              TYPE RANGE OF mara-matnr.
+
+  zclcxr1002_util=>crear_rango(
+    EXPORTING
+      i_low                          = material
+    CHANGING
+      c_ti_rango                     = r_material ).
+
+  SUBMIT zsdi1130_1
+  WITH so_matnr IN r_material
+
+  AND RETURN.
+
+  IMPORT gti_inv_ecommerce = ti_inventario_ecommerce FROM DATABASE indx(sc) ID 'GTI_INV_ECOMMERCE'.
+  DELETE FROM DATABASE indx(sc) ID 'GTI_INV_ECOMMERCE'.
+
+  wmdvex[] = VALUE #( ( com_qty = VALUE #( ti_inventario_ecommerce[ 1 ]-cntecom ) ) ).
+
+
+ENDFUNCTION.

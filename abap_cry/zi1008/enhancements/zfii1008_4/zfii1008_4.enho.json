@@ -1,0 +1,41 @@
+{
+  "enhancementName" : "ZFII1008_4",
+  "header" : {
+    "enhancementName" : "ZFII1008_4",
+    "description" : "Modificar Segmentos Idoc fixedasset_create1",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZI1008",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-06-27",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-07-12"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "SAPL1022",
+    "fullName" : "\\PR:SAPL1022\\FO:IDOC_FIXEDASSET_CREATE1\\SE:END\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "  zclfi_exits_gestion_activofijo=>modificar_idoc_activo_fijo( CHANGING c_ti_datos_idoc = idoc_data[] )."
+  }, {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "SAPL1022",
+    "fullName" : "\\PR:SAPL1022\\FO:IDOC_FIXEDASSET_CREATE\\SE:END\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "  zclfi_exits_gestion_activofijo=>modificar_idoc_activo_fijo( CHANGING c_ti_datos_idoc = idoc_data[] )."
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

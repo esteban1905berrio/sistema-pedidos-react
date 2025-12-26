@@ -1,0 +1,748 @@
+class ZCLFI_EXITS_GESTION_DOCUMENTOS definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces IF_EX_AC_DOCUMENT .
+
+  class-methods VALIDAR_OBLIGATORIO_BKTXT
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+      !C_TI_BKPF type BKPF_T .
+  class-methods SUSTITUIR_VALIDAR_ZUONR
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BKPF_SUBST type BKPF_SUBST_T
+      !C_TI_BKPF type BKPF_T .
+  class-methods SUSTITUIR_VALIDAR_NIT_TERCERO
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional .
+  class-methods IMP_DIFERIDO_RECUPERA_CUENTA
+    changing
+      !C_R_NUMERO_CUENTA type ZCLFIR1005_IMPUESTO_DIFERIDO=>GTP_R_RACCT
+      !C_LEDGER type RLDNR .
+  class-methods IMP_DIFERIDO_EXPOR_COMPARACION
+    changing
+      !C_TI_COMPARACION type ANY TABLE
+      !C_DT_CALL_LIST_TOOL type CHAR1 optional .
+  class-methods SUSTITUIR_CUENTAS_BANCARIAS
+    importing
+      !I_ES_BKPF type BKPF
+    changing
+      !C_TI_BSEG type BSEG_T .
+  class-methods ASIGNAR_DOCUMENTO_ANULACION
+    importing
+      value(I_TIPO_MENSAJE) type EDI_MESTYP optional
+    changing
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods COMPENSAR_DOCUMENTO_ANULADO
+    changing
+      !C_ES_DATOS_DOCUMENTO type ACCDN .
+  class-methods EXIT_SAPLFCPD_001
+    importing
+      !I_ES_BSEC type BSEC .
+  class-methods VALIDAR_CL_IMPUESTO_PROVEEDOR
+    importing
+      value(I_TIPO_MENSAJE) type EDI_MESTYP optional
+    changing
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods VALIDAR_BP_HOMOLOGADO_EN_AFS
+    importing
+      !I_ES_CONTROL_IDOC type EDIDC
+    changing
+      !C_TI_VERIFICAR_CAMPO_LLENO type ZCLFII1008_INTEGRACION_AFS=>GTP_TI_CAMPO
+      !C_TI_LOG_HOMOLOGACION type ZCLMMI1009_HOMOLOGACION_CAMPOS=>GTP_TI_LOG_HOMOLOGACION
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods HOMOLOGAR_IDOC_ENTRADA_FIDCC2
+    importing
+      value(I_ES_CONTROL_IDOC) type EDIDC
+    changing
+      !C_TI_VERIFICAR_CAMPO_LLENO type ZCLFII1008_INTEGRACION_AFS=>GTP_TI_CAMPO
+      !C_TI_LOG_HOMOLOGACION type ZCLMMI1009_HOMOLOGACION_CAMPOS=>GTP_TI_LOG_HOMOLOGACION
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods VALIDAR_FECHA_CONTAB_DOC_FI
+    importing
+      value(I_TIPO_MENSAJE) type EDI_MESTYP optional
+    changing
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods SUSTITUIR_VALIDAR_XREF1_XREF3
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+      !I_TI_BKPF type BKPF_T optional
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XBLNR
+    importing
+      !I_TI_BKPF type BKPF_T
+      !I_TI_BSEG type BSEG_T
+    changing
+      !C_TI_BKPFSUB type BKPF_SUBST_T .
+  class-methods VALIDACION_XBLNR_POR_PROVEEDOR
+    importing
+      !I_XBLNR type XBLNR1
+      !I_LIFNR type LIFNR
+      !I_BLART type BKPF-BLART optional .
+    "! Sustitución campo BKPF-BKTXT por BSEG-SGTXT
+    "! @parameter i_ti_bkpf | Cabecera Documento
+    "! @parameter c_ti_bseg | Posiciones Documento
+  class-methods SUSTITUIR_TEXTOS_BSEG
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XREF1_XREF3_COMPENSA
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T .
+  class-methods SUSTITUIR_CUENTA_CONTABLE
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLFI_EXITS_GESTION_DOCUMENTOS IMPLEMENTATION.
+
+
+  METHOD sustituir_validar_nit_tercero.
+
+    zclfie1002_val_xref1_xref3=>sustituir_xref3( EXPORTING i_bukrs         = i_bukrs
+                                                           i_blart         = i_blart
+                                                           i_tcode         = i_tcode
+                                                 CHANGING  c_ti_bseg_subst = c_ti_bseg_subst
+                                                           c_ti_bseg       = c_ti_bseg ).
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_cuentas_bancarias.
+
+    zclfie1010_xref1_xref3_bancos=>xref1_xref3_cuentas_bancarias(
+      EXPORTING
+        i_es_bkpf = i_es_bkpf
+      CHANGING
+        c_ti_bseg = c_ti_bseg ).
+
+  ENDMETHOD.
+
+
+  METHOD imp_diferido_recupera_cuenta.
+
+    zclfir1005_impuesto_diferido=>recupera_cuenta(
+      CHANGING
+        c_r_numero_cuenta = c_r_numero_cuenta
+        c_ledger          = c_ledger ).
+
+  ENDMETHOD.
+
+
+  METHOD imp_diferido_expor_comparacion.
+
+    zclfir1005_impuesto_diferido=>expor_comparacion(
+      CHANGING
+        c_ti_comparacion    = c_ti_comparacion
+        c_dt_call_list_tool = c_dt_call_list_tool ).
+
+  ENDMETHOD.
+
+
+  METHOD asignar_documento_anulacion.
+    zclfii1008_integracion_afs=>asignar_documento_anulacion(
+      EXPORTING
+        i_tipo_mensaje  = i_tipo_mensaje
+      CHANGING
+        c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+
+  METHOD compensar_documento_anulado.
+    zclfii1008_integracion_afs=>compensar_documento_anulado(
+      CHANGING
+        c_es_datos_documento = c_es_datos_documento ).
+  ENDMETHOD.
+
+
+  METHOD exit_saplfcpd_001.
+
+    zclfie1027_exit_datos_cpd_fi=>verificar_campos_prov_prodiver( i_es_bsec = i_es_bsec ).
+
+  ENDMETHOD.
+
+
+  METHOD validar_cl_impuesto_proveedor.
+    zclfii1008_integracion_afs=>validar_cl_impuesto_bp(
+      EXPORTING
+        i_tipo_mensaje  = i_tipo_mensaje
+      CHANGING
+        c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+
+  METHOD validar_bp_homologado_en_afs.
+
+    zclfii1008_integracion_afs=>validar_bp_homologado_en_afs(
+      EXPORTING
+        i_es_control_idoc          = i_es_control_idoc
+      CHANGING
+        c_ti_verificar_campo_lleno = c_ti_verificar_campo_lleno
+        c_ti_log_homologacion      = c_ti_log_homologacion
+        c_ti_datos_idoc            = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+
+  METHOD validar_fecha_contab_doc_fi.
+    zclfii1008_integracion_afs=>validar_fecha_contab_doc_fi(
+      CHANGING
+        c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+
+  METHOD sustituir_validar_zuonr.
+* Ini EFB 20.10.2021
+* Se incluye sustitución de bktxt ya que el campo se llena a partir
+* de lo que el usuario registra en el campo bseg-sgtxt
+* Fin EFB 20.10.2021
+    zclfie1035_val_sust_zuonr=>valida_sustituir_zuonr( EXPORTING i_bukrs         = i_bukrs
+                                                                 i_blart         = i_blart
+                                                                 i_tcode         = i_tcode
+                                                       CHANGING  c_ti_bseg_subst = c_ti_bseg_subst[]
+                                                                 c_ti_bseg       = c_ti_bseg[]
+                                                                 c_ti_bkpf_subst = c_ti_bkpf_subst[] "EFB 20.10.2021
+                                                                 c_ti_bkpf       = c_ti_bkpf[] ). "EFB 20.10.2021
+
+  ENDMETHOD.
+
+
+  METHOD homologar_idoc_entrada_fidcc2.
+
+    zclfii1008_integracion_afs=>homologar_idoc_entrada_fidcc2(
+      EXPORTING
+        i_es_control_idoc          = i_es_control_idoc
+      CHANGING
+        c_ti_verificar_campo_lleno = c_ti_verificar_campo_lleno
+        c_ti_log_homologacion      = c_ti_log_homologacion
+        c_ti_datos_idoc            = c_ti_datos_idoc ).
+
+  ENDMETHOD.
+
+
+  METHOD validar_obligatorio_bktxt.
+
+    zclfie1035_val_sust_zuonr=>validar_cabecera_bktxt( EXPORTING i_blart   = i_blart
+                                                                 i_tcode   = i_tcode
+                                                                 c_ti_bkpf = c_ti_bkpf ).
+
+
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_validar_xref1_xref3.
+
+    zclfie1002_val_xref1_xref3=>sustituir_xref1_xref3( EXPORTING i_bukrs         = i_bukrs
+                                                                 i_blart         = i_blart
+                                                                 i_tcode         = i_tcode
+                                                                 i_ti_bkpf       = i_ti_bkpf
+                                                       CHANGING  c_ti_bseg       = c_ti_bseg
+                                                                 c_ti_bseg_subst = c_ti_bseg_subst
+                                                                 c_ti_bsec       = c_ti_bsec ).
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xblnr.
+
+    zclfie1002_val_xref1_xref3=>sustituir_xblnr(
+      EXPORTING
+        i_ti_bkpf    = i_ti_bkpf
+        i_ti_bseg    = i_ti_bseg
+      CHANGING
+        c_ti_bkpfsub = c_ti_bkpfsub ).
+
+  ENDMETHOD.
+
+
+  METHOD validacion_xblnr_por_proveedor.
+
+    zclfie1045_validar_referencia=>validacion_xblnr_por_proveedor( i_lifnr = i_lifnr i_xblnr = i_xblnr i_blart = i_blart ).
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_textos_bseg.
+
+    zclfie1002_val_xref1_xref3=>sustituir_textos_bseg(
+      EXPORTING
+        i_ti_bkpf       = i_ti_bkpf
+      CHANGING
+        c_ti_bseg       = c_ti_bseg
+        c_ti_bseg_subst = c_ti_bseg_subst
+*       c_ti_bsec       =
+    ).
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref1_xref3_compensa.
+
+    zclfie1002_val_xref1_xref3=>sustituir_xref1_xref3_compensa(
+      EXPORTING
+        i_ti_bkpf       = i_ti_bkpf[]       " Standard Table Type for BKPF
+      CHANGING
+        c_ti_bseg_subst = c_ti_bseg_subst[] " Table Type BSEG_SUBST
+    ).
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~change_after_check.
+    "Asignacion necesaria para que no se limpie el campo BKTXT
+    ex_document-header-bktxt = im_document-header-bktxt.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~change_initial.
+
+    "Asignacion necesaria para que no se limpie el campo BKTXT
+    ex_document-header-bktxt = im_document-header-bktxt.
+
+    zclfie1007_contabiliza_wpufib=>modificar_oper_empresarial(
+      EXPORTING
+        i_es_documento = im_document
+      IMPORTING
+        e_es_documento = ex_document ).
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~is_acctit_relevant.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~is_compression_required.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~is_suppressed_acct.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_cuenta_contable.
+**********************************************************************
+*NOTA: Se mueve a la sustitucion de FI (transacción GGB1 y a nivel de posición
+*      de documento se crea una nueva sustitución HKONT y dentro un nuevo paso
+*      con el campo BSEG-HKONT que se llamara a la función U100), esto debido a
+*      que cuando se cambia aca la BSEG descarta los campbios luego de salir de la BTE
+**********************************************************************
+    zclfie1098_sust_cuenta_contabl=>sustituir_cuenta_contable(
+      EXPORTING
+        i_ti_bkpf       = i_ti_bkpf[]       " Standard Table Type for BKPF
+      CHANGING
+        c_ti_bseg       = c_ti_bseg[]       " Table Type BSEG
+        c_ti_bseg_subst = c_ti_bseg_subst[] " Table Type BSEG_SUBST
+    ).
+
+  ENDMETHOD.
+ENDCLASS.
+class ZCLFI_EXITS_GESTION_DOCUMENTOS definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces IF_EX_AC_DOCUMENT .
+
+  class-methods VALIDAR_OBLIGATORIO_BKTXT
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+      !C_TI_BKPF type BKPF_T .
+  class-methods SUSTITUIR_VALIDAR_ZUONR
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BKPF_SUBST type BKPF_SUBST_T
+      !C_TI_BKPF type BKPF_T .
+  class-methods SUSTITUIR_VALIDAR_NIT_TERCERO
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional .
+  class-methods IMP_DIFERIDO_RECUPERA_CUENTA
+    changing
+      !C_R_NUMERO_CUENTA type ZCLFIR1005_IMPUESTO_DIFERIDO=>GTP_R_RACCT
+      !C_LEDGER type RLDNR .
+  class-methods IMP_DIFERIDO_EXPOR_COMPARACION
+    changing
+      !C_TI_COMPARACION type ANY TABLE
+      !C_DT_CALL_LIST_TOOL type CHAR1 optional .
+  class-methods SUSTITUIR_CUENTAS_BANCARIAS
+    importing
+      !I_ES_BKPF type BKPF
+    changing
+      !C_TI_BSEG type BSEG_T .
+  class-methods ASIGNAR_DOCUMENTO_ANULACION
+    importing
+      value(I_TIPO_MENSAJE) type EDI_MESTYP optional
+    changing
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods COMPENSAR_DOCUMENTO_ANULADO
+    changing
+      !C_ES_DATOS_DOCUMENTO type ACCDN .
+  class-methods EXIT_SAPLFCPD_001
+    importing
+      !I_ES_BSEC type BSEC .
+  class-methods VALIDAR_CL_IMPUESTO_PROVEEDOR
+    importing
+      value(I_TIPO_MENSAJE) type EDI_MESTYP optional
+    changing
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods VALIDAR_BP_HOMOLOGADO_EN_AFS
+    importing
+      !I_ES_CONTROL_IDOC type EDIDC
+    changing
+      !C_TI_VERIFICAR_CAMPO_LLENO type ZCLFII1008_INTEGRACION_AFS=>GTP_TI_CAMPO
+      !C_TI_LOG_HOMOLOGACION type ZCLMMI1009_HOMOLOGACION_CAMPOS=>GTP_TI_LOG_HOMOLOGACION
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods HOMOLOGAR_IDOC_ENTRADA_FIDCC2
+    importing
+      value(I_ES_CONTROL_IDOC) type EDIDC
+    changing
+      !C_TI_VERIFICAR_CAMPO_LLENO type ZCLFII1008_INTEGRACION_AFS=>GTP_TI_CAMPO
+      !C_TI_LOG_HOMOLOGACION type ZCLMMI1009_HOMOLOGACION_CAMPOS=>GTP_TI_LOG_HOMOLOGACION
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods VALIDAR_FECHA_CONTAB_DOC_FI
+    importing
+      value(I_TIPO_MENSAJE) type EDI_MESTYP optional
+    changing
+      !C_TI_DATOS_IDOC type EDIDD_TT .
+  class-methods SUSTITUIR_VALIDAR_XREF1_XREF3
+    importing
+      !I_BUKRS type BSEG-BUKRS
+      !I_BLART type BKPF-BLART
+      !I_TCODE type SYTCODE
+      !I_TI_BKPF type BKPF_T optional
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XBLNR
+    importing
+      !I_TI_BKPF type BKPF_T
+      !I_TI_BSEG type BSEG_T
+    changing
+      !C_TI_BKPFSUB type BKPF_SUBST_T .
+  class-methods VALIDACION_XBLNR_POR_PROVEEDOR
+    importing
+      !I_XBLNR type XBLNR1
+      !I_LIFNR type LIFNR
+      !I_BLART type BKPF-BLART optional .
+    "! Sustitución campo BKPF-BKTXT por BSEG-SGTXT
+    "! @parameter i_ti_bkpf | Cabecera Documento
+    "! @parameter c_ti_bseg | Posiciones Documento
+  class-methods SUSTITUIR_TEXTOS_BSEG
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG type BSEG_T optional
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T optional
+      !C_TI_BSEC type BSEC_T optional .
+  class-methods SUSTITUIR_XREF1_XREF3_COMPENSA
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T .
+  class-methods SUSTITUIR_CUENTA_CONTABLE
+    importing
+      !I_TI_BKPF type BKPF_T
+    changing
+      !C_TI_BSEG type BSEG_T
+      !C_TI_BSEG_SUBST type BSEG_SUBST_T .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLFI_EXITS_GESTION_DOCUMENTOS IMPLEMENTATION.
+
+
+  METHOD sustituir_validar_nit_tercero.
+
+    zclfie1002_val_xref1_xref3=>sustituir_xref3( EXPORTING i_bukrs         = i_bukrs
+                                                           i_blart         = i_blart
+                                                           i_tcode         = i_tcode
+                                                 CHANGING  c_ti_bseg_subst = c_ti_bseg_subst
+                                                           c_ti_bseg       = c_ti_bseg ).
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_cuentas_bancarias.
+
+    zclfie1010_xref1_xref3_bancos=>xref1_xref3_cuentas_bancarias(
+      EXPORTING
+        i_es_bkpf = i_es_bkpf
+      CHANGING
+        c_ti_bseg = c_ti_bseg ).
+
+  ENDMETHOD.
+
+
+  METHOD imp_diferido_recupera_cuenta.
+
+    zclfir1005_impuesto_diferido=>recupera_cuenta(
+      CHANGING
+        c_r_numero_cuenta = c_r_numero_cuenta
+        c_ledger          = c_ledger ).
+
+  ENDMETHOD.
+
+
+  METHOD imp_diferido_expor_comparacion.
+
+    zclfir1005_impuesto_diferido=>expor_comparacion(
+      CHANGING
+        c_ti_comparacion    = c_ti_comparacion
+        c_dt_call_list_tool = c_dt_call_list_tool ).
+
+  ENDMETHOD.
+
+
+  METHOD asignar_documento_anulacion.
+    zclfii1008_integracion_afs=>asignar_documento_anulacion(
+      EXPORTING
+        i_tipo_mensaje  = i_tipo_mensaje
+      CHANGING
+        c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+
+  METHOD compensar_documento_anulado.
+    zclfii1008_integracion_afs=>compensar_documento_anulado(
+      CHANGING
+        c_es_datos_documento = c_es_datos_documento ).
+  ENDMETHOD.
+
+
+  METHOD exit_saplfcpd_001.
+
+    zclfie1027_exit_datos_cpd_fi=>verificar_campos_prov_prodiver( i_es_bsec = i_es_bsec ).
+
+  ENDMETHOD.
+
+
+  METHOD validar_cl_impuesto_proveedor.
+    zclfii1008_integracion_afs=>validar_cl_impuesto_bp(
+      EXPORTING
+        i_tipo_mensaje  = i_tipo_mensaje
+      CHANGING
+        c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+
+  METHOD validar_bp_homologado_en_afs.
+
+    zclfii1008_integracion_afs=>validar_bp_homologado_en_afs(
+      EXPORTING
+        i_es_control_idoc          = i_es_control_idoc
+      CHANGING
+        c_ti_verificar_campo_lleno = c_ti_verificar_campo_lleno
+        c_ti_log_homologacion      = c_ti_log_homologacion
+        c_ti_datos_idoc            = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+
+  METHOD validar_fecha_contab_doc_fi.
+    zclfii1008_integracion_afs=>validar_fecha_contab_doc_fi(
+      CHANGING
+        c_ti_datos_idoc = c_ti_datos_idoc ).
+  ENDMETHOD.
+
+
+  METHOD sustituir_validar_zuonr.
+* Ini EFB 20.10.2021
+* Se incluye sustitución de bktxt ya que el campo se llena a partir
+* de lo que el usuario registra en el campo bseg-sgtxt
+* Fin EFB 20.10.2021
+    zclfie1035_val_sust_zuonr=>valida_sustituir_zuonr( EXPORTING i_bukrs         = i_bukrs
+                                                                 i_blart         = i_blart
+                                                                 i_tcode         = i_tcode
+                                                       CHANGING  c_ti_bseg_subst = c_ti_bseg_subst[]
+                                                                 c_ti_bseg       = c_ti_bseg[]
+                                                                 c_ti_bkpf_subst = c_ti_bkpf_subst[] "EFB 20.10.2021
+                                                                 c_ti_bkpf       = c_ti_bkpf[] ). "EFB 20.10.2021
+
+  ENDMETHOD.
+
+
+  METHOD homologar_idoc_entrada_fidcc2.
+
+    zclfii1008_integracion_afs=>homologar_idoc_entrada_fidcc2(
+      EXPORTING
+        i_es_control_idoc          = i_es_control_idoc
+      CHANGING
+        c_ti_verificar_campo_lleno = c_ti_verificar_campo_lleno
+        c_ti_log_homologacion      = c_ti_log_homologacion
+        c_ti_datos_idoc            = c_ti_datos_idoc ).
+
+  ENDMETHOD.
+
+
+  METHOD validar_obligatorio_bktxt.
+
+    zclfie1035_val_sust_zuonr=>validar_cabecera_bktxt( EXPORTING i_blart   = i_blart
+                                                                 i_tcode   = i_tcode
+                                                                 c_ti_bkpf = c_ti_bkpf ).
+
+
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_validar_xref1_xref3.
+
+    zclfie1002_val_xref1_xref3=>sustituir_xref1_xref3( EXPORTING i_bukrs         = i_bukrs
+                                                                 i_blart         = i_blart
+                                                                 i_tcode         = i_tcode
+                                                                 i_ti_bkpf       = i_ti_bkpf
+                                                       CHANGING  c_ti_bseg       = c_ti_bseg
+                                                                 c_ti_bseg_subst = c_ti_bseg_subst
+                                                                 c_ti_bsec       = c_ti_bsec ).
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_xblnr.
+
+    zclfie1002_val_xref1_xref3=>sustituir_xblnr(
+      EXPORTING
+        i_ti_bkpf    = i_ti_bkpf
+        i_ti_bseg    = i_ti_bseg
+      CHANGING
+        c_ti_bkpfsub = c_ti_bkpfsub ).
+
+  ENDMETHOD.
+
+
+  METHOD validacion_xblnr_por_proveedor.
+
+    zclfie1045_validar_referencia=>validacion_xblnr_por_proveedor( i_lifnr = i_lifnr i_xblnr = i_xblnr i_blart = i_blart ).
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_textos_bseg.
+
+    zclfie1002_val_xref1_xref3=>sustituir_textos_bseg(
+      EXPORTING
+        i_ti_bkpf       = i_ti_bkpf
+      CHANGING
+        c_ti_bseg       = c_ti_bseg
+        c_ti_bseg_subst = c_ti_bseg_subst
+*       c_ti_bsec       =
+    ).
+  ENDMETHOD.
+
+
+  METHOD sustituir_xref1_xref3_compensa.
+
+    zclfie1002_val_xref1_xref3=>sustituir_xref1_xref3_compensa(
+      EXPORTING
+        i_ti_bkpf       = i_ti_bkpf[]       " Standard Table Type for BKPF
+      CHANGING
+        c_ti_bseg_subst = c_ti_bseg_subst[] " Table Type BSEG_SUBST
+    ).
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~change_after_check.
+    "Asignacion necesaria para que no se limpie el campo BKTXT
+    ex_document-header-bktxt = im_document-header-bktxt.
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~change_initial.
+
+    "Asignacion necesaria para que no se limpie el campo BKTXT
+    ex_document-header-bktxt = im_document-header-bktxt.
+
+    zclfie1007_contabiliza_wpufib=>modificar_oper_empresarial(
+      EXPORTING
+        i_es_documento = im_document
+      IMPORTING
+        e_es_documento = ex_document ).
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~is_acctit_relevant.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~is_compression_required.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_ac_document~is_suppressed_acct.
+
+  ENDMETHOD.
+
+
+  METHOD sustituir_cuenta_contable.
+**********************************************************************
+*NOTA: Se mueve a la sustitucion de FI (transacción GGB1 y a nivel de posición
+*      de documento se crea una nueva sustitución HKONT y dentro un nuevo paso
+*      con el campo BSEG-HKONT que se llamara a la función U100), esto debido a
+*      que cuando se cambia aca la BSEG descarta los campbios luego de salir de la BTE
+**********************************************************************
+    zclfie1098_sust_cuenta_contabl=>sustituir_cuenta_contable(
+      EXPORTING
+        i_ti_bkpf       = i_ti_bkpf[]       " Standard Table Type for BKPF
+      CHANGING
+        c_ti_bseg       = c_ti_bseg[]       " Table Type BSEG
+        c_ti_bseg_subst = c_ti_bseg_subst[] " Table Type BSEG_SUBST
+    ).
+
+  ENDMETHOD.
+ENDCLASS.

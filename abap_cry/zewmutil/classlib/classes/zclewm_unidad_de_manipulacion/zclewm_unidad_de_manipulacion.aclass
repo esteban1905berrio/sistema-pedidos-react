@@ -1,0 +1,262 @@
+CLASS zclewm_unidad_de_manipulacion DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+
+    TYPES: gtp_r_entrega TYPE RANGE OF likp-vbeln.
+
+    CLASS-METHODS:
+      "!
+      "! @parameter i_r_entrega | Rango Entregas ERP
+      "! @parameter e_ti_cabecera_entrega |Datos cabecera de la entrega
+      "! @parameter e_ti_posicion_entrega |Datos posición de la entrega
+      "! @parameter e_ti_cabecera_um_ewm |Datos cabecera de la unidad de manipulación
+      "! @parameter e_ti_posicion_um_ewm |Datos posición de la unidad de manipulación (Contenido)
+      um_ewm_desde_entrega_erp
+        IMPORTING
+          VALUE(i_r_entrega)    TYPE gtp_r_entrega
+        EXPORTING
+          e_ti_cabecera_entrega TYPE /scwm/tt_wip_whrhead_out
+          e_ti_posicion_entrega TYPE /scwm/tt_wip_whritem_out
+          e_ti_cabecera_um_ewm  TYPE /scwm/tt_huhdr_mon
+          e_ti_posicion_um_ewm  TYPE /scwm/tt_huitm_mon.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclewm_unidad_de_manipulacion IMPLEMENTATION.
+
+  METHOD um_ewm_desde_entrega_erp.
+
+    CONSTANTS: modo_ejecucion_fm TYPE /scwm/de_mon_fm_mode VALUE '2'.
+
+    DATA: ti_cabecera_entrega TYPE /scwm/tt_wip_whrhead_out,
+          ti_posicion_entrega TYPE /scwm/tt_wip_whritem_out,
+          ti_cabecera_um_ewm  TYPE /scwm/tt_huhdr_mon,
+          ti_posicion_um_ewm  TYPE /scwm/tt_huitm_mon.
+
+    CHECK i_r_entrega IS NOT INITIAL.
+
+    "Consultar almacen EWM x Entrega
+    SELECT
+    FROM likp AS e
+    INNER JOIN /scwm/tmapwhnum AS w
+    ON w~whnumerp = e~lgnum
+    FIELDS vbeln, lgnum, w~whnumwme
+    WHERE vbeln IN @i_r_entrega
+    ORDER BY whnumwme, vbeln
+    INTO TABLE @DATA(ti_almacen_ewm).
+
+
+    LOOP AT  ti_almacen_ewm ASSIGNING FIELD-SYMBOL(<fs_es_almacen_ewm>)
+                            GROUP BY ( whnumwme = <fs_es_almacen_ewm>-whnumwme ).
+
+      CLEAR: ti_cabecera_entrega, ti_posicion_entrega,ti_cabecera_um_ewm, ti_posicion_um_ewm.
+
+      "Crea la tabla del rango para consultar la información de las cajas
+      DATA(ti_tab_range) = VALUE rsds_trange(
+                             ( tablename = '/SCWM/S_WIP_Q_WHR_OUTBOUND'
+                               frange_t  = VALUE rsds_frange_t( ( fieldname = 'REFDOCNO_ERP_H'
+                                                                  selopt_t  = VALUE #( FOR es_entrega_erp IN ti_almacen_ewm WHERE ( whnumwme = <fs_es_almacen_ewm>-whnumwme )
+                                                                                          ( sign = 'I' option = 'EQ' low = es_entrega_erp-vbeln )
+                                                                                     )
+                                                               ) ) ) ).
+
+      CHECK ti_tab_range IS NOT INITIAL.
+
+      TRY.
+          "Busca la cabecera de la entrega
+          CALL FUNCTION '/SCWM/WHRHEAD_MON_OUT'
+            EXPORTING
+              iv_lgnum     = <fs_es_almacen_ewm>-whnumwme
+              iv_mode      = modo_ejecucion_fm
+            IMPORTING
+              et_data      = ti_cabecera_entrega
+            CHANGING
+              ct_tab_range = ti_tab_range.
+
+          CHECK ti_cabecera_entrega IS NOT INITIAL.
+
+          "Busca las posiciones de la entrega
+          CALL FUNCTION '/SCWM/WHRITEM_MON_OUT'
+            EXPORTING
+              iv_lgnum       = <fs_es_almacen_ewm>-whnumwme
+              iv_mode        = modo_ejecucion_fm
+              it_data_parent = ti_cabecera_entrega
+            IMPORTING
+              et_data        = ti_posicion_entrega.
+
+          "Busca la cabecera de la unidad de manipulación
+          CALL FUNCTION '/SCWM/WHRHEAD_OUT_HU_MON'
+            EXPORTING
+              iv_lgnum       = <fs_es_almacen_ewm>-whnumwme
+              iv_mode        = modo_ejecucion_fm
+              it_data_parent = ti_cabecera_entrega
+            IMPORTING
+              et_data        = ti_cabecera_um_ewm.
+
+          CHECK ti_cabecera_um_ewm IS NOT INITIAL.
+
+          "Busca las posiciones de la unidad de manipulación
+          CALL FUNCTION '/SCWM/HUITM_OVERVIEW_MON'
+            EXPORTING
+              iv_lgnum       = <fs_es_almacen_ewm>-whnumwme
+              iv_mode        = modo_ejecucion_fm
+              it_data_parent = ti_cabecera_um_ewm
+            IMPORTING
+              et_data        = ti_posicion_um_ewm
+            EXCEPTIONS
+              error_message  = 1.
+
+          APPEND LINES OF ti_cabecera_entrega TO e_ti_cabecera_entrega.
+          APPEND LINES OF ti_posicion_entrega TO e_ti_posicion_entrega.
+          APPEND LINES OF ti_cabecera_um_ewm  TO e_ti_cabecera_um_ewm.
+          APPEND LINES OF ti_posicion_um_ewm  TO e_ti_posicion_um_ewm.
+
+        CATCH /scwm/cx_mon_noexec ##NO_HANDLER.
+
+      ENDTRY.
+
+      CLEAR: ti_tab_range.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclewm_unidad_de_manipulacion DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+
+    TYPES: gtp_r_entrega TYPE RANGE OF likp-vbeln.
+
+    CLASS-METHODS:
+      "!
+      "! @parameter i_r_entrega | Rango Entregas ERP
+      "! @parameter e_ti_cabecera_entrega |Datos cabecera de la entrega
+      "! @parameter e_ti_posicion_entrega |Datos posición de la entrega
+      "! @parameter e_ti_cabecera_um_ewm |Datos cabecera de la unidad de manipulación
+      "! @parameter e_ti_posicion_um_ewm |Datos posición de la unidad de manipulación (Contenido)
+      um_ewm_desde_entrega_erp
+        IMPORTING
+          VALUE(i_r_entrega)    TYPE gtp_r_entrega
+        EXPORTING
+          e_ti_cabecera_entrega TYPE /scwm/tt_wip_whrhead_out
+          e_ti_posicion_entrega TYPE /scwm/tt_wip_whritem_out
+          e_ti_cabecera_um_ewm  TYPE /scwm/tt_huhdr_mon
+          e_ti_posicion_um_ewm  TYPE /scwm/tt_huitm_mon.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclewm_unidad_de_manipulacion IMPLEMENTATION.
+
+  METHOD um_ewm_desde_entrega_erp.
+
+    CONSTANTS: modo_ejecucion_fm TYPE /scwm/de_mon_fm_mode VALUE '2'.
+
+    DATA: ti_cabecera_entrega TYPE /scwm/tt_wip_whrhead_out,
+          ti_posicion_entrega TYPE /scwm/tt_wip_whritem_out,
+          ti_cabecera_um_ewm  TYPE /scwm/tt_huhdr_mon,
+          ti_posicion_um_ewm  TYPE /scwm/tt_huitm_mon.
+
+    CHECK i_r_entrega IS NOT INITIAL.
+
+    "Consultar almacen EWM x Entrega
+    SELECT
+    FROM likp AS e
+    INNER JOIN /scwm/tmapwhnum AS w
+    ON w~whnumerp = e~lgnum
+    FIELDS vbeln, lgnum, w~whnumwme
+    WHERE vbeln IN @i_r_entrega
+    ORDER BY whnumwme, vbeln
+    INTO TABLE @DATA(ti_almacen_ewm).
+
+
+    LOOP AT  ti_almacen_ewm ASSIGNING FIELD-SYMBOL(<fs_es_almacen_ewm>)
+                            GROUP BY ( whnumwme = <fs_es_almacen_ewm>-whnumwme ).
+
+      CLEAR: ti_cabecera_entrega, ti_posicion_entrega,ti_cabecera_um_ewm, ti_posicion_um_ewm.
+
+      "Crea la tabla del rango para consultar la información de las cajas
+      DATA(ti_tab_range) = VALUE rsds_trange(
+                             ( tablename = '/SCWM/S_WIP_Q_WHR_OUTBOUND'
+                               frange_t  = VALUE rsds_frange_t( ( fieldname = 'REFDOCNO_ERP_H'
+                                                                  selopt_t  = VALUE #( FOR es_entrega_erp IN ti_almacen_ewm WHERE ( whnumwme = <fs_es_almacen_ewm>-whnumwme )
+                                                                                          ( sign = 'I' option = 'EQ' low = es_entrega_erp-vbeln )
+                                                                                     )
+                                                               ) ) ) ).
+
+      CHECK ti_tab_range IS NOT INITIAL.
+
+      TRY.
+          "Busca la cabecera de la entrega
+          CALL FUNCTION '/SCWM/WHRHEAD_MON_OUT'
+            EXPORTING
+              iv_lgnum     = <fs_es_almacen_ewm>-whnumwme
+              iv_mode      = modo_ejecucion_fm
+            IMPORTING
+              et_data      = ti_cabecera_entrega
+            CHANGING
+              ct_tab_range = ti_tab_range.
+
+          CHECK ti_cabecera_entrega IS NOT INITIAL.
+
+          "Busca las posiciones de la entrega
+          CALL FUNCTION '/SCWM/WHRITEM_MON_OUT'
+            EXPORTING
+              iv_lgnum       = <fs_es_almacen_ewm>-whnumwme
+              iv_mode        = modo_ejecucion_fm
+              it_data_parent = ti_cabecera_entrega
+            IMPORTING
+              et_data        = ti_posicion_entrega.
+
+          "Busca la cabecera de la unidad de manipulación
+          CALL FUNCTION '/SCWM/WHRHEAD_OUT_HU_MON'
+            EXPORTING
+              iv_lgnum       = <fs_es_almacen_ewm>-whnumwme
+              iv_mode        = modo_ejecucion_fm
+              it_data_parent = ti_cabecera_entrega
+            IMPORTING
+              et_data        = ti_cabecera_um_ewm.
+
+          CHECK ti_cabecera_um_ewm IS NOT INITIAL.
+
+          "Busca las posiciones de la unidad de manipulación
+          CALL FUNCTION '/SCWM/HUITM_OVERVIEW_MON'
+            EXPORTING
+              iv_lgnum       = <fs_es_almacen_ewm>-whnumwme
+              iv_mode        = modo_ejecucion_fm
+              it_data_parent = ti_cabecera_um_ewm
+            IMPORTING
+              et_data        = ti_posicion_um_ewm
+            EXCEPTIONS
+              error_message  = 1.
+
+          APPEND LINES OF ti_cabecera_entrega TO e_ti_cabecera_entrega.
+          APPEND LINES OF ti_posicion_entrega TO e_ti_posicion_entrega.
+          APPEND LINES OF ti_cabecera_um_ewm  TO e_ti_cabecera_um_ewm.
+          APPEND LINES OF ti_posicion_um_ewm  TO e_ti_posicion_um_ewm.
+
+        CATCH /scwm/cx_mon_noexec ##NO_HANDLER.
+
+      ENDTRY.
+
+      CLEAR: ti_tab_range.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+ENDCLASS.

@@ -351,9 +351,9 @@ public class ObjectService {
             Element data = doc.createElement("DATA");
             values.appendChild(data);
 
-            addTextElement(doc, data, "TV_NODEKEY", "000000");
+            addTextElement(doc, data, "TV_NODEKEY", "000002");
 
-            String requestXml = xmlToString(doc);
+            String requestXml = xmlToStringWithDeclaration(doc);
 
             // Execute node structure request
             String nodeStructureUri = "/sap/bc/adt/repository/nodestructure";
@@ -422,6 +422,17 @@ public class ObjectService {
         TransformerFactory tf = TransformerFactory.newInstance();
         Transformer transformer = tf.newTransformer();
         transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        transformer.setOutputProperty(OutputKeys.INDENT, "no");
+        StringWriter writer = new StringWriter();
+        transformer.transform(new DOMSource(doc), new StreamResult(writer));
+        return writer.getBuffer().toString();
+    }
+
+    private String xmlToStringWithDeclaration(Document doc) throws Exception {
+        TransformerFactory tf = TransformerFactory.newInstance();
+        Transformer transformer = tf.newTransformer();
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
+        transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
         transformer.setOutputProperty(OutputKeys.INDENT, "no");
         StringWriter writer = new StringWriter();
         transformer.transform(new DOMSource(doc), new StreamResult(writer));

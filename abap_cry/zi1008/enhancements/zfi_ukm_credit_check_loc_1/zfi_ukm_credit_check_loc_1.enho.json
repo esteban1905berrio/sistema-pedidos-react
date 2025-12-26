@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFI_UKM_CREDIT_CHECK_LOC_1",
+  "header" : {
+    "enhancementName" : "ZFI_UKM_CREDIT_CHECK_LOC_1",
+    "description" : "Validaciones gestion de credito",
+    "toolType" : "BADI_IMPL",
+    "toolTypeText" : "BAdI Implementation",
+    "devclass" : "ZI1008",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-08-04",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-08-04"
+  },
+  "elements" : [ {
+    "elementType" : "BADI_IMPL",
+    "spotName" : "",
+    "programName" : "",
+    "fullName" : "",
+    "badiName" : "UKM_CREDIT_CHECK_LOC",
+    "badiImpl" : "ZFI_UKM_CREDIT_CHECK_LOC_1",
+    "implClass" : "ZCLFI_EXITS_GESTION_CREDITOS",
+    "interfaceName" : "IF_EX_UKM_CREDIT_CHECK_LOC",
+    "active" : true,
+    "sourceCode" : ""
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

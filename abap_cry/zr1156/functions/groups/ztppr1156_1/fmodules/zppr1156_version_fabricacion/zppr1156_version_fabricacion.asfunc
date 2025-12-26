@@ -1,0 +1,93 @@
+FUNCTION zppr1156_version_fabricacion
+  CHANGING
+    VALUE(shlp) TYPE shlp_descr
+    VALUE(callcontrol) LIKE ddshf4ctrl
+  TABLES
+    shlp_tab TYPE shlp_desct
+    record_tab LIKE seahlpres.
+
+
+
+  DATA: ti_version_fab TYPE STANDARD TABLE OF zippr1156_version_fabricacion,
+        es_version_fab LIKE LINE OF ti_version_fab,
+        v_material     TYPE matnr,
+        v_centro       TYPE werks_d.
+
+
+* EXIT immediately, if you do not want to handle this step
+  IF callcontrol-step <> 'SELONE' AND
+     callcontrol-step <> 'SELECT' AND
+     " AND SO ON
+     callcontrol-step <> 'DISP'.
+    EXIT.
+  ENDIF.
+
+*"----------------------------------------------------------------------
+* STEP SELONE  (Select one of the elementary searchhelps)
+*"----------------------------------------------------------------------
+* This step is only called for collective searchhelps. It may be used
+* to reduce the amount of elementary searchhelps given in SHLP_TAB.
+* The compound searchhelp is given in SHLP.
+* If you do not change CALLCONTROL-STEP, the next step is the
+* dialog, to select one of the elementary searchhelps.
+* If you want to skip this dialog, you have to return the selected
+* elementary searchhelp in SHLP and to change CALLCONTROL-STEP to
+* either to 'PRESEL' or to 'SELECT'.
+  IF callcontrol-step = 'SELONE'.
+*   PERFORM SELONE .........
+    EXIT.
+  ENDIF.
+
+*"----------------------------------------------------------------------
+* STEP PRESEL  (Enter selection conditions)
+*"----------------------------------------------------------------------
+* This step allows you, to influence the selection conditions either
+* before they are displayed or in order to skip the dialog completely.
+* If you want to skip the dialog, you should change CALLCONTROL-STEP
+* to 'SELECT'.
+* Normaly only SHLP-SELOPT should be changed in this step.
+  IF callcontrol-step = 'PRESEL'.
+*   PERFORM PRESEL ..........
+    EXIT.
+  ENDIF.
+*"----------------------------------------------------------------------
+* STEP SELECT    (Select values)
+*"----------------------------------------------------------------------
+* This step may be used to overtake the data selection completely.
+* To skip the standard seletion, you should return 'DISP' as following
+* step in CALLCONTROL-STEP.
+* Normally RECORD_TAB should be filled after this step.
+* Standard function module F4UT_RESULTS_MAP may be very helpfull in this
+* step.
+  IF callcontrol-step = 'SELECT'.
+
+    IF NOT line_exists( shlp-selopt[ shlpfield = 'MATNR' ] )
+    AND line_exists(  shlp-interface[ shlpfield = 'MATNR' ] ).
+
+      shlp-selopt = VALUE #( BASE shlp-selopt ( shlpname = shlp-intdescr-selmethod
+                                                shlpfield = 'MATNR'
+                                                sign = 'I'
+                                                option = 'EQ'
+                                                low = v_material ) ).
+
+    ENDIF.
+
+    IF NOT line_exists( shlp-selopt[ shlpfield = 'CENTRO' ] )
+    AND line_exists(  shlp-interface[ shlpfield = 'CENTRO' ] ).
+
+      shlp-selopt = VALUE #( BASE shlp-selopt ( shlpname = shlp-intdescr-selmethod
+                                              shlpfield = 'CENTRO'
+                                              sign = 'I'
+                                              option = 'EQ'
+                                              low = v_centro ) ).
+
+    ENDIF.
+    EXIT. "Don't process STEP DISP additionally in this call.
+  ENDIF.
+
+  IF callcontrol-step = 'DISP'.
+*   PERFORM AUTHORITY_CHECK TABLES RECORD_TAB SHLP_TAB
+*                           CHANGING SHLP CALLCONTROL.
+    EXIT.
+  ENDIF.
+ENDFUNCTION.

@@ -1,0 +1,31 @@
+FUNCTION zcxr1003_impresora_usuario
+  IMPORTING
+    i_c_etiqueta_uuid TYPE sysuuid_x16
+  EXPORTING
+    e_c_impresora TYPE zedimpresoraid.
+
+
+
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador: R1003
+* Función      : zcxr1003_impresora_usuario
+* Descripción  : Selección de Impresora para Etiqueta
+* Autor Prog.  : Cristian Montoya
+* Fecha Creac. : 8 mar. 2021
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 8 mar. 2021    xxxxxx         Cristian Montoya  Version Inicial
+*----------------------------------------------------------------------*
+
+   "Dynpro Selección Impresora Usuario
+    g_c_etiqueta_uuid = i_c_etiqueta_uuid.
+    CALL SCREEN 100 STARTING AT 40 5.
+    e_c_impresora = g_c_impresora.
+
+
+ENDFUNCTION.

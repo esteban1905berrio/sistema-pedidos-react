@@ -1,0 +1,248 @@
+CLASS zclcx_object_reference DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      ty_founds  TYPE STANDARD TABLE OF rsfindlst
+                           WITH NON-UNIQUE DEFAULT KEY .
+    TYPES:
+      BEGIN OF ty_s_seu_obj,
+        data_type TYPE  seu_obj,
+      END OF ty_s_seu_obj,
+      ty_seu_obj TYPE STANDARD TABLE OF seu_obj
+                           WITH NON-UNIQUE DEFAULT KEY .
+
+    METHODS: constructor.
+
+    CLASS-METHODS:
+      get_object_references
+        IMPORTING
+          !iv_object_name      TYPE csequence
+          !iv_depth            TYPE i
+          !iv_object_type      TYPE euobj-id
+          !it_scope            TYPE ty_seu_obj OPTIONAL
+        RETURNING
+          VALUE(rt_founds_all) TYPE ty_founds .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclcx_object_reference IMPLEMENTATION.
+
+  METHOD get_object_references.
+
+    DATA: lt_findstrings TYPE string_table,
+          lt_founds      TYPE STANDARD TABLE OF rsfindlst,
+          lt_scope       TYPE ty_seu_obj,
+          lv_findstring  LIKE LINE OF lt_findstrings.
+
+    FIELD-SYMBOLS: <ls_found> TYPE rsfindlst.
+
+    IF it_scope IS SUPPLIED.
+      lt_scope = it_scope.
+    ELSE.
+      APPEND 'P' TO lt_scope.
+      APPEND 'DTF' TO lt_scope. "Table Fields
+      APPEND 'DSF' TO lt_scope. "Structure Fields
+      APPEND 'DVF' TO lt_scope. " View Fields
+      APPEND 'DA' TO lt_scope.
+      APPEND 'DH' TO lt_scope.
+      APPEND 'O' TO lt_scope. "Classes/Interfaces
+    ENDIF.
+
+    lv_findstring = iv_object_name.
+    INSERT lv_findstring INTO TABLE lt_findstrings.
+
+    DO iv_depth TIMES.
+
+      CLEAR: lt_founds.
+
+      CALL FUNCTION 'RS_EU_CROSSREF'
+        EXPORTING
+          i_find_obj_cls           = iv_object_type
+          no_dialog                = 'X'
+        TABLES
+          i_findstrings            = lt_findstrings
+          o_founds                 = lt_founds
+          i_scope_object_cls       = lt_scope
+        EXCEPTIONS
+          not_executed             = 1
+          not_found                = 2
+          illegal_object           = 3
+          no_cross_for_this_object = 4
+          batch                    = 5
+          batchjob_error           = 6
+          wrong_type               = 7
+          object_not_exist         = 8
+          OTHERS                   = 9.
+
+      IF sy-subrc = 1 OR sy-subrc = 2 OR lines( lt_founds ) = 0.
+        EXIT.
+      ELSEIF sy-subrc > 2.
+        "zcx_abapgit_exception=>raise_t100( ).
+      ENDIF.
+
+      INSERT LINES OF lt_founds INTO TABLE rt_founds_all.
+
+      CLEAR: lt_findstrings.
+
+      LOOP AT lt_founds ASSIGNING <ls_found>.
+
+        lv_findstring = <ls_found>-object.
+        INSERT lv_findstring INTO TABLE lt_findstrings.
+
+      ENDLOOP.
+
+    ENDDO.
+
+  ENDMETHOD.
+
+  METHOD constructor.
+
+    DATA: lt_scope  TYPE ty_seu_obj,
+          lt_founds TYPE ty_founds.
+
+    APPEND 'P' TO lt_scope.
+    APPEND 'DTF' TO lt_scope. "Table Fields
+    APPEND  'DSF' TO lt_scope. "Structure Fields
+    APPEND 'DVF' TO lt_scope. " View Fields
+    APPEND 'DA' TO lt_scope.
+    APPEND 'DH' TO lt_scope.
+    APPEND 'O' TO lt_scope. "Classes/Interfaces
+
+
+
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclcx_object_reference DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      ty_founds  TYPE STANDARD TABLE OF rsfindlst
+                           WITH NON-UNIQUE DEFAULT KEY .
+    TYPES:
+      BEGIN OF ty_s_seu_obj,
+        data_type TYPE  seu_obj,
+      END OF ty_s_seu_obj,
+      ty_seu_obj TYPE STANDARD TABLE OF seu_obj
+                           WITH NON-UNIQUE DEFAULT KEY .
+
+    METHODS: constructor.
+
+    CLASS-METHODS:
+      get_object_references
+        IMPORTING
+          !iv_object_name      TYPE csequence
+          !iv_depth            TYPE i
+          !iv_object_type      TYPE euobj-id
+          !it_scope            TYPE ty_seu_obj OPTIONAL
+        RETURNING
+          VALUE(rt_founds_all) TYPE ty_founds .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclcx_object_reference IMPLEMENTATION.
+
+  METHOD get_object_references.
+
+    DATA: lt_findstrings TYPE string_table,
+          lt_founds      TYPE STANDARD TABLE OF rsfindlst,
+          lt_scope       TYPE ty_seu_obj,
+          lv_findstring  LIKE LINE OF lt_findstrings.
+
+    FIELD-SYMBOLS: <ls_found> TYPE rsfindlst.
+
+    IF it_scope IS SUPPLIED.
+      lt_scope = it_scope.
+    ELSE.
+      APPEND 'P' TO lt_scope.
+      APPEND 'DTF' TO lt_scope. "Table Fields
+      APPEND 'DSF' TO lt_scope. "Structure Fields
+      APPEND 'DVF' TO lt_scope. " View Fields
+      APPEND 'DA' TO lt_scope.
+      APPEND 'DH' TO lt_scope.
+      APPEND 'O' TO lt_scope. "Classes/Interfaces
+    ENDIF.
+
+    lv_findstring = iv_object_name.
+    INSERT lv_findstring INTO TABLE lt_findstrings.
+
+    DO iv_depth TIMES.
+
+      CLEAR: lt_founds.
+
+      CALL FUNCTION 'RS_EU_CROSSREF'
+        EXPORTING
+          i_find_obj_cls           = iv_object_type
+          no_dialog                = 'X'
+        TABLES
+          i_findstrings            = lt_findstrings
+          o_founds                 = lt_founds
+          i_scope_object_cls       = lt_scope
+        EXCEPTIONS
+          not_executed             = 1
+          not_found                = 2
+          illegal_object           = 3
+          no_cross_for_this_object = 4
+          batch                    = 5
+          batchjob_error           = 6
+          wrong_type               = 7
+          object_not_exist         = 8
+          OTHERS                   = 9.
+
+      IF sy-subrc = 1 OR sy-subrc = 2 OR lines( lt_founds ) = 0.
+        EXIT.
+      ELSEIF sy-subrc > 2.
+        "zcx_abapgit_exception=>raise_t100( ).
+      ENDIF.
+
+      INSERT LINES OF lt_founds INTO TABLE rt_founds_all.
+
+      CLEAR: lt_findstrings.
+
+      LOOP AT lt_founds ASSIGNING <ls_found>.
+
+        lv_findstring = <ls_found>-object.
+        INSERT lv_findstring INTO TABLE lt_findstrings.
+
+      ENDLOOP.
+
+    ENDDO.
+
+  ENDMETHOD.
+
+  METHOD constructor.
+
+    DATA: lt_scope  TYPE ty_seu_obj,
+          lt_founds TYPE ty_founds.
+
+    APPEND 'P' TO lt_scope.
+    APPEND 'DTF' TO lt_scope. "Table Fields
+    APPEND  'DSF' TO lt_scope. "Structure Fields
+    APPEND 'DVF' TO lt_scope. " View Fields
+    APPEND 'DA' TO lt_scope.
+    APPEND 'DH' TO lt_scope.
+    APPEND 'O' TO lt_scope. "Classes/Interfaces
+
+
+
+
+  ENDMETHOD.
+
+ENDCLASS.

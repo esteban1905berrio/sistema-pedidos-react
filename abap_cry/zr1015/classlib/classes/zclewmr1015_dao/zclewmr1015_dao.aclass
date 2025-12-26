@@ -1,0 +1,1564 @@
+CLASS zclewmr1015_dao DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    TYPES: gtp_ti_ctara TYPE STANDARD TABLE OF ztppi1024_1 WITH DEFAULT KEY,
+           BEGIN OF gtp_es_ubicacion_isla,
+             lgnum  TYPE /scwm/lgnum,
+             lgpla  TYPE /scwm/lgpla,
+             lgtyp  TYPE /scwm/lgtyp,
+             srt_nr TYPE /scwm/de_sort,
+           END OF gtp_es_ubicacion_isla,
+           gtp_ti_ubicacion_isla TYPE STANDARD TABLE OF gtp_es_ubicacion_isla WITH EMPTY KEY,
+           BEGIN OF gtp_es_islas,
+             workstation TYPE /scwm/de_workstation,
+           END OF gtp_es_islas,
+           gtp_ti_islas       TYPE STANDARD TABLE OF gtp_es_islas WITH EMPTY KEY,
+           gtp_r_procesos     TYPE RANGE OF /scwm/de_procty,
+           gtp_r_isla         TYPE RANGE OF /scwm/de_workstation,
+           gtp_ti_ubicaciones TYPE STANDARD TABLE OF ztewmr1015_1 WITH DEFAULT KEY,
+           gtp_r_tanum        TYPE RANGE OF /scwm/ordim_o-tanum,
+           gtp_ti_tareas      TYPE STANDARD TABLE OF /scwm/ordim_o WITH DEFAULT KEY,
+           gtp_ti_estados     TYPE STANDARD TABLE OF /scdl/db_status  WITH DEFAULT KEY.
+
+    DATA: g_ti_ola TYPE zclewmr1015_distribuirmatprima=>gtp_ti_ola.
+
+    CLASS-METHODS:
+      almacen_del_usuario
+        RETURNING
+          VALUE(r_lgnum) TYPE /scwm/lgnum,
+      tipos_conos
+        RETURNING
+          VALUE(r_ti_ctara) TYPE gtp_ti_ctara,
+      islas_picking
+        IMPORTING
+          i_lgnum          TYPE /scwm/lgnum
+        RETURNING
+          VALUE(r_ti_isla) TYPE gtp_ti_islas.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_sammg    TYPE sammg           OPTIONAL
+          i_r_procty TYPE gtp_r_procesos  OPTIONAL
+          i_procty   TYPE /scwm/de_procty OPTIONAL,
+      obtener_ump
+        IMPORTING
+          i_ump             TYPE /scwm/de_huident
+        RETURNING
+          VALUE(r_es_huhdr) TYPE /scwm/huhdr,
+      obtener_tareas_ump
+        IMPORTING
+          i_lgnum             TYPE /scwm/lgnum
+          i_ump               TYPE /scwm/de_huident
+          i_flghuto           TYPE /scwm/ordim_o-flghuto DEFAULT space
+          i_r_tanum           TYPE gtp_r_tanum OPTIONAL
+*          i_procty            TYPE /scwm/de_procty
+          i_r_procty          TYPE gtp_r_procesos OPTIONAL
+          i_tipo_almacen      TYPE zzedlow OPTIONAL "+SLS 25.07.203 - Proyecto materia prima
+        RETURNING
+          VALUE(r_es_ordim_o) TYPE /scwm/ordim_o ,
+      obtener_isla
+        IMPORTING
+          i_lgnum             TYPE /scwm/lgnum
+          i_isla              TYPE /scwm/de_workstation
+        RETURNING
+          VALUE(r_es_tworkst) TYPE /scwm/tworkst,
+      obtener_peso_cono
+        IMPORTING
+          i_ctara       TYPE zedctara
+        RETURNING
+          VALUE(r_peso) TYPE zedptara,
+      determinar_ubicacion_existente
+        IMPORTING
+          VALUE(i_ola)            TYPE sammg
+          VALUE(i_r_isla)         TYPE gtp_r_isla
+          VALUE(i_numero_almacen) TYPE /scwm/lgnum
+          VALUE(i_tipo_almacen)   TYPE zzedlow
+          VALUE(i_r_entrega)      TYPE fsh_vbeln_ranges_tab OPTIONAL
+        EXPORTING
+          e_asignar_ubicacion     TYPE flag
+        CHANGING
+          c_ti_ubicacion_isla     TYPE zclewmr1015_dao=>gtp_ti_ubicacion_isla OPTIONAL
+        RETURNING
+          VALUE(r_ubicacion)      TYPE  /scwm/lgpla,
+      obtener_datos_ola
+        IMPORTING
+          VALUE(i_mandt)    TYPE mandt
+          VALUE(i_sammg)    TYPE sammg
+          VALUE(i_r_procty) TYPE gtp_r_procesos
+          VALUE(i_procty)   TYPE /scwm/de_procty
+          VALUE(i_atinn)    TYPE atinn
+        EXPORTING
+          VALUE(e_ti_ola)   TYPE zclewmr1015_distribuirmatprima=>gtp_ti_ola,
+      actualizar_conos_despachados
+        IMPORTING
+          i_numero_almacen  TYPE /scwm/lgnum
+          i_entrega         TYPE vbeln
+          i_posicion        TYPE /scdl/dl_itemno
+          i_cantidad_conos  TYPE ztewmi1006_1-conos_despachados
+        RETURNING
+          VALUE(r_sy_subrc) TYPE sy-subrc,
+      obtener_ubicacion_entrega
+        IMPORTING
+          i_ola                   TYPE sammg
+          i_r_isla                TYPE gtp_r_isla OPTIONAL
+          i_r_entrega             TYPE fsh_vbeln_ranges_tab OPTIONAL
+          VALUE(i_numero_almacen) TYPE /scwm/lgnum OPTIONAL
+          VALUE(i_tipo_almacen)   TYPE zzedlow OPTIONAL
+        EXPORTING
+          e_isla                  TYPE /scwm/de_workstation
+          e_ti_ubicaciones        TYPE gtp_ti_ubicaciones
+          e_asignar_ubicacion     TYPE flag
+        RETURNING
+          VALUE(r_ubicacion)      TYPE lgpla,
+      obtener_ubicaciones_isla
+        IMPORTING
+          i_isla                     TYPE /scwm/de_workstation
+          i_numero_almacen           TYPE /scwm/lgnum
+          i_tipo_almacen             TYPE  zzedlow
+        RETURNING
+          VALUE(r_ti_ubicacion_isla) TYPE gtp_ti_ubicacion_isla,
+
+      obtener_ubicacion_verif
+        IMPORTING
+          i_numero_almacen         TYPE /scwm/lgnum
+          i_ubicacion              TYPE /scwm/lgpla
+        RETURNING
+          VALUE(r_ubicacion_verif) TYPE /scwm/de_verify,
+
+      insertar_ubicacion_entrega
+        IMPORTING
+          i_ola       TYPE sammg
+          i_isla      TYPE /scwm/de_workstation
+          i_entrega   TYPE vbeln
+          i_ubicacion TYPE lgpla,
+      obtener_almacen_erp
+        IMPORTING
+          i_numero_almacen TYPE /scwm/lgnum
+        RETURNING
+          VALUE(r_lgnum)   TYPE lgnum,
+      eliminar_ola_isla
+        IMPORTING
+          i_ti_ubicaciones TYPE gtp_ti_ubicaciones,
+      insertar_tipo_cono
+        IMPORTING
+          i_matnr TYPE matnr
+          i_cono  TYPE zedctara,
+      obtener_id_externo
+        IMPORTING
+          i_ump               TYPE /scwm/de_huident
+        RETURNING
+          VALUE(r_id_esterno) TYPE ztewmr1015_3-identificador,
+      guardar_id_externo
+        IMPORTING
+          i_ump             TYPE /scwm/de_huident
+          i_entrega_erp     TYPE vbeln_vl
+          i_id_externo      TYPE ztewmr1015_3-identificador
+        RETURNING
+          VALUE(r_sy_subrc) TYPE sy-subrc,
+      actualizar_id_externo_activo
+        IMPORTING
+          i_ump        TYPE /scwm/de_huident
+          i_id_externo TYPE ztewmr1015_3-identificador,
+      id_externo_existente_activo
+        IMPORTING
+          i_ump           TYPE /scwm/de_huident
+          i_id_externo    TYPE ztewmr1015_3-identificador
+        EXPORTING
+          e_ump           TYPE /scwm/de_huident
+        RETURNING
+          VALUE(r_existe) TYPE flag,
+      obtener_conos
+        IMPORTING
+          i_lgnum                  TYPE /scwm/lgnum
+          i_entrega_erp            TYPE vbeln_vl
+          i_posicion               TYPE char4 "ztewmi1006_1-rspos
+        RETURNING
+          VALUE(r_gramos_mercados) TYPE ztewmi1006_1-conos_despachados,
+      obtener_gramos_mercados
+        IMPORTING
+          i_lgnum                  TYPE /scwm/lgnum
+          i_docid                  TYPE /scwm/ordim_c-rdocid
+          i_itemid                 TYPE /scwm/ordim_c-ritmid
+        RETURNING
+          VALUE(r_gramos_mercados) TYPE /scwm/ltap_nista,
+      obtener_tareas_pendientes
+        IMPORTING
+          i_lgnum            TYPE /scwm/lgnum
+          i_docid            TYPE /scwm/ordim_c-rdocid
+          i_itemid           TYPE /scwm/ordim_c-ritmid
+        RETURNING
+          VALUE(r_ti_tareas) TYPE gtp_ti_tareas,
+      obtener_pendientes_ola
+        IMPORTING
+          i_lgnum             TYPE /scwm/lgnum
+          i_ola               TYPE sammg
+        RETURNING
+          VALUE(r_ti_estados) TYPE gtp_ti_estados.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+ENDCLASS.
+
+CLASS zclewmr1015_dao IMPLEMENTATION.
+
+  METHOD constructor.
+
+*    obtener_datos_ola( EXPORTING
+*                           i_mandt     = sy-mandt "'120'
+*                           i_sammg     = i_sammg
+*                           i_r_procty  = i_r_procty
+*                           i_procty    = i_procty
+*                      IMPORTING
+*                            e_ti_ola   = g_ti_ola ).
+
+  ENDMETHOD.
+
+  METHOD obtener_datos_ola BY DATABASE PROCEDURE
+                              FOR HDB LANGUAGE SQLSCRIPT
+                              OPTIONS READ-ONLY
+                              USING vbss /scdl/db_refdoc /scdl/db_proci_o makt /scwm/tmapwhnum ztewmi1006_1 ztewmr1015_2 ztppi1024_1 /scwm/ordim_o
+                                    /scwm/huhdr inob ausp mara wrf_charvalt lips.
+
+    ti_data      = SELECT DISTINCT vbss.mandt, proci.productid AS matid, orim.batchid AS batchid, proci.productno AS matnr,makt.maktx,proci.batchno AS charg,
+                                   proci.docno, proci.itemno, vbss.vbeln, substring( ref.refitemno,7,4 ) AS posnr, proci.uom AS medida , z.aufnr AS orden, z.maquina , z.cantidad AS cant_necesaria,
+                                   z.conos, z2.ctara AS tipo_cono, z3.ptara AS peso_conos, orim.vsolm AS cant_tomar,
+*                                   proci.qty AS cant_tomar,
+                                   proci."/SCWM/WHNO" AS lgnum, proci.docid, proci.itemid,
+                                   z.conos_despachados, proci.uom AS altme, proci.qty AS reqqty, proci.qty AS anfme, proci.stock_category AS cat, proci.stock_owner AS owner,
+                                   proci.stock_owner_role AS owner_role, proci.entitled, proci.entitled_role, orim.vlenr, z.cant_necesaria AS cant_entrega
+                    FROM vbss
+                    JOIN "/SCDL/DB_REFDOC"    AS ref   ON ref.mandt   = vbss.mandt AND ref.refdoccat  = 'ERP'                          AND ref.refdocno = vbss.vbeln
+                                                                                   AND ref.refitemno <> '0'
+                    JOIN "/SCDL/DB_PROCI_O"   AS proci ON proci.mandt = vbss.mandt AND proci.docid    = ref.docid                      AND proci.itemid = ref.itemid
+                    JOIN "/SCWM/TMAPWHNUM"    AS whnum ON whnum.mandt = vbss.mandt AND whnum.whnumwme = proci."/SCWM/WHNO"
+                    JOIN ztewmi1006_1         AS z     ON z.mandt     = vbss.mandt AND z.lgnum        = whnum.whnumerp                 AND z.rsnum      = ref.refdocno
+                                                                                   AND z.rspos        = substring( ref.refitemno,7,4 ) AND z.tipo       = 'N'
+                    JOIN makt                          ON makt.mandt  = vbss.mandt AND makt.matnr     = proci.productno                AND makt.spras   = 'S'
+*                    JOIN "/SCWM/AQUA"         AS aqua  ON aqua.mandt  = vbss.mandt AND aqua.lgnum     = proci."/SCWM/WHNO"             AND aqua.matid   = proci.productid
+*                                                                                   AND aqua.charg     = proci.batchno
+                    LEFT JOIN ztewmr1015_2    AS z2    ON z2.mandt    = vbss.mandt AND z2.matnr       = proci.productno
+                    LEFT JOIN ztppi1024_1     AS z3    ON z3.mandt    = vbss.mandt AND z3.ctara       = z2.ctara
+                    JOIN "/SCWM/ORDIM_O"      AS orim  ON orim.mandt  = vbss.mandt AND orim.lgnum     = proci."/SCWM/WHNO"             AND orim.rdocid  = proci.docid
+                                                                                   AND orim.ritmid    = proci.itemid                   AND orim.flghuto = ''
+                                                                                   AND orim.procty    = :i_procty
+                    WHERE vbss.mandt = :i_mandt
+                      AND vbss.sammg = :i_sammg;
+
+
+    ti_data_pendiente = SELECT ti.*, COUNT( orim.vlenr ) AS ordenes_pendientes, orim.tanum, orim.dstgrp, orim.tostat, orim.procty, orim.vltyp
+                        FROM :ti_data AS ti
+                        LEFT JOIN "/SCWM/ORDIM_O" AS orim ON orim.mandt = ti.mandt AND orim.lgnum  = ti.lgnum   AND orim.rdocid = ti.docid   AND orim.ritmid = ti.itemid AND orim.flghuto = ''
+                                                                                   AND orim.procty = :i_procty  AND ti.vlenr    = orim.vlenr
+                        GROUP BY ti.mandt, ti.matid, ti.batchid, ti.matnr, ti.maktx, ti.charg, ti.docno, ti.itemno, ti.conos_despachados,
+                                 ti.vbeln, ti.medida, ti.cant_necesaria, ti.orden, ti.maquina, ti.conos, ti.tipo_cono, ti.posnr,
+                                 ti.peso_conos, ti.cant_tomar, ti.lgnum, ti.docid, ti.itemid, orim.vlenr, orim.tanum,ti.altme,ti.reqqty,ti.anfme,ti.cat,
+                                 ti.owner,ti.owner_role,ti.entitled,ti.entitled_role,orim.dstgrp, orim.tostat, orim.procty, orim.vltyp, ti.vlenr, ti.cant_entrega;
+
+    ti_data_mercada = SELECT ti.*, 0 AS gramos_mercados--SUM( orim.nista ) AS gramos_mercados
+                        FROM :ti_data_pendiente AS ti
+*                        LEFT JOIN "/SCWM/ORDIM_C" AS orim ON orim.mandt = ti.mandt AND orim.lgnum = ti.lgnum AND orim.tapos  = '0001' AND orim.rdocid = ti.docid
+*                                                         AND orim.ritmid = ti.itemid AND orim.tostat = 'C'
+*                        GROUP BY ti.mandt, ti.matid, ti.batchid, ti.matnr, ti.maktx, ti.charg, ti.docno, ti.itemno, ti.vlenr, ti.posnr,
+*                                 ti.vbeln, ti.medida, ti.cant_necesaria, ti.orden, ti.maquina, ti.conos, ti.tipo_cono, ti.tanum, ti.ordenes_pendientes,
+*                                 ti.peso_conos, ti.cant_tomar, orim.vlenr, ti.lgnum, ti.docid, ti.itemid, ti.conos_despachados,ti.altme,ti.reqqty,ti.anfme,ti.cat,
+*                                 ti.owner,ti.owner_role,ti.entitled,ti.entitled_role,ti.dstgrp, ti.tostat, ti.procty
+                                 ;
+
+    ti_materiales = SELECT DISTINCT datos.matnr, inob.objek, inob.cuobj, ausp.atwrt
+                        FROM :ti_data AS datos
+                        JOIN inob ON inob.mandt = datos.mandt AND inob.objek = datos.matnr
+                        JOIN ausp ON inob.mandt = datos.mandt AND inob.cuobj = ausp.objek AND ausp.atinn = :i_atinn;
+
+    --+SLS 06.06.2023:Agregar datos Pack and Hold{
+    ti_reservas_completa =
+    SELECT DISTINCT _reserva_suministro.mandt, _reserva_suministro.rsnum, _reserva_suministro.tipo,
+                    _entrega_posicion.vbeln, _reserva_suministro.fecha_hora_inicio_tejido, _reserva_suministro.marca_ph
+    FROM :ti_data_mercada AS _data_mercada
+    INNER JOIN lips AS _entrega_posicion ON
+    _data_mercada.mandt = _entrega_posicion.mandt
+    AND _data_mercada.vbeln = _entrega_posicion.vbeln
+    INNER JOIN ztewmi1006_1 as _reserva_suministro ON
+    _reserva_suministro.mandt = _entrega_posicion.mandt
+    AND _reserva_suministro.rsnum = _entrega_posicion.rsnum
+    AND tipo = 'R';
+
+    ti_reservas = SELECT * FROM ( SELECT ROW_NUMBER ( ) OVER( PARTITION BY rsnum, tipo, vbeln, marca_ph
+                                  ORDER BY rsnum, tipo, vbeln, fecha_hora_inicio_tejido DESC )
+                                AS _t_reserva, * FROM :ti_reservas_completa ) WHERE _t_reserva = 1;
+    --}
+    e_ti_ola = SELECT DISTINCT '' AS marcar,
+                               ti.lgnum,
+                               ti.tanum,
+                               ti.dstgrp,
+                               hu.guid_hu,
+                               ti.vlenr AS ump,
+                               ti.tostat AS estado,
+                               ti.procty AS proceso,
+                               0 AS cant_disponible,
+                               ti.matid,
+                               ti.batchid,
+                               ti.altme,
+                               ti.reqqty,
+                               ti.anfme,
+                               ti.cat,
+                               ti.owner,
+                               ti.owner_role,
+                               ti.entitled,
+                               ti.entitled_role,
+                               ti.matnr,
+                               mara.color,
+                               mara.color_atinn,
+                               ti.maktx,
+                               wrf_charvalt.atwtb AS des_color,
+                               ti.charg,
+                               encona.atwrt AS encona,
+                               ti.docid,
+                               ti.itemid,
+                               ti.docno,
+                               ti.itemno,
+                               ti.vbeln,
+                               ti.posnr,
+                               ti.orden,
+                               ti.maquina,
+*                               CASE
+*                               WHEN ti.gramos_mercados IS NOT NULL THEN
+*                                 ti.cant_necesaria - ti.gramos_mercados
+*                               ELSE
+                                 ti.cant_necesaria,
+*                               END AS cant_necesaria,
+                               ti.medida,
+                               ti.cant_tomar,
+                               0 AS mostrar_cant_tomar,
+                               ti.conos,
+                               ti.peso_conos,
+                               ti.tipo_cono,
+                               0 AS conos_despachar,
+                               0 AS peso_bascula,
+                               0 AS peso_neto,
+                               ti.gramos_mercados,
+                               0  AS mostrar_gramos_mercados,
+                               '' AS ump_creada,
+                               '' AS ump_destino_out,
+                               '' AS id_externo,
+                               '' AS original_id_externo,
+                               '' AS id_ump_creada,
+                               '' AS confirmada,
+                               '' AS ubicacion,
+                               ti.conos_despachados,
+                               ti.ordenes_pendientes,
+                               0 AS gramos_um,
+                               0 AS diferencia,
+                               '' AS ajustar_um,
+                               ti.cant_entrega,
+                               --+SLS 01.07.2023 : Proyecto materia prima{
+                               ti.vltyp,
+                               _reserva.fecha_hora_inicio_tejido,
+                               CASE
+                               WHEN _reserva.marca_ph = '1' THEN
+                                '@E8@ Pack and Hold'
+                               ELSE
+                                 ''
+                               END AS marca_ph
+                               --}
+                FROM :ti_data_mercada AS ti
+                INNER JOIN "/SCWM/HUHDR" AS hu ON hu.mandt = ti.mandt AND hu.huident = ti.vlenr
+                LEFT JOIN :ti_materiales AS encona ON encona.matnr = ti.matnr
+                LEFT JOIN mara ON mara.mandt = ti.mandt AND mara.matnr = ti.matnr
+                LEFT JOIN wrf_charvalt ON
+                wrf_charvalt.mandt = ti.mandt AND wrf_charvalt.atinn = mara.color_atinn
+                AND wrf_charvalt.atwrt = mara.color AND wrf_charvalt.spras = 'S'
+                LEFT JOIN :ti_reservas AS _reserva ON --SLS 06.06.2023
+                _reserva.mandt = ti.mandt AND _reserva.vbeln = ti.vbeln;
+
+  ENDMETHOD.
+
+  METHOD obtener_ump.
+    SELECT SINGLE guid_hu, huident
+    INTO CORRESPONDING FIELDS OF @r_es_huhdr
+    FROM /scwm/huhdr
+    WHERE huident EQ @i_ump.
+  ENDMETHOD.
+
+  METHOD obtener_isla.
+    SELECT SINGLE *
+    INTO CORRESPONDING FIELDS OF @r_es_tworkst
+    FROM /scwm/tworkst
+    WHERE lgnum       EQ @i_lgnum
+      AND workstation EQ @i_isla.
+  ENDMETHOD.
+
+  METHOD obtener_tareas_ump.
+    SELECT SINGLE orim~lgnum, orim~tanum, orim~vlenr, orim~vsolm, orim~meins
+    INTO  CORRESPONDING FIELDS OF @r_es_ordim_o
+    FROM /scwm/ordim_o AS orim
+    WHERE orim~lgnum   EQ @i_lgnum
+      AND orim~tanum   IN @i_r_tanum
+*      AND orim~vlenr   EQ @i_ump
+      AND ( orim~vlenr EQ @i_ump OR orim~nlenr EQ @i_ump )
+      AND orim~flghuto EQ @i_flghuto "@space
+*      AND orim~procty  EQ @i_procty
+      AND orim~procty  IN @i_r_procty
+      .
+  ENDMETHOD.
+
+  METHOD almacen_del_usuario.
+    SELECT SINGLE lgnum
+    INTO @r_lgnum
+    FROM /scwm/user
+    WHERE uname EQ @sy-uname.
+  ENDMETHOD.
+
+  METHOD tipos_conos.
+    SELECT *
+    FROM ztppi1024_1
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_ctara.
+  ENDMETHOD.
+
+  METHOD obtener_peso_cono.
+    SELECT SINGLE ptara
+    INTO @r_peso
+    FROM ztppi1024_1
+    WHERE ctara EQ @i_ctara.
+  ENDMETHOD.
+
+  METHOD actualizar_conos_despachados.
+
+    DATA(almacen_erp) = obtener_almacen_erp( i_numero_almacen = i_numero_almacen ).
+    DATA(longitud)    = strlen( i_posicion ) - 4.
+
+    SELECT SINGLE ( conos_despachados + @i_cantidad_conos ) AS cant_conos
+    INTO @DATA(cant_conos)
+    FROM ztewmi1006_1
+    WHERE lgnum = @almacen_erp
+      AND rsnum = @i_entrega
+      AND rspos = @i_posicion+longitud(4)
+      AND tipo  = 'N'.
+
+*    DATA(cantidad_conos) = cant_conos + i_cantidad_conos.
+
+    UPDATE ztewmi1006_1 SET conos_despachados = @cant_conos WHERE lgnum = @almacen_erp
+                                                              AND rsnum = @i_entrega
+                                                              AND rspos = @i_posicion+longitud(4)
+                                                              AND tipo  = 'N'.
+*    UPDATE ztewmi1006_1 SET conos_despachados = @i_cantidad_conos WHERE lgnum = @almacen_erp
+*                                                                    AND rsnum = @i_entrega
+*                                                                    AND rspos = @i_posicion+longitud(4)
+*                                                                    AND tipo  = 'N'.
+
+    r_sy_subrc = sy-subrc.
+    IF sy-subrc EQ 0.
+      COMMIT WORK AND WAIT.
+    ELSE.
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD obtener_ubicaciones_isla.
+
+    SELECT lagps~lgnum, lagps~lgpla, lagps~lgtyp, lagps~srt_nr
+          FROM /scwm/tworkst AS tworkst
+            INNER JOIN /scwm/lagp  AS lagp  ON lagp~lgnum  = tworkst~lgnum AND lagp~lgtyp  = @i_tipo_almacen AND lagp~lgber     = tworkst~o_section AND lagp~skzue = @space
+            INNER JOIN /scwm/lagps AS lagps ON lagps~lgnum = lagp~lgnum    AND lagps~lgpla = lagp~lgpla      AND lagps~act_type = 'PICK'
+        WHERE tworkst~lgnum       = @i_numero_almacen
+          AND tworkst~workstation = @i_isla
+        INTO CORRESPONDING FIELDS OF TABLE @r_ti_ubicacion_isla.
+
+  ENDMETHOD.
+
+  METHOD obtener_ubicacion_verif.
+
+    CLEAR r_ubicacion_verif.
+
+    IF i_numero_almacen IS INITIAL OR
+       i_ubicacion IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    SELECT SINGLE FROM /scwm/lagp
+    FIELDS verif
+     WHERE lgnum = @i_numero_almacen
+       AND lgpla = @i_ubicacion
+      INTO @r_ubicacion_verif.
+
+  ENDMETHOD.
+
+  METHOD insertar_ubicacion_entrega.
+
+    DATA(es_ztewmr1015_1) = VALUE ztewmr1015_1( sammg        = i_ola
+                                                workstation  = i_isla
+                                                vbeln        = i_entrega
+                                                lgpla        = i_ubicacion
+                                                fecha_crea   = sy-datum
+                                                hora_crea    = sy-uzeit
+                                                usuario_crea = sy-uname ).
+
+    MODIFY ztewmr1015_1 FROM es_ztewmr1015_1.
+
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
+
+  METHOD obtener_ubicacion_entrega.
+
+    SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_ubicaciones
+    FROM ztewmr1015_1
+    WHERE sammg       =  @i_ola
+      AND workstation IN @i_r_isla
+      AND vbeln       IN @i_r_entrega.
+
+    IF line_exists( e_ti_ubicaciones[ 1 ] ).
+      r_ubicacion = e_ti_ubicaciones[ 1 ]-lgpla.
+      e_isla      = e_ti_ubicaciones[ 1 ]-workstation.
+    ENDIF.
+
+    "+SLS 24.07.2023: Asignar ubicarion de forma secuencial
+    r_ubicacion = determinar_ubicacion_existente( EXPORTING
+                                                i_ola       = |{ i_ola ALPHA = IN }|
+                                                i_r_isla    = COND #( WHEN i_r_isla IS INITIAL THEN
+                                                                        VALUE #( sign = 'I' option = 'EQ' ( low = e_isla ) )
+                                                                      ELSE
+                                                                        i_r_isla )
+                                                i_numero_almacen = i_numero_almacen
+                                                i_tipo_almacen   = i_tipo_almacen
+                                                i_r_entrega      = i_r_entrega
+                                            IMPORTING
+                                                e_asignar_ubicacion = e_asignar_ubicacion ).
+
+
+  ENDMETHOD.
+
+  METHOD islas_picking.
+    SELECT workstation
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_isla
+    FROM /scwm/tworkst
+    WHERE lgnum EQ @i_lgnum
+      AND lgtyp EQ 'PPK'.
+  ENDMETHOD.
+
+  METHOD obtener_almacen_erp.
+    SELECT SINGLE whnumerp
+    INTO @r_lgnum
+    FROM /scwm/tmapwhnum
+    WHERE whnumwme EQ @i_numero_almacen.
+  ENDMETHOD.
+
+  METHOD eliminar_ola_isla.
+
+    DELETE ztewmr1015_1 FROM TABLE i_ti_ubicaciones.
+
+    IF sy-subrc EQ 0.
+      COMMIT WORK AND WAIT.
+    ELSE.
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD insertar_tipo_cono.
+
+    DATA(es_ztewmr1015_2) = VALUE ztewmr1015_2( matnr   = i_matnr
+                                                ctara   = i_cono
+                                                laeda   = sy-datum
+                                                cputm   = sy-uzeit
+                                                usuario = sy-uname ).
+
+    MODIFY ztewmr1015_2 FROM es_ztewmr1015_2.
+
+    COMMIT WORK.
+
+  ENDMETHOD.
+
+  METHOD obtener_id_externo.
+
+    SELECT SINGLE identificador
+    INTO @r_id_esterno
+    FROM ztewmr1015_3
+    WHERE huident = @i_ump.
+
+  ENDMETHOD.
+
+  METHOD guardar_id_externo.
+
+    DATA(es_ztewmr1015_3) = VALUE ztewmr1015_3( huident       = i_ump
+                                                identificador = i_id_externo
+                                                entrega_erp   = i_entrega_erp
+                                                procesado     = space
+                                                fecha_crea    = sy-datum
+                                                hora_crea     = sy-uzeit
+                                                usuario_crea  = sy-uname ).
+
+    MODIFY ztewmr1015_3 FROM es_ztewmr1015_3.
+
+    r_sy_subrc = sy-subrc.
+
+    IF sy-subrc EQ 0.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD actualizar_id_externo_activo.
+
+    "Verificar si los campos ingresados están vacíos
+    IF i_ump IS INITIAL OR
+       i_id_externo IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    "Actualizar el indicador general para los ID_EXTERNO diferente
+    "de la UMP y cuyo indicador general sea igual a vacío.
+    UPDATE ztewmr1015_3
+       SET procesado = @abap_true
+     WHERE huident <> @i_ump
+       AND identificador = @i_id_externo
+       AND procesado = @abap_false.
+
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD id_externo_existente_activo.
+
+    SELECT SINGLE huident
+      INTO @e_ump
+      FROM ztewmr1015_3
+      WHERE huident      NE @i_ump
+        AND identificador = @i_id_externo
+        AND procesado     = @space.
+
+    IF e_ump IS NOT INITIAL.
+      r_existe = abap_true.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD obtener_conos.
+
+    DATA(lgnum_erp) = obtener_almacen_erp( i_numero_almacen = i_lgnum ).
+
+    SELECT SINGLE conos_despachados
+    INTO @r_gramos_mercados
+    FROM ztewmi1006_1         AS z
+    WHERE z~lgnum      = @lgnum_erp "whnum.whnumerp
+      AND z~rsnum      = @i_entrega_erp "ref.refdocno
+      AND z~rspos      = @i_posicion "substring( ref.refitemno,7,4 )
+      AND z~tipo       = 'N'.
+
+  ENDMETHOD.
+
+  METHOD obtener_gramos_mercados.
+
+    SELECT SUM( orim~nista ) AS gramos_mercados
+    INTO @r_gramos_mercados
+    FROM /scwm/ordim_c AS orim
+    WHERE orim~lgnum  = @i_lgnum "ti.lgnum
+      AND orim~tapos  = '0001'
+      AND orim~rdocid = @i_docid "ti.docid
+      AND orim~ritmid = @i_itemid "ti.itemid
+      AND orim~tostat = 'C'.
+
+  ENDMETHOD.
+
+  METHOD obtener_tareas_pendientes.
+
+    SELECT orim~tanum, orim~vlenr, orim~vsolm, orim~vsola, orim~altme
+      INTO  CORRESPONDING FIELDS OF TABLE @r_ti_tareas
+      FROM /scwm/ordim_o AS orim
+      WHERE orim~lgnum   EQ @i_lgnum
+        AND orim~flghuto EQ @space
+        AND orim~rdocid  EQ @i_docid
+        AND orim~ritmid  EQ @i_itemid
+*      AND orim~procty  IN @i_r_procty
+        .
+
+  ENDMETHOD.
+
+  METHOD obtener_pendientes_ola.
+
+    SELECT estado~docid, estado~status_value
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_estados
+    FROM ztewme1029_1 AS z
+    JOIN /scdl/db_proci_o AS doc_ewm ON doc_ewm~docno = z~entrega_ewm
+    JOIN /scdl/db_status AS estado ON estado~docid = doc_ewm~docid
+    WHERE z~almacen            = @i_lgnum
+      AND z~ola                = @i_ola
+      AND estado~status_type   = 'DPI'
+      AND estado~status_value NE '9'.
+
+  ENDMETHOD.
+
+  METHOD determinar_ubicacion_existente.
+
+    DATA: r_ubicacion_bd             TYPE RANGE OF ztewmr1015_1-lgpla,
+          ubicacion_asiganda_entrega TYPE flag,
+          ti_ubicacion_isla          LIKE c_ti_ubicacion_isla.
+
+    e_asignar_ubicacion = abap_false.
+
+    "Consultar si para la Ola y la Isla ya existen ubicaciones asigandas
+    SELECT
+    FROM ztewmr1015_1
+    FIELDS sammg, workstation,lgpla, vbeln
+    WHERE sammg = @i_ola
+    AND workstation in @i_r_isla
+    INTO TABLE @DATA(ti_ubicacion_bd).
+
+    "Si encuentra elimina las que ya fueron asignadas
+    IF ti_ubicacion_bd IS NOT INITIAL.
+      "Cuando se envia la entrega se debe determinar si la entrega ya esta en la tabla ztewmr1015_1,
+      "de ser asi se debe asignar la misma ubicacion
+      IF i_r_entrega IS NOT INITIAL .
+        LOOP AT ti_ubicacion_bd TRANSPORTING NO FIELDS WHERE vbeln in i_r_entrega.
+        ENDLOOP.
+
+        IF sy-subrc IS INITIAL.
+          DELETE ti_ubicacion_bd WHERE vbeln NOT IN i_r_entrega.
+          ubicacion_asiganda_entrega = abap_true.
+        ENDIF.
+      ENDIF.
+
+      zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_ti                           = ti_ubicacion_bd
+          i_nombre_columna               = 'LGPLA'
+        CHANGING
+          c_ti_rango                     = r_ubicacion_bd ).
+
+      IF c_ti_ubicacion_isla IS SUPPLIED.
+        ti_ubicacion_isla = c_ti_ubicacion_isla.
+      ELSE.
+        ti_ubicacion_isla = obtener_ubicaciones_isla( i_isla           = i_r_isla[ 1 ]-low
+                                                      i_numero_almacen = i_numero_almacen
+                                                      i_tipo_almacen   = i_tipo_almacen ).
+      ENDIF.
+
+      "Se descartan las ubicaciones ya asignados y se recupera la ultima ubicación disponible
+      SORT ti_ubicacion_isla BY srt_nr ASCENDING.
+      "+SLS 28072023 : Proyecto materia prima - determinar la misma ubicación cuando la entrega ya existe en
+      IF ubicacion_asiganda_entrega = abap_true.
+        DELETE ti_ubicacion_isla WHERE lgpla NOT IN r_ubicacion_bd.
+      ELSE.
+        DELETE ti_ubicacion_isla WHERE lgpla IN r_ubicacion_bd.
+      ENDIF.
+
+      r_ubicacion = ti_ubicacion_isla[ 1 ]-lgpla.
+
+      IF c_ti_ubicacion_isla IS SUPPLIED.
+        c_ti_ubicacion_isla = ti_ubicacion_isla.
+      ENDIF.
+
+    ENDIF.
+
+    "Determinar si la ubicacion se debe actualizar en la tabla ztewmr1015_1
+    IF i_r_entrega IS NOT INITIAL.
+      SELECT
+      FROM ztewmr1015_1
+      FIELDS sammg, workstation,lgpla, vbeln
+      WHERE sammg = @i_ola
+      AND workstation in @i_r_isla
+      AND vbeln       in @i_r_entrega
+      AND lgpla       = @r_ubicacion
+      INTO TABLE @ti_ubicacion_bd.
+
+      IF sy-subrc IS NOT INITIAL.
+        e_asignar_ubicacion = abap_true.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclewmr1015_dao DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    TYPES: gtp_ti_ctara TYPE STANDARD TABLE OF ztppi1024_1 WITH DEFAULT KEY,
+           BEGIN OF gtp_es_ubicacion_isla,
+             lgnum  TYPE /scwm/lgnum,
+             lgpla  TYPE /scwm/lgpla,
+             lgtyp  TYPE /scwm/lgtyp,
+             srt_nr TYPE /scwm/de_sort,
+           END OF gtp_es_ubicacion_isla,
+           gtp_ti_ubicacion_isla TYPE STANDARD TABLE OF gtp_es_ubicacion_isla WITH EMPTY KEY,
+           BEGIN OF gtp_es_islas,
+             workstation TYPE /scwm/de_workstation,
+           END OF gtp_es_islas,
+           gtp_ti_islas       TYPE STANDARD TABLE OF gtp_es_islas WITH EMPTY KEY,
+           gtp_r_procesos     TYPE RANGE OF /scwm/de_procty,
+           gtp_r_isla         TYPE RANGE OF /scwm/de_workstation,
+           gtp_ti_ubicaciones TYPE STANDARD TABLE OF ztewmr1015_1 WITH DEFAULT KEY,
+           gtp_r_tanum        TYPE RANGE OF /scwm/ordim_o-tanum,
+           gtp_ti_tareas      TYPE STANDARD TABLE OF /scwm/ordim_o WITH DEFAULT KEY,
+           gtp_ti_estados     TYPE STANDARD TABLE OF /scdl/db_status  WITH DEFAULT KEY.
+
+    DATA: g_ti_ola TYPE zclewmr1015_distribuirmatprima=>gtp_ti_ola.
+
+    CLASS-METHODS:
+      almacen_del_usuario
+        RETURNING
+          VALUE(r_lgnum) TYPE /scwm/lgnum,
+      tipos_conos
+        RETURNING
+          VALUE(r_ti_ctara) TYPE gtp_ti_ctara,
+      islas_picking
+        IMPORTING
+          i_lgnum          TYPE /scwm/lgnum
+        RETURNING
+          VALUE(r_ti_isla) TYPE gtp_ti_islas.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_sammg    TYPE sammg           OPTIONAL
+          i_r_procty TYPE gtp_r_procesos  OPTIONAL
+          i_procty   TYPE /scwm/de_procty OPTIONAL,
+      obtener_ump
+        IMPORTING
+          i_ump             TYPE /scwm/de_huident
+        RETURNING
+          VALUE(r_es_huhdr) TYPE /scwm/huhdr,
+      obtener_tareas_ump
+        IMPORTING
+          i_lgnum             TYPE /scwm/lgnum
+          i_ump               TYPE /scwm/de_huident
+          i_flghuto           TYPE /scwm/ordim_o-flghuto DEFAULT space
+          i_r_tanum           TYPE gtp_r_tanum OPTIONAL
+*          i_procty            TYPE /scwm/de_procty
+          i_r_procty          TYPE gtp_r_procesos OPTIONAL
+          i_tipo_almacen      TYPE zzedlow OPTIONAL "+SLS 25.07.203 - Proyecto materia prima
+        RETURNING
+          VALUE(r_es_ordim_o) TYPE /scwm/ordim_o ,
+      obtener_isla
+        IMPORTING
+          i_lgnum             TYPE /scwm/lgnum
+          i_isla              TYPE /scwm/de_workstation
+        RETURNING
+          VALUE(r_es_tworkst) TYPE /scwm/tworkst,
+      obtener_peso_cono
+        IMPORTING
+          i_ctara       TYPE zedctara
+        RETURNING
+          VALUE(r_peso) TYPE zedptara,
+      determinar_ubicacion_existente
+        IMPORTING
+          VALUE(i_ola)            TYPE sammg
+          VALUE(i_r_isla)         TYPE gtp_r_isla
+          VALUE(i_numero_almacen) TYPE /scwm/lgnum
+          VALUE(i_tipo_almacen)   TYPE zzedlow
+          VALUE(i_r_entrega)      TYPE fsh_vbeln_ranges_tab OPTIONAL
+        EXPORTING
+          e_asignar_ubicacion     TYPE flag
+        CHANGING
+          c_ti_ubicacion_isla     TYPE zclewmr1015_dao=>gtp_ti_ubicacion_isla OPTIONAL
+        RETURNING
+          VALUE(r_ubicacion)      TYPE  /scwm/lgpla,
+      obtener_datos_ola
+        IMPORTING
+          VALUE(i_mandt)    TYPE mandt
+          VALUE(i_sammg)    TYPE sammg
+          VALUE(i_r_procty) TYPE gtp_r_procesos
+          VALUE(i_procty)   TYPE /scwm/de_procty
+          VALUE(i_atinn)    TYPE atinn
+        EXPORTING
+          VALUE(e_ti_ola)   TYPE zclewmr1015_distribuirmatprima=>gtp_ti_ola,
+      actualizar_conos_despachados
+        IMPORTING
+          i_numero_almacen  TYPE /scwm/lgnum
+          i_entrega         TYPE vbeln
+          i_posicion        TYPE /scdl/dl_itemno
+          i_cantidad_conos  TYPE ztewmi1006_1-conos_despachados
+        RETURNING
+          VALUE(r_sy_subrc) TYPE sy-subrc,
+      obtener_ubicacion_entrega
+        IMPORTING
+          i_ola                   TYPE sammg
+          i_r_isla                TYPE gtp_r_isla OPTIONAL
+          i_r_entrega             TYPE fsh_vbeln_ranges_tab OPTIONAL
+          VALUE(i_numero_almacen) TYPE /scwm/lgnum OPTIONAL
+          VALUE(i_tipo_almacen)   TYPE zzedlow OPTIONAL
+        EXPORTING
+          e_isla                  TYPE /scwm/de_workstation
+          e_ti_ubicaciones        TYPE gtp_ti_ubicaciones
+          e_asignar_ubicacion     TYPE flag
+        RETURNING
+          VALUE(r_ubicacion)      TYPE lgpla,
+      obtener_ubicaciones_isla
+        IMPORTING
+          i_isla                     TYPE /scwm/de_workstation
+          i_numero_almacen           TYPE /scwm/lgnum
+          i_tipo_almacen             TYPE  zzedlow
+        RETURNING
+          VALUE(r_ti_ubicacion_isla) TYPE gtp_ti_ubicacion_isla,
+
+      obtener_ubicacion_verif
+        IMPORTING
+          i_numero_almacen         TYPE /scwm/lgnum
+          i_ubicacion              TYPE /scwm/lgpla
+        RETURNING
+          VALUE(r_ubicacion_verif) TYPE /scwm/de_verify,
+
+      insertar_ubicacion_entrega
+        IMPORTING
+          i_ola       TYPE sammg
+          i_isla      TYPE /scwm/de_workstation
+          i_entrega   TYPE vbeln
+          i_ubicacion TYPE lgpla,
+      obtener_almacen_erp
+        IMPORTING
+          i_numero_almacen TYPE /scwm/lgnum
+        RETURNING
+          VALUE(r_lgnum)   TYPE lgnum,
+      eliminar_ola_isla
+        IMPORTING
+          i_ti_ubicaciones TYPE gtp_ti_ubicaciones,
+      insertar_tipo_cono
+        IMPORTING
+          i_matnr TYPE matnr
+          i_cono  TYPE zedctara,
+      obtener_id_externo
+        IMPORTING
+          i_ump               TYPE /scwm/de_huident
+        RETURNING
+          VALUE(r_id_esterno) TYPE ztewmr1015_3-identificador,
+      guardar_id_externo
+        IMPORTING
+          i_ump             TYPE /scwm/de_huident
+          i_entrega_erp     TYPE vbeln_vl
+          i_id_externo      TYPE ztewmr1015_3-identificador
+        RETURNING
+          VALUE(r_sy_subrc) TYPE sy-subrc,
+      actualizar_id_externo_activo
+        IMPORTING
+          i_ump        TYPE /scwm/de_huident
+          i_id_externo TYPE ztewmr1015_3-identificador,
+      id_externo_existente_activo
+        IMPORTING
+          i_ump           TYPE /scwm/de_huident
+          i_id_externo    TYPE ztewmr1015_3-identificador
+        EXPORTING
+          e_ump           TYPE /scwm/de_huident
+        RETURNING
+          VALUE(r_existe) TYPE flag,
+      obtener_conos
+        IMPORTING
+          i_lgnum                  TYPE /scwm/lgnum
+          i_entrega_erp            TYPE vbeln_vl
+          i_posicion               TYPE char4 "ztewmi1006_1-rspos
+        RETURNING
+          VALUE(r_gramos_mercados) TYPE ztewmi1006_1-conos_despachados,
+      obtener_gramos_mercados
+        IMPORTING
+          i_lgnum                  TYPE /scwm/lgnum
+          i_docid                  TYPE /scwm/ordim_c-rdocid
+          i_itemid                 TYPE /scwm/ordim_c-ritmid
+        RETURNING
+          VALUE(r_gramos_mercados) TYPE /scwm/ltap_nista,
+      obtener_tareas_pendientes
+        IMPORTING
+          i_lgnum            TYPE /scwm/lgnum
+          i_docid            TYPE /scwm/ordim_c-rdocid
+          i_itemid           TYPE /scwm/ordim_c-ritmid
+        RETURNING
+          VALUE(r_ti_tareas) TYPE gtp_ti_tareas,
+      obtener_pendientes_ola
+        IMPORTING
+          i_lgnum             TYPE /scwm/lgnum
+          i_ola               TYPE sammg
+        RETURNING
+          VALUE(r_ti_estados) TYPE gtp_ti_estados.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+ENDCLASS.
+
+CLASS zclewmr1015_dao IMPLEMENTATION.
+
+  METHOD constructor.
+
+*    obtener_datos_ola( EXPORTING
+*                           i_mandt     = sy-mandt "'120'
+*                           i_sammg     = i_sammg
+*                           i_r_procty  = i_r_procty
+*                           i_procty    = i_procty
+*                      IMPORTING
+*                            e_ti_ola   = g_ti_ola ).
+
+  ENDMETHOD.
+
+  METHOD obtener_datos_ola BY DATABASE PROCEDURE
+                              FOR HDB LANGUAGE SQLSCRIPT
+                              OPTIONS READ-ONLY
+                              USING vbss /scdl/db_refdoc /scdl/db_proci_o makt /scwm/tmapwhnum ztewmi1006_1 ztewmr1015_2 ztppi1024_1 /scwm/ordim_o
+                                    /scwm/huhdr inob ausp mara wrf_charvalt lips.
+
+    ti_data      = SELECT DISTINCT vbss.mandt, proci.productid AS matid, orim.batchid AS batchid, proci.productno AS matnr,makt.maktx,proci.batchno AS charg,
+                                   proci.docno, proci.itemno, vbss.vbeln, substring( ref.refitemno,7,4 ) AS posnr, proci.uom AS medida , z.aufnr AS orden, z.maquina , z.cantidad AS cant_necesaria,
+                                   z.conos, z2.ctara AS tipo_cono, z3.ptara AS peso_conos, orim.vsolm AS cant_tomar,
+*                                   proci.qty AS cant_tomar,
+                                   proci."/SCWM/WHNO" AS lgnum, proci.docid, proci.itemid,
+                                   z.conos_despachados, proci.uom AS altme, proci.qty AS reqqty, proci.qty AS anfme, proci.stock_category AS cat, proci.stock_owner AS owner,
+                                   proci.stock_owner_role AS owner_role, proci.entitled, proci.entitled_role, orim.vlenr, z.cant_necesaria AS cant_entrega
+                    FROM vbss
+                    JOIN "/SCDL/DB_REFDOC"    AS ref   ON ref.mandt   = vbss.mandt AND ref.refdoccat  = 'ERP'                          AND ref.refdocno = vbss.vbeln
+                                                                                   AND ref.refitemno <> '0'
+                    JOIN "/SCDL/DB_PROCI_O"   AS proci ON proci.mandt = vbss.mandt AND proci.docid    = ref.docid                      AND proci.itemid = ref.itemid
+                    JOIN "/SCWM/TMAPWHNUM"    AS whnum ON whnum.mandt = vbss.mandt AND whnum.whnumwme = proci."/SCWM/WHNO"
+                    JOIN ztewmi1006_1         AS z     ON z.mandt     = vbss.mandt AND z.lgnum        = whnum.whnumerp                 AND z.rsnum      = ref.refdocno
+                                                                                   AND z.rspos        = substring( ref.refitemno,7,4 ) AND z.tipo       = 'N'
+                    JOIN makt                          ON makt.mandt  = vbss.mandt AND makt.matnr     = proci.productno                AND makt.spras   = 'S'
+*                    JOIN "/SCWM/AQUA"         AS aqua  ON aqua.mandt  = vbss.mandt AND aqua.lgnum     = proci."/SCWM/WHNO"             AND aqua.matid   = proci.productid
+*                                                                                   AND aqua.charg     = proci.batchno
+                    LEFT JOIN ztewmr1015_2    AS z2    ON z2.mandt    = vbss.mandt AND z2.matnr       = proci.productno
+                    LEFT JOIN ztppi1024_1     AS z3    ON z3.mandt    = vbss.mandt AND z3.ctara       = z2.ctara
+                    JOIN "/SCWM/ORDIM_O"      AS orim  ON orim.mandt  = vbss.mandt AND orim.lgnum     = proci."/SCWM/WHNO"             AND orim.rdocid  = proci.docid
+                                                                                   AND orim.ritmid    = proci.itemid                   AND orim.flghuto = ''
+                                                                                   AND orim.procty    = :i_procty
+                    WHERE vbss.mandt = :i_mandt
+                      AND vbss.sammg = :i_sammg;
+
+
+    ti_data_pendiente = SELECT ti.*, COUNT( orim.vlenr ) AS ordenes_pendientes, orim.tanum, orim.dstgrp, orim.tostat, orim.procty, orim.vltyp
+                        FROM :ti_data AS ti
+                        LEFT JOIN "/SCWM/ORDIM_O" AS orim ON orim.mandt = ti.mandt AND orim.lgnum  = ti.lgnum   AND orim.rdocid = ti.docid   AND orim.ritmid = ti.itemid AND orim.flghuto = ''
+                                                                                   AND orim.procty = :i_procty  AND ti.vlenr    = orim.vlenr
+                        GROUP BY ti.mandt, ti.matid, ti.batchid, ti.matnr, ti.maktx, ti.charg, ti.docno, ti.itemno, ti.conos_despachados,
+                                 ti.vbeln, ti.medida, ti.cant_necesaria, ti.orden, ti.maquina, ti.conos, ti.tipo_cono, ti.posnr,
+                                 ti.peso_conos, ti.cant_tomar, ti.lgnum, ti.docid, ti.itemid, orim.vlenr, orim.tanum,ti.altme,ti.reqqty,ti.anfme,ti.cat,
+                                 ti.owner,ti.owner_role,ti.entitled,ti.entitled_role,orim.dstgrp, orim.tostat, orim.procty, orim.vltyp, ti.vlenr, ti.cant_entrega;
+
+    ti_data_mercada = SELECT ti.*, 0 AS gramos_mercados--SUM( orim.nista ) AS gramos_mercados
+                        FROM :ti_data_pendiente AS ti
+*                        LEFT JOIN "/SCWM/ORDIM_C" AS orim ON orim.mandt = ti.mandt AND orim.lgnum = ti.lgnum AND orim.tapos  = '0001' AND orim.rdocid = ti.docid
+*                                                         AND orim.ritmid = ti.itemid AND orim.tostat = 'C'
+*                        GROUP BY ti.mandt, ti.matid, ti.batchid, ti.matnr, ti.maktx, ti.charg, ti.docno, ti.itemno, ti.vlenr, ti.posnr,
+*                                 ti.vbeln, ti.medida, ti.cant_necesaria, ti.orden, ti.maquina, ti.conos, ti.tipo_cono, ti.tanum, ti.ordenes_pendientes,
+*                                 ti.peso_conos, ti.cant_tomar, orim.vlenr, ti.lgnum, ti.docid, ti.itemid, ti.conos_despachados,ti.altme,ti.reqqty,ti.anfme,ti.cat,
+*                                 ti.owner,ti.owner_role,ti.entitled,ti.entitled_role,ti.dstgrp, ti.tostat, ti.procty
+                                 ;
+
+    ti_materiales = SELECT DISTINCT datos.matnr, inob.objek, inob.cuobj, ausp.atwrt
+                        FROM :ti_data AS datos
+                        JOIN inob ON inob.mandt = datos.mandt AND inob.objek = datos.matnr
+                        JOIN ausp ON inob.mandt = datos.mandt AND inob.cuobj = ausp.objek AND ausp.atinn = :i_atinn;
+
+    --+SLS 06.06.2023:Agregar datos Pack and Hold{
+    ti_reservas_completa =
+    SELECT DISTINCT _reserva_suministro.mandt, _reserva_suministro.rsnum, _reserva_suministro.tipo,
+                    _entrega_posicion.vbeln, _reserva_suministro.fecha_hora_inicio_tejido, _reserva_suministro.marca_ph
+    FROM :ti_data_mercada AS _data_mercada
+    INNER JOIN lips AS _entrega_posicion ON
+    _data_mercada.mandt = _entrega_posicion.mandt
+    AND _data_mercada.vbeln = _entrega_posicion.vbeln
+    INNER JOIN ztewmi1006_1 as _reserva_suministro ON
+    _reserva_suministro.mandt = _entrega_posicion.mandt
+    AND _reserva_suministro.rsnum = _entrega_posicion.rsnum
+    AND tipo = 'R';
+
+    ti_reservas = SELECT * FROM ( SELECT ROW_NUMBER ( ) OVER( PARTITION BY rsnum, tipo, vbeln, marca_ph
+                                  ORDER BY rsnum, tipo, vbeln, fecha_hora_inicio_tejido DESC )
+                                AS _t_reserva, * FROM :ti_reservas_completa ) WHERE _t_reserva = 1;
+    --}
+    e_ti_ola = SELECT DISTINCT '' AS marcar,
+                               ti.lgnum,
+                               ti.tanum,
+                               ti.dstgrp,
+                               hu.guid_hu,
+                               ti.vlenr AS ump,
+                               ti.tostat AS estado,
+                               ti.procty AS proceso,
+                               0 AS cant_disponible,
+                               ti.matid,
+                               ti.batchid,
+                               ti.altme,
+                               ti.reqqty,
+                               ti.anfme,
+                               ti.cat,
+                               ti.owner,
+                               ti.owner_role,
+                               ti.entitled,
+                               ti.entitled_role,
+                               ti.matnr,
+                               mara.color,
+                               mara.color_atinn,
+                               ti.maktx,
+                               wrf_charvalt.atwtb AS des_color,
+                               ti.charg,
+                               encona.atwrt AS encona,
+                               ti.docid,
+                               ti.itemid,
+                               ti.docno,
+                               ti.itemno,
+                               ti.vbeln,
+                               ti.posnr,
+                               ti.orden,
+                               ti.maquina,
+*                               CASE
+*                               WHEN ti.gramos_mercados IS NOT NULL THEN
+*                                 ti.cant_necesaria - ti.gramos_mercados
+*                               ELSE
+                                 ti.cant_necesaria,
+*                               END AS cant_necesaria,
+                               ti.medida,
+                               ti.cant_tomar,
+                               0 AS mostrar_cant_tomar,
+                               ti.conos,
+                               ti.peso_conos,
+                               ti.tipo_cono,
+                               0 AS conos_despachar,
+                               0 AS peso_bascula,
+                               0 AS peso_neto,
+                               ti.gramos_mercados,
+                               0  AS mostrar_gramos_mercados,
+                               '' AS ump_creada,
+                               '' AS ump_destino_out,
+                               '' AS id_externo,
+                               '' AS original_id_externo,
+                               '' AS id_ump_creada,
+                               '' AS confirmada,
+                               '' AS ubicacion,
+                               ti.conos_despachados,
+                               ti.ordenes_pendientes,
+                               0 AS gramos_um,
+                               0 AS diferencia,
+                               '' AS ajustar_um,
+                               ti.cant_entrega,
+                               --+SLS 01.07.2023 : Proyecto materia prima{
+                               ti.vltyp,
+                               _reserva.fecha_hora_inicio_tejido,
+                               CASE
+                               WHEN _reserva.marca_ph = '1' THEN
+                                '@E8@ Pack and Hold'
+                               ELSE
+                                 ''
+                               END AS marca_ph
+                               --}
+                FROM :ti_data_mercada AS ti
+                INNER JOIN "/SCWM/HUHDR" AS hu ON hu.mandt = ti.mandt AND hu.huident = ti.vlenr
+                LEFT JOIN :ti_materiales AS encona ON encona.matnr = ti.matnr
+                LEFT JOIN mara ON mara.mandt = ti.mandt AND mara.matnr = ti.matnr
+                LEFT JOIN wrf_charvalt ON
+                wrf_charvalt.mandt = ti.mandt AND wrf_charvalt.atinn = mara.color_atinn
+                AND wrf_charvalt.atwrt = mara.color AND wrf_charvalt.spras = 'S'
+                LEFT JOIN :ti_reservas AS _reserva ON --SLS 06.06.2023
+                _reserva.mandt = ti.mandt AND _reserva.vbeln = ti.vbeln;
+
+  ENDMETHOD.
+
+  METHOD obtener_ump.
+    SELECT SINGLE guid_hu, huident
+    INTO CORRESPONDING FIELDS OF @r_es_huhdr
+    FROM /scwm/huhdr
+    WHERE huident EQ @i_ump.
+  ENDMETHOD.
+
+  METHOD obtener_isla.
+    SELECT SINGLE *
+    INTO CORRESPONDING FIELDS OF @r_es_tworkst
+    FROM /scwm/tworkst
+    WHERE lgnum       EQ @i_lgnum
+      AND workstation EQ @i_isla.
+  ENDMETHOD.
+
+  METHOD obtener_tareas_ump.
+    SELECT SINGLE orim~lgnum, orim~tanum, orim~vlenr, orim~vsolm, orim~meins
+    INTO  CORRESPONDING FIELDS OF @r_es_ordim_o
+    FROM /scwm/ordim_o AS orim
+    WHERE orim~lgnum   EQ @i_lgnum
+      AND orim~tanum   IN @i_r_tanum
+*      AND orim~vlenr   EQ @i_ump
+      AND ( orim~vlenr EQ @i_ump OR orim~nlenr EQ @i_ump )
+      AND orim~flghuto EQ @i_flghuto "@space
+*      AND orim~procty  EQ @i_procty
+      AND orim~procty  IN @i_r_procty
+      .
+  ENDMETHOD.
+
+  METHOD almacen_del_usuario.
+    SELECT SINGLE lgnum
+    INTO @r_lgnum
+    FROM /scwm/user
+    WHERE uname EQ @sy-uname.
+  ENDMETHOD.
+
+  METHOD tipos_conos.
+    SELECT *
+    FROM ztppi1024_1
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_ctara.
+  ENDMETHOD.
+
+  METHOD obtener_peso_cono.
+    SELECT SINGLE ptara
+    INTO @r_peso
+    FROM ztppi1024_1
+    WHERE ctara EQ @i_ctara.
+  ENDMETHOD.
+
+  METHOD actualizar_conos_despachados.
+
+    DATA(almacen_erp) = obtener_almacen_erp( i_numero_almacen = i_numero_almacen ).
+    DATA(longitud)    = strlen( i_posicion ) - 4.
+
+    SELECT SINGLE ( conos_despachados + @i_cantidad_conos ) AS cant_conos
+    INTO @DATA(cant_conos)
+    FROM ztewmi1006_1
+    WHERE lgnum = @almacen_erp
+      AND rsnum = @i_entrega
+      AND rspos = @i_posicion+longitud(4)
+      AND tipo  = 'N'.
+
+*    DATA(cantidad_conos) = cant_conos + i_cantidad_conos.
+
+    UPDATE ztewmi1006_1 SET conos_despachados = @cant_conos WHERE lgnum = @almacen_erp
+                                                              AND rsnum = @i_entrega
+                                                              AND rspos = @i_posicion+longitud(4)
+                                                              AND tipo  = 'N'.
+*    UPDATE ztewmi1006_1 SET conos_despachados = @i_cantidad_conos WHERE lgnum = @almacen_erp
+*                                                                    AND rsnum = @i_entrega
+*                                                                    AND rspos = @i_posicion+longitud(4)
+*                                                                    AND tipo  = 'N'.
+
+    r_sy_subrc = sy-subrc.
+    IF sy-subrc EQ 0.
+      COMMIT WORK AND WAIT.
+    ELSE.
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD obtener_ubicaciones_isla.
+
+    SELECT lagps~lgnum, lagps~lgpla, lagps~lgtyp, lagps~srt_nr
+          FROM /scwm/tworkst AS tworkst
+            INNER JOIN /scwm/lagp  AS lagp  ON lagp~lgnum  = tworkst~lgnum AND lagp~lgtyp  = @i_tipo_almacen AND lagp~lgber     = tworkst~o_section AND lagp~skzue = @space
+            INNER JOIN /scwm/lagps AS lagps ON lagps~lgnum = lagp~lgnum    AND lagps~lgpla = lagp~lgpla      AND lagps~act_type = 'PICK'
+        WHERE tworkst~lgnum       = @i_numero_almacen
+          AND tworkst~workstation = @i_isla
+        INTO CORRESPONDING FIELDS OF TABLE @r_ti_ubicacion_isla.
+
+  ENDMETHOD.
+
+  METHOD obtener_ubicacion_verif.
+
+    CLEAR r_ubicacion_verif.
+
+    IF i_numero_almacen IS INITIAL OR
+       i_ubicacion IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    SELECT SINGLE FROM /scwm/lagp
+    FIELDS verif
+     WHERE lgnum = @i_numero_almacen
+       AND lgpla = @i_ubicacion
+      INTO @r_ubicacion_verif.
+
+  ENDMETHOD.
+
+  METHOD insertar_ubicacion_entrega.
+
+    DATA(es_ztewmr1015_1) = VALUE ztewmr1015_1( sammg        = i_ola
+                                                workstation  = i_isla
+                                                vbeln        = i_entrega
+                                                lgpla        = i_ubicacion
+                                                fecha_crea   = sy-datum
+                                                hora_crea    = sy-uzeit
+                                                usuario_crea = sy-uname ).
+
+    MODIFY ztewmr1015_1 FROM es_ztewmr1015_1.
+
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
+
+  METHOD obtener_ubicacion_entrega.
+
+    SELECT *
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_ubicaciones
+    FROM ztewmr1015_1
+    WHERE sammg       =  @i_ola
+      AND workstation IN @i_r_isla
+      AND vbeln       IN @i_r_entrega.
+
+    IF line_exists( e_ti_ubicaciones[ 1 ] ).
+      r_ubicacion = e_ti_ubicaciones[ 1 ]-lgpla.
+      e_isla      = e_ti_ubicaciones[ 1 ]-workstation.
+    ENDIF.
+
+    "+SLS 24.07.2023: Asignar ubicarion de forma secuencial
+    r_ubicacion = determinar_ubicacion_existente( EXPORTING
+                                                i_ola       = |{ i_ola ALPHA = IN }|
+                                                i_r_isla    = COND #( WHEN i_r_isla IS INITIAL THEN
+                                                                        VALUE #( sign = 'I' option = 'EQ' ( low = e_isla ) )
+                                                                      ELSE
+                                                                        i_r_isla )
+                                                i_numero_almacen = i_numero_almacen
+                                                i_tipo_almacen   = i_tipo_almacen
+                                                i_r_entrega      = i_r_entrega
+                                            IMPORTING
+                                                e_asignar_ubicacion = e_asignar_ubicacion ).
+
+
+  ENDMETHOD.
+
+  METHOD islas_picking.
+    SELECT workstation
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_isla
+    FROM /scwm/tworkst
+    WHERE lgnum EQ @i_lgnum
+      AND lgtyp EQ 'PPK'.
+  ENDMETHOD.
+
+  METHOD obtener_almacen_erp.
+    SELECT SINGLE whnumerp
+    INTO @r_lgnum
+    FROM /scwm/tmapwhnum
+    WHERE whnumwme EQ @i_numero_almacen.
+  ENDMETHOD.
+
+  METHOD eliminar_ola_isla.
+
+    DELETE ztewmr1015_1 FROM TABLE i_ti_ubicaciones.
+
+    IF sy-subrc EQ 0.
+      COMMIT WORK AND WAIT.
+    ELSE.
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD insertar_tipo_cono.
+
+    DATA(es_ztewmr1015_2) = VALUE ztewmr1015_2( matnr   = i_matnr
+                                                ctara   = i_cono
+                                                laeda   = sy-datum
+                                                cputm   = sy-uzeit
+                                                usuario = sy-uname ).
+
+    MODIFY ztewmr1015_2 FROM es_ztewmr1015_2.
+
+    COMMIT WORK.
+
+  ENDMETHOD.
+
+  METHOD obtener_id_externo.
+
+    SELECT SINGLE identificador
+    INTO @r_id_esterno
+    FROM ztewmr1015_3
+    WHERE huident = @i_ump.
+
+  ENDMETHOD.
+
+  METHOD guardar_id_externo.
+
+    DATA(es_ztewmr1015_3) = VALUE ztewmr1015_3( huident       = i_ump
+                                                identificador = i_id_externo
+                                                entrega_erp   = i_entrega_erp
+                                                procesado     = space
+                                                fecha_crea    = sy-datum
+                                                hora_crea     = sy-uzeit
+                                                usuario_crea  = sy-uname ).
+
+    MODIFY ztewmr1015_3 FROM es_ztewmr1015_3.
+
+    r_sy_subrc = sy-subrc.
+
+    IF sy-subrc EQ 0.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD actualizar_id_externo_activo.
+
+    "Verificar si los campos ingresados están vacíos
+    IF i_ump IS INITIAL OR
+       i_id_externo IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    "Actualizar el indicador general para los ID_EXTERNO diferente
+    "de la UMP y cuyo indicador general sea igual a vacío.
+    UPDATE ztewmr1015_3
+       SET procesado = @abap_true
+     WHERE huident <> @i_ump
+       AND identificador = @i_id_externo
+       AND procesado = @abap_false.
+
+    IF sy-subrc = 0.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD id_externo_existente_activo.
+
+    SELECT SINGLE huident
+      INTO @e_ump
+      FROM ztewmr1015_3
+      WHERE huident      NE @i_ump
+        AND identificador = @i_id_externo
+        AND procesado     = @space.
+
+    IF e_ump IS NOT INITIAL.
+      r_existe = abap_true.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD obtener_conos.
+
+    DATA(lgnum_erp) = obtener_almacen_erp( i_numero_almacen = i_lgnum ).
+
+    SELECT SINGLE conos_despachados
+    INTO @r_gramos_mercados
+    FROM ztewmi1006_1         AS z
+    WHERE z~lgnum      = @lgnum_erp "whnum.whnumerp
+      AND z~rsnum      = @i_entrega_erp "ref.refdocno
+      AND z~rspos      = @i_posicion "substring( ref.refitemno,7,4 )
+      AND z~tipo       = 'N'.
+
+  ENDMETHOD.
+
+  METHOD obtener_gramos_mercados.
+
+    SELECT SUM( orim~nista ) AS gramos_mercados
+    INTO @r_gramos_mercados
+    FROM /scwm/ordim_c AS orim
+    WHERE orim~lgnum  = @i_lgnum "ti.lgnum
+      AND orim~tapos  = '0001'
+      AND orim~rdocid = @i_docid "ti.docid
+      AND orim~ritmid = @i_itemid "ti.itemid
+      AND orim~tostat = 'C'.
+
+  ENDMETHOD.
+
+  METHOD obtener_tareas_pendientes.
+
+    SELECT orim~tanum, orim~vlenr, orim~vsolm, orim~vsola, orim~altme
+      INTO  CORRESPONDING FIELDS OF TABLE @r_ti_tareas
+      FROM /scwm/ordim_o AS orim
+      WHERE orim~lgnum   EQ @i_lgnum
+        AND orim~flghuto EQ @space
+        AND orim~rdocid  EQ @i_docid
+        AND orim~ritmid  EQ @i_itemid
+*      AND orim~procty  IN @i_r_procty
+        .
+
+  ENDMETHOD.
+
+  METHOD obtener_pendientes_ola.
+
+    SELECT estado~docid, estado~status_value
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_estados
+    FROM ztewme1029_1 AS z
+    JOIN /scdl/db_proci_o AS doc_ewm ON doc_ewm~docno = z~entrega_ewm
+    JOIN /scdl/db_status AS estado ON estado~docid = doc_ewm~docid
+    WHERE z~almacen            = @i_lgnum
+      AND z~ola                = @i_ola
+      AND estado~status_type   = 'DPI'
+      AND estado~status_value NE '9'.
+
+  ENDMETHOD.
+
+  METHOD determinar_ubicacion_existente.
+
+    DATA: r_ubicacion_bd             TYPE RANGE OF ztewmr1015_1-lgpla,
+          ubicacion_asiganda_entrega TYPE flag,
+          ti_ubicacion_isla          LIKE c_ti_ubicacion_isla.
+
+    e_asignar_ubicacion = abap_false.
+
+    "Consultar si para la Ola y la Isla ya existen ubicaciones asigandas
+    SELECT
+    FROM ztewmr1015_1
+    FIELDS sammg, workstation,lgpla, vbeln
+    WHERE sammg = @i_ola
+    AND workstation in @i_r_isla
+    INTO TABLE @DATA(ti_ubicacion_bd).
+
+    "Si encuentra elimina las que ya fueron asignadas
+    IF ti_ubicacion_bd IS NOT INITIAL.
+      "Cuando se envia la entrega se debe determinar si la entrega ya esta en la tabla ztewmr1015_1,
+      "de ser asi se debe asignar la misma ubicacion
+      IF i_r_entrega IS NOT INITIAL .
+        LOOP AT ti_ubicacion_bd TRANSPORTING NO FIELDS WHERE vbeln in i_r_entrega.
+        ENDLOOP.
+
+        IF sy-subrc IS INITIAL.
+          DELETE ti_ubicacion_bd WHERE vbeln NOT IN i_r_entrega.
+          ubicacion_asiganda_entrega = abap_true.
+        ENDIF.
+      ENDIF.
+
+      zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_ti                           = ti_ubicacion_bd
+          i_nombre_columna               = 'LGPLA'
+        CHANGING
+          c_ti_rango                     = r_ubicacion_bd ).
+
+      IF c_ti_ubicacion_isla IS SUPPLIED.
+        ti_ubicacion_isla = c_ti_ubicacion_isla.
+      ELSE.
+        ti_ubicacion_isla = obtener_ubicaciones_isla( i_isla           = i_r_isla[ 1 ]-low
+                                                      i_numero_almacen = i_numero_almacen
+                                                      i_tipo_almacen   = i_tipo_almacen ).
+      ENDIF.
+
+      "Se descartan las ubicaciones ya asignados y se recupera la ultima ubicación disponible
+      SORT ti_ubicacion_isla BY srt_nr ASCENDING.
+      "+SLS 28072023 : Proyecto materia prima - determinar la misma ubicación cuando la entrega ya existe en
+      IF ubicacion_asiganda_entrega = abap_true.
+        DELETE ti_ubicacion_isla WHERE lgpla NOT IN r_ubicacion_bd.
+      ELSE.
+        DELETE ti_ubicacion_isla WHERE lgpla IN r_ubicacion_bd.
+      ENDIF.
+
+      r_ubicacion = ti_ubicacion_isla[ 1 ]-lgpla.
+
+      IF c_ti_ubicacion_isla IS SUPPLIED.
+        c_ti_ubicacion_isla = ti_ubicacion_isla.
+      ENDIF.
+
+    ENDIF.
+
+    "Determinar si la ubicacion se debe actualizar en la tabla ztewmr1015_1
+    IF i_r_entrega IS NOT INITIAL.
+      SELECT
+      FROM ztewmr1015_1
+      FIELDS sammg, workstation,lgpla, vbeln
+      WHERE sammg = @i_ola
+      AND workstation in @i_r_isla
+      AND vbeln       in @i_r_entrega
+      AND lgpla       = @r_ubicacion
+      INTO TABLE @ti_ubicacion_bd.
+
+      IF sy-subrc IS NOT INITIAL.
+        e_asignar_ubicacion = abap_true.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.

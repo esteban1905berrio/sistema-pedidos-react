@@ -1,0 +1,662 @@
+CLASS zclmmi1062_instruccion_lavado DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_mensaje        TYPE string VALUE 'ZMM01',
+               gc_nombre_objeto_log    TYPE balobj_d  VALUE 'ZMM_1',
+               gc_nombre_subobjeto_log TYPE balsubobj VALUE 'ZI1062_1'.
+
+    TYPES: gtp_ti_instlavado TYPE STANDARD TABLE OF ztmmi1062_1 .
+
+    CLASS-METHODS:
+      actualizar_instlavado
+        IMPORTING
+          i_ti_px_instlavado TYPE zpxinst_lavado_row_tab,
+      validar_instruccion_cuidado
+        IMPORTING
+          VALUE(i_ti_posicion) TYPE zclmmi1009_gen_articulos_flex=>gtp_ti_talla_color OPTIONAL
+          i_o_producto         TYPE REF TO zclmmi1009_gen_articulos_flex
+          i_separador          TYPE char1
+        CHANGING
+          c_ti_return          TYPE bapiret2_t,
+      class_constructor.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA: go_parametros TYPE REF TO zclcxr1000_parametros,
+                go_log        TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS actualizar_caracteristica
+      CHANGING
+        c_ti_instlavado TYPE gtp_ti_instlavado.
+ENDCLASS.
+
+
+
+CLASS ZCLMMI1062_INSTRUCCION_LAVADO IMPLEMENTATION.
+
+
+  METHOD actualizar_caracteristica.
+
+    DATA: ti_charactvaluesnum      TYPE STANDARD TABLE OF bapicharactvaluesnum,
+          es_charactvaluesnum      TYPE bapicharactvaluesnum,
+          ti_return                TYPE bapiret2_t,
+          es_return                TYPE bapiret2,
+          ti_char_det              TYPE TABLE OF bapicharactdetail,
+          es_charactdetail         LIKE LINE OF ti_char_det,
+          ti_charactdescr          TYPE STANDARD TABLE OF bapicharactdescr,
+          r_caracteristica         TYPE RANGE OF atnam,
+          es_parametro             TYPE ztcx0001,
+          es_balmsg                TYPE bal_s_msg,
+          mensaje_agregado         TYPE boolean,
+          lc_nombre_caracteristica TYPE atnam VALUE 'MM_MAT_INSTRUCCION_CUIDADO'.
+
+    FIELD-SYMBOLS: <lfs_es_instlavado> LIKE LINE OF c_ti_instlavado.
+
+    CHECK c_ti_instlavado IS NOT INITIAL.
+
+    "nombre de la caracteristica
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'NM_CARACT'
+      IMPORTING
+        e_ti_valrango           = r_caracteristica
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty message_v1 = sy-msgv1 message_v2 = sy-msgv2 ) ).
+      RETURN.
+    ENDIF.
+
+    IF es_parametro-valtxt1 IS NOT INITIAL.
+      lc_nombre_caracteristica = r_caracteristica[ 1 ]-low.
+    ENDIF.
+
+    "consultar valores numericos de la caracteristica
+    CALL FUNCTION 'BAPI_CHARACT_GETDETAIL'
+      EXPORTING
+        charactname      = lc_nombre_caracteristica
+        language         = sy-langu
+      IMPORTING
+        charactdetail    = es_charactdetail
+      TABLES
+        charactdescr     = ti_charactdescr
+        charactvaluesnum = ti_charactvaluesnum
+        return           = ti_return.
+
+    SORT c_ti_instlavado BY codlavado posicion.
+    DELETE ADJACENT DUPLICATES FROM c_ti_instlavado COMPARING codlavado.
+
+    LOOP AT c_ti_instlavado ASSIGNING <lfs_es_instlavado>.
+
+      READ TABLE ti_charactvaluesnum INTO es_charactvaluesnum
+                                       WITH KEY value_from = <lfs_es_instlavado>-codlavado.
+
+      IF sy-subrc IS NOT INITIAL.
+        CLEAR: es_charactvaluesnum.
+        es_charactvaluesnum-value_relation = '1'.
+        es_charactvaluesnum-value_from = <lfs_es_instlavado>-codlavado.
+        APPEND es_charactvaluesnum TO ti_charactvaluesnum.
+      ELSE.
+        DELETE TABLE ti_charactvaluesnum FROM es_charactvaluesnum.
+      ENDIF.
+    ENDLOOP.
+
+    "actualizar caracteristicas
+    CLEAR: ti_return.
+
+    APPEND es_charactdetail TO ti_char_det.
+
+    CALL FUNCTION 'BAPI_CHARACT_CHANGE'
+      EXPORTING
+        charactname         = lc_nombre_caracteristica
+      TABLES
+        charactdescrnew     = ti_charactdescr
+        charactdetailnew    = ti_char_det
+        charactvaluesnumnew = ti_charactvaluesnum
+        return              = ti_return.
+
+    READ TABLE ti_return
+      TRANSPORTING NO FIELDS
+      WITH KEY type = 'E'.
+
+    IF sy-subrc NE 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+    ENDIF.
+
+    LOOP AT ti_return INTO es_return.
+
+      MOVE:
+      es_return-type       TO es_balmsg-msgty,
+      es_return-id         TO es_balmsg-msgid,
+      es_return-number     TO es_balmsg-msgno,
+      es_return-message_v1 TO es_balmsg-msgv1,
+      es_return-message_v2 TO es_balmsg-msgv2,
+      es_return-message_v3 TO es_balmsg-msgv3,
+      es_return-message_v4 TO es_balmsg-msgv4.
+
+      go_log->set_es_log( i_es = CORRESPONDING #( es_return ) ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD actualizar_instlavado.
+
+    DATA: ti_instlavado TYPE gtp_ti_instlavado,
+          es_instlavado LIKE LINE OF ti_instlavado,
+          idioma        TYPE ztmmi1062_1-spras,
+          es_input      LIKE LINE OF i_ti_px_instlavado.
+
+    FIELD-SYMBOLS: <fs_es_instlavado> LIKE LINE OF ti_instlavado.
+
+    "instanciar Log
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( i_es_cabecera_log = VALUE #( object = gc_nombre_objeto_log
+                                                                                    subobject = gc_nombre_subobjeto_log
+                                                                                    aldate_del = sy-datum + 5 ) ).
+
+    IF i_ti_px_instlavado IS INITIAL.
+
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '096' type = 'W'  ) ).
+
+    ELSE.
+
+      LOOP AT i_ti_px_instlavado INTO es_input.
+
+        CLEAR: es_instlavado.
+
+        es_instlavado-codlavado     = es_input-co_lavado.
+        es_instlavado-posicion      = es_input-posicion.
+        es_instlavado-denlavado     = es_input-de_lavado.
+        es_instlavado-lavadopccion  = es_input-de_lavado_produccion. "Adicion 09Sep2024 Sebastian Restrepo Villa
+
+        CONCATENATE es_input-fe_creacion(4) es_input-fe_creacion+5(2) es_input-fe_creacion+8(2)
+        INTO es_instlavado-fechacrea.
+
+        CONCATENATE es_input-fe_creacion+11(2) es_input-fe_creacion+14(2) es_input-fe_creacion+17(2)
+        INTO es_instlavado-horacrea.
+
+        CONCATENATE es_input-fe_actualizacion(4) es_input-fe_actualizacion+5(2) es_input-fe_actualizacion+8(2)
+        INTO es_instlavado-fechaactualiza.
+
+        CONCATENATE es_input-fe_actualizacion+11(2) es_input-fe_actualizacion+14(2) es_input-fe_actualizacion+14(2)
+        INTO es_instlavado-horaactualiza.
+
+        es_instlavado-usuariocrea = es_input-usuario.
+        es_instlavado-fechaactualizain = sy-datum.
+        es_instlavado-horaactualizain = sy-uzeit.
+        es_instlavado-usuariomodifica = sy-uname.
+        APPEND es_instlavado TO ti_instlavado.
+
+      ENDLOOP.
+      "asignar idioma
+      SORT ti_instlavado BY codlavado posicion.
+
+      LOOP AT ti_instlavado ASSIGNING <fs_es_instlavado>.
+
+        IF <fs_es_instlavado>-posicion <= 15.
+          idioma = 'S'.
+        ELSE.
+          idioma = 'E'.
+        ENDIF.
+
+        <fs_es_instlavado>-spras = idioma.
+
+      ENDLOOP.
+
+      "modificar tabla
+      DELETE FROM ztmmi1062_1 WHERE codlavado NE space.
+      COMMIT WORK AND WAIT.
+
+      MODIFY ztmmi1062_1 FROM TABLE ti_instlavado.
+
+      IF sy-subrc IS INITIAL.
+        COMMIT WORK AND WAIT.
+
+        "modificar caracteristicas
+        actualizar_caracteristica( CHANGING c_ti_instlavado = ti_instlavado ).
+
+      ELSE.
+        ROLLBACK WORK.
+      ENDIF.
+    ENDIF.
+
+    go_log->guardar( ).
+
+  ENDMETHOD.
+
+
+  METHOD class_constructor.
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'I1062' ).
+  ENDMETHOD.
+
+
+  METHOD validar_instruccion_cuidado.
+
+    DATA: codigo_lavado         TYPE char100,
+          existe_codigo_lavado  TYPE flag,
+          nombre_caracteristica TYPE string,
+          mensaje               TYPE string,
+          r_caracteristica      TYPE RANGE OF atnam.
+
+    "Consulta maestro
+    SELECT *
+    FROM ztmmi1062_1
+    INTO TABLE @DATA(ti_instrucciones_cuidado).
+
+    "nombre de la caracteristica
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'NM_CARACT'
+      IMPORTING
+        e_ti_valrango           = r_caracteristica
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                          message_v1 = sy-msgv1 message_v2 = sy-msgv2 ) ).
+      RETURN.
+    ENDIF.
+    TRY.
+
+        nombre_caracteristica = r_caracteristica[ 1 ]-low.
+
+        "Recorre datos del proxy
+        LOOP AT i_o_producto->gti_px_materiales INTO DATA(es_materiales).
+          "Datos de variante
+          LOOP AT es_materiales-caracteristicas INTO DATA(es_caracteristicas) WHERE char_name = nombre_caracteristica.
+
+            existe_codigo_lavado = abap_true.
+
+            "valores de la caracteristica
+
+            codigo_lavado = es_caracteristicas-char_value.
+            CONDENSE codigo_lavado NO-GAPS.
+            SPLIT codigo_lavado AT ',' INTO TABLE DATA(ti_codigo_lavado_dividido).
+
+            "Multiples instrucciones en un codigo{
+            IF lines( ti_codigo_lavado_dividido ) > 1.
+              LOOP AT ti_codigo_lavado_dividido ASSIGNING FIELD-SYMBOL(<es_codigo_lavado>).
+
+                IF <es_codigo_lavado> NE zclmmi1009_gen_articulos_flex=>gc_vacio AND
+                   NOT line_exists( ti_instrucciones_cuidado[ codlavado = <es_codigo_lavado> ] ).
+                  codigo_lavado = <es_codigo_lavado>.
+                  existe_codigo_lavado = abap_false.
+                  EXIT.
+                ENDIF.
+
+              ENDLOOP.
+
+              IF ti_codigo_lavado_dividido IS NOT INITIAL AND existe_codigo_lavado = abap_true.
+                CLEAR: codigo_lavado.
+              ENDIF.
+            ENDIF.
+            "}
+
+            IF  codigo_lavado IS NOT INITIAL AND
+                codigo_lavado NE zclmmi1009_gen_articulos_flex=>gc_vacio AND
+               (
+                (
+                    NOT line_exists( ti_instrucciones_cuidado[ codlavado = codigo_lavado ] )
+                )
+                OR  existe_codigo_lavado = abap_false
+               ).
+
+              MESSAGE  ID  gc_clase_mensaje  TYPE 'E' NUMBER  '097' WITH codigo_lavado
+              INTO mensaje.
+              APPEND VALUE #( id = gc_clase_mensaje number = '097' type = 'E' message = mensaje  message_v1 = codigo_lavado )
+              TO c_ti_return.
+
+            ENDIF.
+
+          ENDLOOP.
+        ENDLOOP.
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclmmi1062_instruccion_lavado DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_mensaje        TYPE string VALUE 'ZMM01',
+               gc_nombre_objeto_log    TYPE balobj_d  VALUE 'ZMM_1',
+               gc_nombre_subobjeto_log TYPE balsubobj VALUE 'ZI1062_1'.
+
+    TYPES: gtp_ti_instlavado TYPE STANDARD TABLE OF ztmmi1062_1 .
+
+    CLASS-METHODS:
+      actualizar_instlavado
+        IMPORTING
+          i_ti_px_instlavado TYPE zpxinst_lavado_row_tab,
+      validar_instruccion_cuidado
+        IMPORTING
+          VALUE(i_ti_posicion) TYPE zclmmi1009_gen_articulos_flex=>gtp_ti_talla_color OPTIONAL
+          i_o_producto         TYPE REF TO zclmmi1009_gen_articulos_flex
+          i_separador          TYPE char1
+        CHANGING
+          c_ti_return          TYPE bapiret2_t,
+      class_constructor.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA: go_parametros TYPE REF TO zclcxr1000_parametros,
+                go_log        TYPE REF TO zclcxr1002_log_aplicacion.
+
+    CLASS-METHODS actualizar_caracteristica
+      CHANGING
+        c_ti_instlavado TYPE gtp_ti_instlavado.
+ENDCLASS.
+
+
+
+CLASS ZCLMMI1062_INSTRUCCION_LAVADO IMPLEMENTATION.
+
+
+  METHOD actualizar_caracteristica.
+
+    DATA: ti_charactvaluesnum      TYPE STANDARD TABLE OF bapicharactvaluesnum,
+          es_charactvaluesnum      TYPE bapicharactvaluesnum,
+          ti_return                TYPE bapiret2_t,
+          es_return                TYPE bapiret2,
+          ti_char_det              TYPE TABLE OF bapicharactdetail,
+          es_charactdetail         LIKE LINE OF ti_char_det,
+          ti_charactdescr          TYPE STANDARD TABLE OF bapicharactdescr,
+          r_caracteristica         TYPE RANGE OF atnam,
+          es_parametro             TYPE ztcx0001,
+          es_balmsg                TYPE bal_s_msg,
+          mensaje_agregado         TYPE boolean,
+          lc_nombre_caracteristica TYPE atnam VALUE 'MM_MAT_INSTRUCCION_CUIDADO'.
+
+    FIELD-SYMBOLS: <lfs_es_instlavado> LIKE LINE OF c_ti_instlavado.
+
+    CHECK c_ti_instlavado IS NOT INITIAL.
+
+    "nombre de la caracteristica
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'NM_CARACT'
+      IMPORTING
+        e_ti_valrango           = r_caracteristica
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty message_v1 = sy-msgv1 message_v2 = sy-msgv2 ) ).
+      RETURN.
+    ENDIF.
+
+    IF es_parametro-valtxt1 IS NOT INITIAL.
+      lc_nombre_caracteristica = r_caracteristica[ 1 ]-low.
+    ENDIF.
+
+    "consultar valores numericos de la caracteristica
+    CALL FUNCTION 'BAPI_CHARACT_GETDETAIL'
+      EXPORTING
+        charactname      = lc_nombre_caracteristica
+        language         = sy-langu
+      IMPORTING
+        charactdetail    = es_charactdetail
+      TABLES
+        charactdescr     = ti_charactdescr
+        charactvaluesnum = ti_charactvaluesnum
+        return           = ti_return.
+
+    SORT c_ti_instlavado BY codlavado posicion.
+    DELETE ADJACENT DUPLICATES FROM c_ti_instlavado COMPARING codlavado.
+
+    LOOP AT c_ti_instlavado ASSIGNING <lfs_es_instlavado>.
+
+      READ TABLE ti_charactvaluesnum INTO es_charactvaluesnum
+                                       WITH KEY value_from = <lfs_es_instlavado>-codlavado.
+
+      IF sy-subrc IS NOT INITIAL.
+        CLEAR: es_charactvaluesnum.
+        es_charactvaluesnum-value_relation = '1'.
+        es_charactvaluesnum-value_from = <lfs_es_instlavado>-codlavado.
+        APPEND es_charactvaluesnum TO ti_charactvaluesnum.
+      ELSE.
+        DELETE TABLE ti_charactvaluesnum FROM es_charactvaluesnum.
+      ENDIF.
+    ENDLOOP.
+
+    "actualizar caracteristicas
+    CLEAR: ti_return.
+
+    APPEND es_charactdetail TO ti_char_det.
+
+    CALL FUNCTION 'BAPI_CHARACT_CHANGE'
+      EXPORTING
+        charactname         = lc_nombre_caracteristica
+      TABLES
+        charactdescrnew     = ti_charactdescr
+        charactdetailnew    = ti_char_det
+        charactvaluesnumnew = ti_charactvaluesnum
+        return              = ti_return.
+
+    READ TABLE ti_return
+      TRANSPORTING NO FIELDS
+      WITH KEY type = 'E'.
+
+    IF sy-subrc NE 0.
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+    ENDIF.
+
+    LOOP AT ti_return INTO es_return.
+
+      MOVE:
+      es_return-type       TO es_balmsg-msgty,
+      es_return-id         TO es_balmsg-msgid,
+      es_return-number     TO es_balmsg-msgno,
+      es_return-message_v1 TO es_balmsg-msgv1,
+      es_return-message_v2 TO es_balmsg-msgv2,
+      es_return-message_v3 TO es_balmsg-msgv3,
+      es_return-message_v4 TO es_balmsg-msgv4.
+
+      go_log->set_es_log( i_es = CORRESPONDING #( es_return ) ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD actualizar_instlavado.
+
+    DATA: ti_instlavado TYPE gtp_ti_instlavado,
+          es_instlavado LIKE LINE OF ti_instlavado,
+          idioma        TYPE ztmmi1062_1-spras,
+          es_input      LIKE LINE OF i_ti_px_instlavado.
+
+    FIELD-SYMBOLS: <fs_es_instlavado> LIKE LINE OF ti_instlavado.
+
+    "instanciar Log
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( i_es_cabecera_log = VALUE #( object = gc_nombre_objeto_log
+                                                                                    subobject = gc_nombre_subobjeto_log
+                                                                                    aldate_del = sy-datum + 5 ) ).
+
+    IF i_ti_px_instlavado IS INITIAL.
+
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '096' type = 'W'  ) ).
+
+    ELSE.
+
+      LOOP AT i_ti_px_instlavado INTO es_input.
+
+        CLEAR: es_instlavado.
+
+        es_instlavado-codlavado     = es_input-co_lavado.
+        es_instlavado-posicion      = es_input-posicion.
+        es_instlavado-denlavado     = es_input-de_lavado.
+        es_instlavado-lavadopccion  = es_input-de_lavado_produccion. "Adicion 09Sep2024 Sebastian Restrepo Villa
+
+        CONCATENATE es_input-fe_creacion(4) es_input-fe_creacion+5(2) es_input-fe_creacion+8(2)
+        INTO es_instlavado-fechacrea.
+
+        CONCATENATE es_input-fe_creacion+11(2) es_input-fe_creacion+14(2) es_input-fe_creacion+17(2)
+        INTO es_instlavado-horacrea.
+
+        CONCATENATE es_input-fe_actualizacion(4) es_input-fe_actualizacion+5(2) es_input-fe_actualizacion+8(2)
+        INTO es_instlavado-fechaactualiza.
+
+        CONCATENATE es_input-fe_actualizacion+11(2) es_input-fe_actualizacion+14(2) es_input-fe_actualizacion+14(2)
+        INTO es_instlavado-horaactualiza.
+
+        es_instlavado-usuariocrea = es_input-usuario.
+        es_instlavado-fechaactualizain = sy-datum.
+        es_instlavado-horaactualizain = sy-uzeit.
+        es_instlavado-usuariomodifica = sy-uname.
+        APPEND es_instlavado TO ti_instlavado.
+
+      ENDLOOP.
+      "asignar idioma
+      SORT ti_instlavado BY codlavado posicion.
+
+      LOOP AT ti_instlavado ASSIGNING <fs_es_instlavado>.
+
+        IF <fs_es_instlavado>-posicion <= 15.
+          idioma = 'S'.
+        ELSE.
+          idioma = 'E'.
+        ENDIF.
+
+        <fs_es_instlavado>-spras = idioma.
+
+      ENDLOOP.
+
+      "modificar tabla
+      DELETE FROM ztmmi1062_1 WHERE codlavado NE space.
+      COMMIT WORK AND WAIT.
+
+      MODIFY ztmmi1062_1 FROM TABLE ti_instlavado.
+
+      IF sy-subrc IS INITIAL.
+        COMMIT WORK AND WAIT.
+
+        "modificar caracteristicas
+        actualizar_caracteristica( CHANGING c_ti_instlavado = ti_instlavado ).
+
+      ELSE.
+        ROLLBACK WORK.
+      ENDIF.
+    ENDIF.
+
+    go_log->guardar( ).
+
+  ENDMETHOD.
+
+
+  METHOD class_constructor.
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'I1062' ).
+  ENDMETHOD.
+
+
+  METHOD validar_instruccion_cuidado.
+
+    DATA: codigo_lavado         TYPE char100,
+          existe_codigo_lavado  TYPE flag,
+          nombre_caracteristica TYPE string,
+          mensaje               TYPE string,
+          r_caracteristica      TYPE RANGE OF atnam.
+
+    "Consulta maestro
+    SELECT *
+    FROM ztmmi1062_1
+    INTO TABLE @DATA(ti_instrucciones_cuidado).
+
+    "nombre de la caracteristica
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'NM_CARACT'
+      IMPORTING
+        e_ti_valrango           = r_caracteristica
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    IF sy-subrc <> 0.
+      go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                          message_v1 = sy-msgv1 message_v2 = sy-msgv2 ) ).
+      RETURN.
+    ENDIF.
+    TRY.
+
+        nombre_caracteristica = r_caracteristica[ 1 ]-low.
+
+        "Recorre datos del proxy
+        LOOP AT i_o_producto->gti_px_materiales INTO DATA(es_materiales).
+          "Datos de variante
+          LOOP AT es_materiales-caracteristicas INTO DATA(es_caracteristicas) WHERE char_name = nombre_caracteristica.
+
+            existe_codigo_lavado = abap_true.
+
+            "valores de la caracteristica
+
+            codigo_lavado = es_caracteristicas-char_value.
+            CONDENSE codigo_lavado NO-GAPS.
+            SPLIT codigo_lavado AT ',' INTO TABLE DATA(ti_codigo_lavado_dividido).
+
+            "Multiples instrucciones en un codigo{
+            IF lines( ti_codigo_lavado_dividido ) > 1.
+              LOOP AT ti_codigo_lavado_dividido ASSIGNING FIELD-SYMBOL(<es_codigo_lavado>).
+
+                IF <es_codigo_lavado> NE zclmmi1009_gen_articulos_flex=>gc_vacio AND
+                   NOT line_exists( ti_instrucciones_cuidado[ codlavado = <es_codigo_lavado> ] ).
+                  codigo_lavado = <es_codigo_lavado>.
+                  existe_codigo_lavado = abap_false.
+                  EXIT.
+                ENDIF.
+
+              ENDLOOP.
+
+              IF ti_codigo_lavado_dividido IS NOT INITIAL AND existe_codigo_lavado = abap_true.
+                CLEAR: codigo_lavado.
+              ENDIF.
+            ENDIF.
+            "}
+
+            IF  codigo_lavado IS NOT INITIAL AND
+                codigo_lavado NE zclmmi1009_gen_articulos_flex=>gc_vacio AND
+               (
+                (
+                    NOT line_exists( ti_instrucciones_cuidado[ codlavado = codigo_lavado ] )
+                )
+                OR  existe_codigo_lavado = abap_false
+               ).
+
+              MESSAGE  ID  gc_clase_mensaje  TYPE 'E' NUMBER  '097' WITH codigo_lavado
+              INTO mensaje.
+              APPEND VALUE #( id = gc_clase_mensaje number = '097' type = 'E' message = mensaje  message_v1 = codigo_lavado )
+              TO c_ti_return.
+
+            ENDIF.
+
+          ENDLOOP.
+        ENDLOOP.
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+
+  ENDMETHOD.
+ENDCLASS.

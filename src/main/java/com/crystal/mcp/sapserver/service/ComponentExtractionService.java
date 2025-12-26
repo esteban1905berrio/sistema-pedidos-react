@@ -478,7 +478,7 @@ public class ComponentExtractionService {
     /**
      * Extract ABAP program source in ONE file.
      */
-    private int extractProgram(Path basePath, String packageName, String progName) throws IOException {
+    private int extractProgram(Path basePath, String packageName, String progName, String uri) throws IOException {
         String progNameLower = progName.toLowerCase();
 
         // Build file path: {basePath}/{package}/programs/{program}
@@ -488,7 +488,7 @@ public class ComponentExtractionService {
         Files.createDirectories(progDir);
 
         // Get program source
-        ProgramSourceResult progSource = programService.getProgramSource(progName, "active");
+        ProgramSourceResult progSource = programService.getProgramSource(progName, "active", uri);
 
         if (progSource == null || progSource.source() == null) {
             String errorDetails = "";
@@ -905,9 +905,9 @@ public class ComponentExtractionService {
 
                     } else if ("PROG".equals(obj.objectType())) {
                         // Extract program source
-                        written = extractProgram(basePath, packageName, obj.objectName());
+                        written = extractProgram(basePath, packageName, obj.objectName(), obj.uri());
 
-                    } else if ("DDLS".equals(obj.objectType())) {
+                    } else if ("VIEW".equals(obj.objectType())) {
                         // Extract CDS View
                         written = extractCds(basePath, packageName, obj.objectName());
 

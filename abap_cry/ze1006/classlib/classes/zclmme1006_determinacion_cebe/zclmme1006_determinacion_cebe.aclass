@@ -1,0 +1,438 @@
+CLASS zclmme1006_determinacion_cebe DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Determinación automática de Centro de beneficio para material<br/>
+      "! a partir de tablas:
+      "! <ol>
+      "! <li>ZTMME1006_1</li>
+      "! <li>ZTMME1006_2</li>
+      "! </ol>
+      "! </p>
+      "! <strong>Identificador:</strong>
+                                                            "! E1006
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 21.06.2021  \S4DK901042\ Sebastian Londono \ Creacion Inicial \
+      "!
+      "! @parameter i_es_mara | Estructura MARA
+      "! @parameter i_badi_tbnam | Nombre de tabla en tratamiento
+      "! @parameter i_badi_flg_referenztyp | Tipo de manejo de plantillas
+      "! @parameter c_es_marc | Estructura MARC
+      determinar_cebe
+        IMPORTING
+          VALUE(i_es_mara)       TYPE mara
+          i_badi_tbnam           TYPE tbnam
+          i_badi_flg_referenztyp TYPE kzref
+        CHANGING
+          c_es_marc              TYPE marc,
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Valida que el Cebe no este asignado en otra regla
+      "! </p>
+      "! <strong>Identificador:</strong> E1004
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+      "!
+      "! @parameter c_ti | Tabla con datos
+      "! @parameter c_cebe | Cebe
+      valiar_asignacion_cebe
+        CHANGING
+          c_ti   TYPE ANY TABLE
+          c_cebe TYPE marc-prctr,
+
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Asignar valor por defecto en Tamaño de lote del cálculo del coste del producto MARC-LOSGR<br/>
+      "! MARA-SPROF
+      "! </p>
+      "! <strong>Identificador:</strong> E1006
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 07.12.2021  \S4DK901042\ Sebastian Londono \ Creacion Inicial \
+      "!
+      "! @parameter i_es_mara | Estructura MARA
+      "! @parameter i_badi_tbnam | Nombre de tabla en tratamiento
+      "! @parameter c_es_mara | Estructura MARA
+      "! @parameter c_es_marc | Estructura MARC
+      "! @parameter c_es_mbew | Estructura MBEW
+      asignar_valores_x_defecto
+        IMPORTING
+          VALUE(i_es_mara) TYPE mara
+          i_badi_tbnam     TYPE tbnam
+        CHANGING
+          c_es_mara        TYPE mara
+          c_es_marc        TYPE marc
+          c_es_mbew        TYPE mbew   .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+ENDCLASS.
+
+
+
+CLASS zclmme1006_determinacion_cebe IMPLEMENTATION.
+
+  METHOD determinar_cebe.
+
+    DATA: tecnologia        TYPE ztmme1006_1-tecnologia,
+          posicion_caracter TYPE i.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_metodo = 'DETERMINAR_CEBE' i_ricefw = 'E1006' ) = abap_true AND
+          i_badi_tbnam    = 'MARC'       AND
+          c_es_marc-werks IS NOT INITIAL AND
+          c_es_marc-werks(1) CO '0123456789' AND
+          c_es_marc-prctr IS INITIAL     AND
+          i_badi_flg_referenztyp = 1.
+
+    "Consultar sociedad de Centro
+    SELECT SINGLE bukrs
+    FROM t001k
+    WHERE bwkey = @c_es_marc-werks
+    INTO @DATA(sociedad_centro).
+
+    IF i_es_mara-mtart IS INITIAL.
+      SELECT SINGLE matnr, mtart, matkl, satnr
+      FROM mara
+      WHERE matnr = @c_es_marc-matnr
+      INTO CORRESPONDING FIELDS OF @i_es_mara.
+    ENDIF.
+
+    "Asignar x sociedad
+    IF sociedad_centro IS NOT INITIAL.
+
+      tecnologia = i_es_mara-matkl+1(1).
+
+      SELECT SINGLE prctr
+      FROM ztmme1006_1
+      WHERE bukrs = @sociedad_centro
+      AND   mtart = @i_es_mara-mtart
+      AND   tecnologia = @tecnologia
+      INTO @c_es_marc-prctr.
+
+    ENDIF.
+
+    "Asignar x Tipo material y Centro
+    IF c_es_marc-prctr IS INITIAL.
+      SELECT *
+      FROM ztmme1006_2
+      WHERE mtart = @i_es_mara-mtart
+      INTO TABLE @DATA(ti_configuracion).
+      "Logica para determinar Cebe cuando el centro tiene patron X*
+      TRY.
+          c_es_marc-prctr = ti_configuracion[  werks = c_es_marc-werks ]-prctr.
+        CATCH cx_sy_itab_line_not_found.
+          LOOP AT ti_configuracion INTO DATA(es_configuracion).
+            IF es_configuracion-werks CS '*'.
+              posicion_caracter = sy-fdpos.
+              IF es_configuracion-werks(posicion_caracter) = c_es_marc-werks(posicion_caracter).
+                c_es_marc-prctr = es_configuracion-prctr.
+                EXIT.
+              ENDIF.
+
+            ENDIF.
+          ENDLOOP.
+      ENDTRY.
+    ENDIF.
+
+    IF c_es_marc-prctr IS INITIAL.
+**          MESSAGE e003(zmm01).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD valiar_asignacion_cebe.
+
+    DATA: cebe_exite TYPE prctr.
+
+    CHECK c_cebe IS NOT INITIAL.
+
+    LOOP AT c_ti TRANSPORTING NO FIELDS WHERE ('PRCTR = C_CEBE').
+      cebe_exite = c_cebe.
+      EXIT.
+    ENDLOOP.
+
+    IF cebe_exite IS INITIAL.
+
+      SELECT SINGLE prctr
+       FROM ztmme1006_1
+       WHERE prctr = @c_cebe
+       INTO @cebe_exite.
+
+      SELECT SINGLE prctr
+       FROM ztmme1006_2
+       WHERE prctr = @c_cebe
+       INTO @cebe_exite.
+    ENDIF.
+
+    IF cebe_exite IS NOT INITIAL.
+***      CLEAR: c_cebe.
+***      MESSAGE e004(zmm01) WITH cebe_exite.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD asignar_valores_x_defecto.
+
+    "asignacion valores por defecto
+    "Perfil de precio para variantes
+    c_es_mara-sprof = space.
+
+    IF c_es_marc IS NOT INITIAL.
+      "Tamaño de lote del cálculo del coste del producto
+      c_es_marc-losgr = 1000.
+    ENDIF.
+
+    IF c_es_mbew IS NOT INITIAL.
+      "Cantidad base
+      c_es_mbew-peinh = 100.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclmme1006_determinacion_cebe DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Determinación automática de Centro de beneficio para material<br/>
+      "! a partir de tablas:
+      "! <ol>
+      "! <li>ZTMME1006_1</li>
+      "! <li>ZTMME1006_2</li>
+      "! </ol>
+      "! </p>
+      "! <strong>Identificador:</strong>
+                                                            "! E1006
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 21.06.2021  \S4DK901042\ Sebastian Londono \ Creacion Inicial \
+      "!
+      "! @parameter i_es_mara | Estructura MARA
+      "! @parameter i_badi_tbnam | Nombre de tabla en tratamiento
+      "! @parameter i_badi_flg_referenztyp | Tipo de manejo de plantillas
+      "! @parameter c_es_marc | Estructura MARC
+      determinar_cebe
+        IMPORTING
+          VALUE(i_es_mara)       TYPE mara
+          i_badi_tbnam           TYPE tbnam
+          i_badi_flg_referenztyp TYPE kzref
+        CHANGING
+          c_es_marc              TYPE marc,
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Valida que el Cebe no este asignado en otra regla
+      "! </p>
+      "! <strong>Identificador:</strong> E1004
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+      "!
+      "! @parameter c_ti | Tabla con datos
+      "! @parameter c_cebe | Cebe
+      valiar_asignacion_cebe
+        CHANGING
+          c_ti   TYPE ANY TABLE
+          c_cebe TYPE marc-prctr,
+
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Asignar valor por defecto en Tamaño de lote del cálculo del coste del producto MARC-LOSGR<br/>
+      "! MARA-SPROF
+      "! </p>
+      "! <strong>Identificador:</strong> E1006
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 07.12.2021  \S4DK901042\ Sebastian Londono \ Creacion Inicial \
+      "!
+      "! @parameter i_es_mara | Estructura MARA
+      "! @parameter i_badi_tbnam | Nombre de tabla en tratamiento
+      "! @parameter c_es_mara | Estructura MARA
+      "! @parameter c_es_marc | Estructura MARC
+      "! @parameter c_es_mbew | Estructura MBEW
+      asignar_valores_x_defecto
+        IMPORTING
+          VALUE(i_es_mara) TYPE mara
+          i_badi_tbnam     TYPE tbnam
+        CHANGING
+          c_es_mara        TYPE mara
+          c_es_marc        TYPE marc
+          c_es_mbew        TYPE mbew   .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+ENDCLASS.
+
+
+
+CLASS zclmme1006_determinacion_cebe IMPLEMENTATION.
+
+  METHOD determinar_cebe.
+
+    DATA: tecnologia        TYPE ztmme1006_1-tecnologia,
+          posicion_caracter TYPE i.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_metodo = 'DETERMINAR_CEBE' i_ricefw = 'E1006' ) = abap_true AND
+          i_badi_tbnam    = 'MARC'       AND
+          c_es_marc-werks IS NOT INITIAL AND
+          c_es_marc-werks(1) CO '0123456789' AND
+          c_es_marc-prctr IS INITIAL     AND
+          i_badi_flg_referenztyp = 1.
+
+    "Consultar sociedad de Centro
+    SELECT SINGLE bukrs
+    FROM t001k
+    WHERE bwkey = @c_es_marc-werks
+    INTO @DATA(sociedad_centro).
+
+    IF i_es_mara-mtart IS INITIAL.
+      SELECT SINGLE matnr, mtart, matkl, satnr
+      FROM mara
+      WHERE matnr = @c_es_marc-matnr
+      INTO CORRESPONDING FIELDS OF @i_es_mara.
+    ENDIF.
+
+    "Asignar x sociedad
+    IF sociedad_centro IS NOT INITIAL.
+
+      tecnologia = i_es_mara-matkl+1(1).
+
+      SELECT SINGLE prctr
+      FROM ztmme1006_1
+      WHERE bukrs = @sociedad_centro
+      AND   mtart = @i_es_mara-mtart
+      AND   tecnologia = @tecnologia
+      INTO @c_es_marc-prctr.
+
+    ENDIF.
+
+    "Asignar x Tipo material y Centro
+    IF c_es_marc-prctr IS INITIAL.
+      SELECT *
+      FROM ztmme1006_2
+      WHERE mtart = @i_es_mara-mtart
+      INTO TABLE @DATA(ti_configuracion).
+      "Logica para determinar Cebe cuando el centro tiene patron X*
+      TRY.
+          c_es_marc-prctr = ti_configuracion[  werks = c_es_marc-werks ]-prctr.
+        CATCH cx_sy_itab_line_not_found.
+          LOOP AT ti_configuracion INTO DATA(es_configuracion).
+            IF es_configuracion-werks CS '*'.
+              posicion_caracter = sy-fdpos.
+              IF es_configuracion-werks(posicion_caracter) = c_es_marc-werks(posicion_caracter).
+                c_es_marc-prctr = es_configuracion-prctr.
+                EXIT.
+              ENDIF.
+
+            ENDIF.
+          ENDLOOP.
+      ENDTRY.
+    ENDIF.
+
+    IF c_es_marc-prctr IS INITIAL.
+**          MESSAGE e003(zmm01).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD valiar_asignacion_cebe.
+
+    DATA: cebe_exite TYPE prctr.
+
+    CHECK c_cebe IS NOT INITIAL.
+
+    LOOP AT c_ti TRANSPORTING NO FIELDS WHERE ('PRCTR = C_CEBE').
+      cebe_exite = c_cebe.
+      EXIT.
+    ENDLOOP.
+
+    IF cebe_exite IS INITIAL.
+
+      SELECT SINGLE prctr
+       FROM ztmme1006_1
+       WHERE prctr = @c_cebe
+       INTO @cebe_exite.
+
+      SELECT SINGLE prctr
+       FROM ztmme1006_2
+       WHERE prctr = @c_cebe
+       INTO @cebe_exite.
+    ENDIF.
+
+    IF cebe_exite IS NOT INITIAL.
+***      CLEAR: c_cebe.
+***      MESSAGE e004(zmm01) WITH cebe_exite.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD asignar_valores_x_defecto.
+
+    "asignacion valores por defecto
+    "Perfil de precio para variantes
+    c_es_mara-sprof = space.
+
+    IF c_es_marc IS NOT INITIAL.
+      "Tamaño de lote del cálculo del coste del producto
+      c_es_marc-losgr = 1000.
+    ENDIF.
+
+    IF c_es_mbew IS NOT INITIAL.
+      "Cantidad base
+      c_es_mbew-peinh = 100.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.

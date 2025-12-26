@@ -1,0 +1,378 @@
+CLASS zclewmi1017_picking_envio_wcs DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: gtp_r_entrega_salida       TYPE RANGE OF /scdl/db_proci_o-docno,
+           gtp_r_ola                  TYPE RANGE OF vbss-sammg,
+           gtp_ti_pickingevio_ola_wcs TYPE STANDARD TABLE OF ziewmi1017_pickingevio_ola_wcs WITH EMPTY KEY.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      preparar_envio_proxy
+        IMPORTING
+          VALUE(i_r_entrega_salida) TYPE gtp_r_entrega_salida OPTIONAL
+          VALUE(i_r_ola)            TYPE gtp_r_ola,
+      enviar_datos_wcs
+        EXPORTING
+          e_ti_return   TYPE bapiret2_t
+        CHANGING
+          i_datos_proxy TYPE REF TO data.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    METHODS:
+      recuperar_numero_rango
+        RETURNING VALUE(r_numero) TYPE numc11,
+      consultar_datos
+        IMPORTING
+          VALUE(i_r_entrega_salida) TYPE gtp_r_entrega_salida OPTIONAL
+          VALUE(i_r_ola)            TYPE gtp_r_ola
+        RETURNING
+          VALUE(r_ti_datos_wcs)     TYPE gtp_ti_pickingevio_ola_wcs.
+
+ENDCLASS.
+
+
+
+CLASS zclewmi1017_picking_envio_wcs IMPLEMENTATION.
+
+  METHOD recuperar_numero_rango.
+
+    CALL FUNCTION 'NUMBER_GET_NEXT'
+      EXPORTING
+        nr_range_nr             = '01'
+        object                  = 'ZEWMI1017'
+      IMPORTING
+        number                  = r_numero
+      EXCEPTIONS
+        interval_not_found      = 1
+        number_range_not_intern = 2
+        object_not_found        = 3
+        quantity_is_0           = 4
+        quantity_is_not_1       = 5
+        interval_overflow       = 6
+        buffer_overflow         = 7.
+
+    IF sy-subrc <> 0.
+      MESSAGE e000(zewm01).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD consultar_datos.
+
+    DATA: ti_datos_wcs LIKE r_ti_datos_wcs.
+
+    FIELD-SYMBOLS: <fs_datos_wcs> LIKE LINE OF ti_datos_wcs.
+    BREAK seblondo.
+    SELECT DISTINCT *
+    FROM ziewmi1017_pickingevio_ola_wcs
+    WHERE entrega_salida IN @i_r_entrega_salida
+    AND status_pick NE '0'
+    AND   ola IN @i_r_ola
+    ORDER BY entrega_salida, productno, itemno
+    INTO TABLE @ti_datos_wcs.
+
+    LOOP AT ti_datos_wcs ASSIGNING FIELD-SYMBOL(<fs_es_datos_ola>)
+                           GROUP BY ( entrega_salida = <fs_es_datos_ola>-entrega_salida
+                                      productno      = <fs_es_datos_ola>-productno
+                                    )
+                           ASSIGNING FIELD-SYMBOL(<fs_es_grupo_entregas>).
+
+      LOOP AT GROUP <fs_es_grupo_entregas> ASSIGNING FIELD-SYMBOL(<fs_es_entregas>).
+
+        TRY.
+            ASSIGN r_ti_datos_wcs[ entrega_salida = <fs_es_entregas>-entrega_salida productno = <fs_es_entregas>-productno ]
+            TO <fs_datos_wcs>.
+
+            IF sy-subrc IS NOT INITIAL.
+              APPEND INITIAL LINE TO r_ti_datos_wcs ASSIGNING <fs_datos_wcs>.
+              <fs_datos_wcs> = CORRESPONDING #( <fs_es_entregas> EXCEPT cantidad ).
+            ENDIF.
+
+          CATCH cx_sy_itab_line_not_found.
+
+        ENDTRY.
+
+        <fs_datos_wcs>-cantidad = <fs_datos_wcs>-cantidad + <fs_es_entregas>-cantidad.
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD enviar_datos_wcs.
+    DATA: o_async_messaging          TYPE REF TO if_wsprotocol_async_messaging,
+          o_replicar_necesidades_ent TYPE REF TO zpxco_replicar_necesidades_ent.
+
+
+    TRY.
+
+        ASSIGN i_datos_proxy->* TO FIELD-SYMBOL(<fs_datos_proxy>).
+
+        o_replicar_necesidades_ent = NEW zpxco_replicar_necesidades_ent( ).
+        o_async_messaging ?= o_replicar_necesidades_ent->get_protocol( if_wsprotocol=>async_messaging ).
+        o_async_messaging->set_serialization_context('I1017_EO').
+
+        o_replicar_necesidades_ent->replicar_async( output = <fs_datos_proxy> ).
+
+        COMMIT WORK AND WAIT.
+
+        go_log->set_es_log( i_es = VALUE #( type = 'S' id = 'ZCX01' number  = '037'  ) ).
+
+        e_ti_return = CORRESPONDING #( go_log->get_log( ) ).
+
+      CATCH cx_ai_system_fault.
+
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD preparar_envio_proxy.
+
+    DATA: es_necesidades_entrega TYPE zpxreplicar_necesidades_entreg,
+          ti_necesidades_entrega TYPE zpxnecesidades_entregas_de_tab,
+          o_monitor_integracion  TYPE REF TO zclcxr1001_monitor_integracion.
+
+    DATA(id_replica) = recuperar_numero_rango( ).
+    DATA(ti_datos_entrega) = consultar_datos( i_r_ola = i_r_ola i_r_entrega_salida = i_r_entrega_salida ).
+
+    es_necesidades_entrega-replicar_necesidades_entregas-necesidades_entregas =
+        VALUE #( FOR es_entregas IN ti_datos_entrega
+                 ( id   = id_replica sammg   = es_entregas-ola vbeln   = |{ es_entregas-entrega_salida ALPHA = OUT }|
+                   ean   = zclmm_util_articulo=>generar_ean128( i_matnr = es_entregas-productno
+                                                                i_meins = es_entregas-unidadmedida
+                                                                i_ean11 = es_entregas-ean11  )-ean128
+                   lfimg  = es_entregas-cantidad
+                   cntbol = es_entregas-unxpaquete
+                   uname  = sy-uname datum  = sy-datum uzeit  = sy-uzeit
+                  )
+                ).
+
+    SORT es_necesidades_entrega-replicar_necesidades_entregas-necesidades_entregas BY id sammg vbeln ean.
+    DELETE ADJACENT DUPLICATES FROM es_necesidades_entrega-replicar_necesidades_entregas-necesidades_entregas
+    COMPARING id sammg vbeln ean.
+
+    TRY.
+        o_monitor_integracion =
+            NEW zclcxr1001_monitor_integracion( i_ricefw          = 'I1017'
+                                                i_es_info_mensaje = VALUE ztcxr1001_1( "ricefw = 'I1017'
+                                                                                         pid       = 'SENDER'
+                                                                                         fecha_ini = sy-datum
+                                                                                         hora_ini  = sy-uzeit
+                                                                                         hora_fin  = sy-uzeit
+                                                                                         ob_system = 'S4'
+                                                                                         ob_name   = 'NOTIFICAR_PICKINGEVIO_OLA_WCS'
+                                                                                         ib_system = 'WCS'
+                                                                                         ib_name   = 'RECIBIR_PICKINGEVIO_OLA_WCS' )
+                                                i_datos_proxy     = es_necesidades_entrega
+                                              ).
+
+        o_monitor_integracion->main( i_datos_proxy = REF #( es_necesidades_entrega ) ).
+
+      CATCH zcxr1001_excepciones_monitor.
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD constructor.
+    go_log =  zclcxr1002_log_aplicacion=>get_instancia(  ).
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclewmi1017_picking_envio_wcs DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: gtp_r_entrega_salida       TYPE RANGE OF /scdl/db_proci_o-docno,
+           gtp_r_ola                  TYPE RANGE OF vbss-sammg,
+           gtp_ti_pickingevio_ola_wcs TYPE STANDARD TABLE OF ziewmi1017_pickingevio_ola_wcs WITH EMPTY KEY.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      preparar_envio_proxy
+        IMPORTING
+          VALUE(i_r_entrega_salida) TYPE gtp_r_entrega_salida OPTIONAL
+          VALUE(i_r_ola)            TYPE gtp_r_ola,
+      enviar_datos_wcs
+        EXPORTING
+          e_ti_return   TYPE bapiret2_t
+        CHANGING
+          i_datos_proxy TYPE REF TO data.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    DATA: go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    METHODS:
+      recuperar_numero_rango
+        RETURNING VALUE(r_numero) TYPE numc11,
+      consultar_datos
+        IMPORTING
+          VALUE(i_r_entrega_salida) TYPE gtp_r_entrega_salida OPTIONAL
+          VALUE(i_r_ola)            TYPE gtp_r_ola
+        RETURNING
+          VALUE(r_ti_datos_wcs)     TYPE gtp_ti_pickingevio_ola_wcs.
+
+ENDCLASS.
+
+
+
+CLASS zclewmi1017_picking_envio_wcs IMPLEMENTATION.
+
+  METHOD recuperar_numero_rango.
+
+    CALL FUNCTION 'NUMBER_GET_NEXT'
+      EXPORTING
+        nr_range_nr             = '01'
+        object                  = 'ZEWMI1017'
+      IMPORTING
+        number                  = r_numero
+      EXCEPTIONS
+        interval_not_found      = 1
+        number_range_not_intern = 2
+        object_not_found        = 3
+        quantity_is_0           = 4
+        quantity_is_not_1       = 5
+        interval_overflow       = 6
+        buffer_overflow         = 7.
+
+    IF sy-subrc <> 0.
+      MESSAGE e000(zewm01).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD consultar_datos.
+
+    DATA: ti_datos_wcs LIKE r_ti_datos_wcs.
+
+    FIELD-SYMBOLS: <fs_datos_wcs> LIKE LINE OF ti_datos_wcs.
+    BREAK seblondo.
+    SELECT DISTINCT *
+    FROM ziewmi1017_pickingevio_ola_wcs
+    WHERE entrega_salida IN @i_r_entrega_salida
+    AND status_pick NE '0'
+    AND   ola IN @i_r_ola
+    ORDER BY entrega_salida, productno, itemno
+    INTO TABLE @ti_datos_wcs.
+
+    LOOP AT ti_datos_wcs ASSIGNING FIELD-SYMBOL(<fs_es_datos_ola>)
+                           GROUP BY ( entrega_salida = <fs_es_datos_ola>-entrega_salida
+                                      productno      = <fs_es_datos_ola>-productno
+                                    )
+                           ASSIGNING FIELD-SYMBOL(<fs_es_grupo_entregas>).
+
+      LOOP AT GROUP <fs_es_grupo_entregas> ASSIGNING FIELD-SYMBOL(<fs_es_entregas>).
+
+        TRY.
+            ASSIGN r_ti_datos_wcs[ entrega_salida = <fs_es_entregas>-entrega_salida productno = <fs_es_entregas>-productno ]
+            TO <fs_datos_wcs>.
+
+            IF sy-subrc IS NOT INITIAL.
+              APPEND INITIAL LINE TO r_ti_datos_wcs ASSIGNING <fs_datos_wcs>.
+              <fs_datos_wcs> = CORRESPONDING #( <fs_es_entregas> EXCEPT cantidad ).
+            ENDIF.
+
+          CATCH cx_sy_itab_line_not_found.
+
+        ENDTRY.
+
+        <fs_datos_wcs>-cantidad = <fs_datos_wcs>-cantidad + <fs_es_entregas>-cantidad.
+      ENDLOOP.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD enviar_datos_wcs.
+    DATA: o_async_messaging          TYPE REF TO if_wsprotocol_async_messaging,
+          o_replicar_necesidades_ent TYPE REF TO zpxco_replicar_necesidades_ent.
+
+
+    TRY.
+
+        ASSIGN i_datos_proxy->* TO FIELD-SYMBOL(<fs_datos_proxy>).
+
+        o_replicar_necesidades_ent = NEW zpxco_replicar_necesidades_ent( ).
+        o_async_messaging ?= o_replicar_necesidades_ent->get_protocol( if_wsprotocol=>async_messaging ).
+        o_async_messaging->set_serialization_context('I1017_EO').
+
+        o_replicar_necesidades_ent->replicar_async( output = <fs_datos_proxy> ).
+
+        COMMIT WORK AND WAIT.
+
+        go_log->set_es_log( i_es = VALUE #( type = 'S' id = 'ZCX01' number  = '037'  ) ).
+
+        e_ti_return = CORRESPONDING #( go_log->get_log( ) ).
+
+      CATCH cx_ai_system_fault.
+
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD preparar_envio_proxy.
+
+    DATA: es_necesidades_entrega TYPE zpxreplicar_necesidades_entreg,
+          ti_necesidades_entrega TYPE zpxnecesidades_entregas_de_tab,
+          o_monitor_integracion  TYPE REF TO zclcxr1001_monitor_integracion.
+
+    DATA(id_replica) = recuperar_numero_rango( ).
+    DATA(ti_datos_entrega) = consultar_datos( i_r_ola = i_r_ola i_r_entrega_salida = i_r_entrega_salida ).
+
+    es_necesidades_entrega-replicar_necesidades_entregas-necesidades_entregas =
+        VALUE #( FOR es_entregas IN ti_datos_entrega
+                 ( id   = id_replica sammg   = es_entregas-ola vbeln   = |{ es_entregas-entrega_salida ALPHA = OUT }|
+                   ean   = zclmm_util_articulo=>generar_ean128( i_matnr = es_entregas-productno
+                                                                i_meins = es_entregas-unidadmedida
+                                                                i_ean11 = es_entregas-ean11  )-ean128
+                   lfimg  = es_entregas-cantidad
+                   cntbol = es_entregas-unxpaquete
+                   uname  = sy-uname datum  = sy-datum uzeit  = sy-uzeit
+                  )
+                ).
+
+    SORT es_necesidades_entrega-replicar_necesidades_entregas-necesidades_entregas BY id sammg vbeln ean.
+    DELETE ADJACENT DUPLICATES FROM es_necesidades_entrega-replicar_necesidades_entregas-necesidades_entregas
+    COMPARING id sammg vbeln ean.
+
+    TRY.
+        o_monitor_integracion =
+            NEW zclcxr1001_monitor_integracion( i_ricefw          = 'I1017'
+                                                i_es_info_mensaje = VALUE ztcxr1001_1( "ricefw = 'I1017'
+                                                                                         pid       = 'SENDER'
+                                                                                         fecha_ini = sy-datum
+                                                                                         hora_ini  = sy-uzeit
+                                                                                         hora_fin  = sy-uzeit
+                                                                                         ob_system = 'S4'
+                                                                                         ob_name   = 'NOTIFICAR_PICKINGEVIO_OLA_WCS'
+                                                                                         ib_system = 'WCS'
+                                                                                         ib_name   = 'RECIBIR_PICKINGEVIO_OLA_WCS' )
+                                                i_datos_proxy     = es_necesidades_entrega
+                                              ).
+
+        o_monitor_integracion->main( i_datos_proxy = REF #( es_necesidades_entrega ) ).
+
+      CATCH zcxr1001_excepciones_monitor.
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD constructor.
+    go_log =  zclcxr1002_log_aplicacion=>get_instancia(  ).
+  ENDMETHOD.
+
+ENDCLASS.

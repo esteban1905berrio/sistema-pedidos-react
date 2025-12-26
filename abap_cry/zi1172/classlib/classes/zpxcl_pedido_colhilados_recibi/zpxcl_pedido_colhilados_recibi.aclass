@@ -1,0 +1,68 @@
+CLASS zpxcl_pedido_colhilados_recibi DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES zpxii_pedido_colhilados_recibi .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zpxcl_pedido_colhilados_recibi IMPLEMENTATION.
+
+
+  METHOD zpxii_pedido_colhilados_recibi~pedido_colhilados_recibir_inb.
+
+    CONSTANTS: c_rifecw TYPE ztcxr1000_1-ricefw VALUE 'I1172'.
+
+    TRY.
+        DATA(o_monitor_ped) = NEW zclcxr1001_monitor_integracion(
+          i_ricefw         = c_rifecw
+          i_datos_proxy    = input-pedido_catalogo_recibir ).
+
+      CATCH cx_root.
+
+    ENDTRY.
+
+    "Realizamos el re-proceso
+    o_monitor_ped->main( EXPORTING i_datos_proxy = REF #( input-pedido_catalogo_recibir ) ).
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zpxcl_pedido_colhilados_recibi DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES zpxii_pedido_colhilados_recibi .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zpxcl_pedido_colhilados_recibi IMPLEMENTATION.
+
+
+  METHOD zpxii_pedido_colhilados_recibi~pedido_colhilados_recibir_inb.
+
+    CONSTANTS: c_rifecw TYPE ztcxr1000_1-ricefw VALUE 'I1172'.
+
+    TRY.
+        DATA(o_monitor_ped) = NEW zclcxr1001_monitor_integracion(
+          i_ricefw         = c_rifecw
+          i_datos_proxy    = input-pedido_catalogo_recibir ).
+
+      CATCH cx_root.
+
+    ENDTRY.
+
+    "Realizamos el re-proceso
+    o_monitor_ped->main( EXPORTING i_datos_proxy = REF #( input-pedido_catalogo_recibir ) ).
+
+  ENDMETHOD.
+ENDCLASS.

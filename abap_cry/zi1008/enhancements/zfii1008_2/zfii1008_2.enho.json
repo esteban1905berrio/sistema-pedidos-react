@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFII1008_2",
+  "header" : {
+    "enhancementName" : "ZFII1008_2",
+    "description" : "Derivar segmento para documento FICO",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZI1008",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-06-22",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-07-12"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "SAPLFINS_CO_TO_ACDOC",
+    "fullName" : "\\FU:FINS_CO_TO_ACDOC_TRANSFER\\SE:BEGIN\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "  zclfi_exits_gestion_costos=>derivar_segmento_co( CHANGING c_ti_coep = i_coep[] )."
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

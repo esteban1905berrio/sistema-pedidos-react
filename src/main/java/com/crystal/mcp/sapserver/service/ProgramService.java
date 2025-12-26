@@ -81,7 +81,7 @@ public class ProgramService {
      * @return ProgramSourceResult containing source code and metadata
      * @throws RuntimeException if program not found or access fails
      */
-    public ProgramSourceResult getProgramSource(String programName, String version) {
+    public ProgramSourceResult getProgramSource(String programName, String version, String iuri) {
         // Validate inputs
         if (programName == null || programName.trim().isEmpty()) {
             throw new IllegalArgumentException("Program name cannot be empty");
@@ -92,6 +92,10 @@ public class ProgramService {
 
         // Build URI
         String uri = String.format("/sap/bc/adt/programs/programs/%s/source/main", programName);
+
+        if (iuri != null && !iuri.isEmpty()) {
+            uri = iuri + "/source/main";
+        }
 
         // Query parameters
         Map<String, String> params = new HashMap<>();

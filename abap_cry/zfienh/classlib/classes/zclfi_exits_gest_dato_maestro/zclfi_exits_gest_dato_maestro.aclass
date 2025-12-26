@@ -1,0 +1,58 @@
+CLASS zclfi_exits_gest_dato_maestro DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      homologar_idoccreateondatabase
+        CHANGING
+          c_ti_datos_idoc   TYPE edidd_tt
+          c_es_control_idoc TYPE edidc
+        RAISING
+          cx_t100_msg.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+CLASS zclfi_exits_gest_dato_maestro IMPLEMENTATION.
+  METHOD homologar_idoccreateondatabase.
+    zclfii1008_integracion_afs=>homologar_idoccreateondatabase(
+    CHANGING
+      c_ti_datos_idoc   = c_ti_datos_idoc
+      c_es_control_idoc = c_es_control_idoc ).
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfi_exits_gest_dato_maestro DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      homologar_idoccreateondatabase
+        CHANGING
+          c_ti_datos_idoc   TYPE edidd_tt
+          c_es_control_idoc TYPE edidc
+        RAISING
+          cx_t100_msg.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+CLASS zclfi_exits_gest_dato_maestro IMPLEMENTATION.
+  METHOD homologar_idoccreateondatabase.
+    zclfii1008_integracion_afs=>homologar_idoccreateondatabase(
+    CHANGING
+      c_ti_datos_idoc   = c_ti_datos_idoc
+      c_es_control_idoc = c_es_control_idoc ).
+  ENDMETHOD.
+
+ENDCLASS.

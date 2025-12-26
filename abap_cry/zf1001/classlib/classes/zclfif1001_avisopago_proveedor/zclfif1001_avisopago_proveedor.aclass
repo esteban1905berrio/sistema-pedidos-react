@@ -1,0 +1,1036 @@
+CLASS zclfif1001_avisopago_proveedor DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_ricefw          TYPE ztcxr1000_1-ricefw VALUE 'F1001',
+               gc_indicador_resta TYPE bseg-shkzg VALUE 'S'.
+
+    TYPES: BEGIN OF tp_es_cabecera,
+             documento         TYPE reguh-vblnr,
+             titulo            TYPE reguh-zanre,
+             lifnr             TYPE reguh-lifnr,
+             nombre            TYPE string,
+             dir_receptor_pago TYPE reguh-zstra,
+             ciudad            TYPE reguh-ort01,
+             fecha_pago        TYPE reguh-zaldt,
+             cuenta_proveedor  TYPE reguh-zbnkn,
+             nit_empresa       TYPE t001z-paval,
+             sociedad          TYPE regup-bukrs,
+             land1             TYPE reguh-land1,
+             empfg             TYPE reguh-empfg , "Codigo del cliente al que se le está pagando
+           END OF tp_es_cabecera,
+
+           BEGIN OF tp_es_detalle_pago,
+             docuemento_contable TYPE regup-belnr,
+             documento_pago      TYPE regup-vblnr,
+             su_doc              TYPE regup-xblnr,
+             fecha               TYPE regup-bldat,
+             base                TYPE string,
+             iva_soport_compra   TYPE string,
+             rete_iva            TYPE string,
+             rete_ica_generales  TYPE string,
+             rete_fuente         TYPE string,
+             desc                TYPE string, "descueto/descripción
+             shkzg               TYPE regup-shkzg, "Indicador de deber o haber
+             importe_neto        TYPE regup-wrbtr,
+             importe_neto_s      TYPE char20,
+             moneda              TYPE regup-waers,
+             sknto               TYPE regup-sknto,
+             wrbtr               TYPE regup-wrbtr,
+             dmbtr               TYPE regup-dmbtr,
+           END OF tp_es_detalle_pago,
+
+           BEGIN OF tp_es_pie_pagina,
+             documento      TYPE reguh-vblnr,
+             fecha_pago     TYPE reguh-zaldt,
+             moneda         TYPE regup-waers,
+             importe_pago   TYPE regup-wrbtr,
+             importe_pago_s TYPE char20,
+           END OF tp_es_pie_pagina.
+
+    TYPES: tp_ti_detalle_pago TYPE STANDARD TABLE OF tp_es_detalle_pago WITH EMPTY KEY,
+           tp_es_traduccion   TYPE ztfif1001_1.
+
+    CLASS-METHODS:
+      class_constructor,
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Modificar variante para aviso de pago cuando son bancos propios
+      "! </p>
+      "! <strong>Identificador:</strong> F1001
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 20.10.2021  \ S4DK900789 \ Sebastian Londono \ Creacion Inicial \
+      "!
+      "! @parameter i_laufd |
+      "! @parameter i_laufi |
+      "! @parameter c_r_zbukr |
+      "! @parameter c_r_absbu |
+      "! @parameter c_r_hbki |
+      "! @parameter c_r_hkti |
+      modifica_avisopago_bcvirtual
+        IMPORTING
+          i_laufd   TYPE reguh-laufd
+          i_laufi   TYPE reguh-laufi
+        CHANGING
+          c_r_zbukr TYPE any
+          c_r_absbu TYPE any
+          c_r_hbki  TYPE any
+          c_r_hkti  TYPE any,
+      determinar_logo
+        IMPORTING
+          i_bukrs              TYPE regup-bukrs
+        RETURNING
+          VALUE(r_nombre_logo) TYPE string,
+      determinar_idioma_x_via_pago
+        IMPORTING
+          i_via_pago             TYPE fpayh-rzawe
+          i_es_cabecera          TYPE tp_es_cabecera
+        RETURNING
+          VALUE(r_es_traduccion) TYPE ztfif1001_1,
+      consultar_pago_cliente
+        IMPORTING
+          i_bukrs           TYPE regup-bukrs
+          i_vblnr           TYPE reguh-vblnr
+          i_es_fpayh        TYPE fpayh
+          i_es_fpayp        TYPE fpayp
+        EXPORTING
+          e_es_cabecera     TYPE tp_es_cabecera
+          e_ti_detalle_pago TYPE tp_ti_detalle_pago
+          e_es_pie_pagina   TYPE tp_es_pie_pagina.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    CLASS-DATA: go_parametros TYPE REF TO zclcxr1000_parametros.
+
+    CLASS-METHODS:
+      consolidar_detalle_pagos
+        CHANGING
+          c_ti_detalle_pago TYPE tp_ti_detalle_pago,
+      consolidar_pie_pagina
+        CHANGING
+          c_ti_detalle_pago      TYPE tp_ti_detalle_pago
+        RETURNING
+          VALUE(r_es_pie_pagina) TYPE tp_es_pie_pagina,
+      aplicar_formato_moneda
+        IMPORTING
+          i_valor_fuente  TYPE bseg-wrbtr
+          i_moneda        TYPE regup-waers
+          i_shkzg         TYPE bseg-shkzg
+        CHANGING
+          c_valor_destino TYPE string.
+
+ENDCLASS.
+
+
+
+CLASS zclfif1001_avisopago_proveedor IMPLEMENTATION.
+
+
+  METHOD consultar_pago_cliente.
+
+    DATA: descuento      TYPE char20,
+          suma_retencion TYPE bseg-pswbt,
+          base           TYPE bseg-wrbtr,
+          r_rete_ica     TYPE RANGE OF with_item-witht,
+          r_retefuente   TYPE RANGE OF with_item-witht,
+          r_rete_iva     TYPE RANGE OF with_item-witht.
+
+    SELECT c~vblnr AS documento, c~zanre AS titulo, c~land1, c~lifnr,
+    c~znme1 AS nombre,"concat( concat( c~znme1, c~znme2 ), concat( c~znme3, c~znme4 ) ) AS nombre,
+    c~zstra AS dir_receptor_pago, c~ort01 AS ciudad, c~zaldt AS fecha_pago, c~zbnkn AS cuenta_proveedor,
+    c~waers AS moneda, s~paval AS nit_empresa,
+    p~belnr AS docuemento_contable, p~xblnr AS su_doc, p~gjahr, p~bldat AS fecha, p~bukrs AS sociedad, rzawe, t~waers AS waers_s,
+    "Cliente del que se está haciendo el págo
+    c~empfg,
+    "Descuento
+    p~sknto,
+    "Importe neto
+    ( p~wrbtr - p~sknto ) AS importe_neto,
+    "Descripción
+    b~sgtxt AS desc,
+    "Indicador de deber o haber
+    p~shkzg
+    FROM reguh AS c
+    INNER JOIN regup AS p
+    ON p~laufd = c~laufd
+    AND p~laufi = c~laufi
+    AND p~zbukr = c~zbukr
+    AND p~vblnr = c~vblnr
+    LEFT JOIN t001 AS t
+    ON t~bukrs = p~bukrs
+    LEFT JOIN t001z AS s
+    ON s~bukrs = p~bukrs
+    AND s~party = 'CO_NIT'
+    LEFT JOIN bseg AS b ON b~bukrs = c~zbukr
+    AND b~belnr = p~belnr
+    AND b~gjahr = p~gjahr
+    AND b~buzei = p~buzei
+    WHERE c~laufd = @i_es_fpayh-laufd
+    AND   c~laufi = @i_es_fpayh-laufi
+    AND   c~xvorl = @space
+    AND   c~zbukr = @i_bukrs
+    AND   c~lifnr = @i_es_fpayp-gpa2r
+    AND   c~vblnr = @i_vblnr
+
+    INTO TABLE @DATA(ti_datos_pago).
+
+    CHECK ti_datos_pago IS NOT INITIAL.
+
+    "Cabecera
+    TRY.
+        e_es_cabecera = CORRESPONDING #( ti_datos_pago[ 1 ] ).
+
+        IF e_es_cabecera-dir_receptor_pago IS INITIAL.
+          e_es_cabecera-dir_receptor_pago = i_es_fpayh-zbstr.
+        ENDIF.
+
+        CONDENSE e_es_cabecera-dir_receptor_pago.
+
+        IF e_es_cabecera-ciudad IS INITIAL.
+          e_es_cabecera-ciudad = i_es_fpayh-zbort.
+        ENDIF.
+
+      CATCH cx_sy_itab_line_not_found.
+    ENDTRY.
+    "+SLS 14022022 - Agregar valores en detalle solo para pagos nacionales{
+    SELECT b~bukrs, b~belnr, b~gjahr, b~buzei, buzid, b~koart, shkzg, qsskz, wrbtr, pswbt, r~wt_withcd, t~text40
+    FROM bseg AS b
+    LEFT JOIN with_item AS r
+    ON r~bukrs = b~bukrs
+    AND r~belnr = b~belnr
+    AND r~gjahr = b~gjahr
+    AND r~witht = b~qsskz
+    LEFT JOIN t059zt AS t
+    ON t~witht = r~witht
+    AND t~wt_withcd = r~wt_withcd
+    AND t~land1     = 'CO'
+    FOR ALL ENTRIES IN @ti_datos_pago
+    WHERE b~bukrs = @ti_datos_pago-sociedad
+    AND   b~belnr = @ti_datos_pago-docuemento_contable
+    AND   b~gjahr = @ti_datos_pago-gjahr
+    INTO TABLE @DATA(ti_detalle_documento_contable).
+
+    "Consultar parametros de retención
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'RETEFUENTE'
+      IMPORTING
+        e_ti_valrango           = r_retefuente
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'RETE_ICA'
+      IMPORTING
+        e_ti_valrango           = r_rete_ica
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'RETE_IVA'
+      IMPORTING
+        e_ti_valrango           = r_rete_iva
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+    "}
+
+    "Detalle del pago{
+    e_ti_detalle_pago = CORRESPONDING #( ti_datos_pago MAPPING documento_pago = documento ).
+
+    LOOP AT e_ti_detalle_pago ASSIGNING FIELD-SYMBOL(<fs_es_dato_pago>).
+
+      CLEAR: base, suma_retencion.
+
+      "Si el valor es Debe, restar
+      IF <fs_es_dato_pago>-shkzg EQ 'S'.
+        <fs_es_dato_pago>-importe_neto = <fs_es_dato_pago>-importe_neto * -1.
+      ENDIF.
+
+      "Base
+      LOOP AT ti_detalle_documento_contable ASSIGNING FIELD-SYMBOL(<fs_es_doc_contable>)
+                                            WHERE belnr = <fs_es_dato_pago>-docuemento_contable
+                                             AND  buzid <> 'T'
+                                             "{ Inicio SGR 30.07.2024 | Excluir las posiciones tipo S  " Cuenta de mayor general
+                                             AND  buzid <> 'S'
+                                             "{ Fin SGR 30.07.2024
+                                             AND  koart = 'S'
+                                             AND  shkzg = 'S'
+                                             AND  qsskz = space.
+
+        base = base + <fs_es_doc_contable>-wrbtr.
+      ENDLOOP.
+
+      aplicar_formato_moneda( EXPORTING i_valor_fuente = base
+                                          i_moneda       = <fs_es_dato_pago>-moneda
+                                          i_shkzg        = <fs_es_dato_pago>-shkzg
+                                CHANGING c_valor_destino = <fs_es_dato_pago>-base ).
+
+      "Iva soportado
+      suma_retencion = VALUE #( ti_detalle_documento_contable[ belnr = <fs_es_dato_pago>-docuemento_contable
+                                                                                    buzid = 'T'
+                                                                                    koart = 'S'
+                                                                                    shkzg = 'S' ]-wrbtr OPTIONAL ).
+
+      aplicar_formato_moneda( EXPORTING i_valor_fuente = suma_retencion
+                                        i_moneda       = <fs_es_dato_pago>-moneda
+                                        i_shkzg        = 'S'
+                               CHANGING c_valor_destino = <fs_es_dato_pago>-iva_soport_compra ).
+
+      "retenciones
+      IF r_rete_ica IS NOT INITIAL.
+        suma_retencion = REDUCE wrbtr( INIT retencion TYPE wrbtr
+                                         FOR  es_detalle IN ti_detalle_documento_contable
+                                         WHERE ( belnr = <fs_es_dato_pago>-docuemento_contable AND qsskz IN r_rete_ica )
+                                         NEXT retencion += COND wrbtr( WHEN es_detalle-shkzg = gc_indicador_resta THEN
+                                                                        es_detalle-wrbtr * -1
+                                                                       ELSE
+                                                                        es_detalle-wrbtr
+                                                                     )
+                                     ).
+
+        aplicar_formato_moneda( EXPORTING i_valor_fuente = suma_retencion
+                                          i_moneda       = <fs_es_dato_pago>-moneda
+                                          i_shkzg        = <fs_es_dato_pago>-shkzg
+                               CHANGING   c_valor_destino = <fs_es_dato_pago>-rete_ica_generales ).
+
+      ENDIF.
+
+      IF r_rete_iva IS NOT INITIAL.
+        suma_retencion = REDUCE wrbtr( INIT retencion TYPE wrbtr
+                                         FOR  es_detalle IN ti_detalle_documento_contable
+                                         WHERE ( belnr = <fs_es_dato_pago>-docuemento_contable AND
+                                                 qsskz IN r_rete_iva )
+                                         NEXT retencion += COND wrbtr( WHEN es_detalle-qsskz = 'IS' AND es_detalle-wt_withcd = '07' THEN
+                                                                    0
+                                                                   ELSE
+                                                                    COND wrbtr( WHEN es_detalle-shkzg = gc_indicador_resta THEN
+                                                                                es_detalle-wrbtr * -1
+                                                                               ELSE
+                                                                                es_detalle-wrbtr
+                                                                              )
+                                                                 )
+                                     ).
+
+        aplicar_formato_moneda( EXPORTING i_valor_fuente = suma_retencion
+                                          i_moneda       = <fs_es_dato_pago>-moneda
+                                          i_shkzg        = <fs_es_dato_pago>-shkzg
+                                CHANGING  c_valor_destino = <fs_es_dato_pago>-rete_iva ).
+      ENDIF.
+
+      IF r_retefuente IS NOT INITIAL.
+        suma_retencion = REDUCE wrbtr( INIT retencion TYPE wrbtr
+                                         FOR  es_detalle IN ti_detalle_documento_contable
+                                         WHERE ( belnr = <fs_es_dato_pago>-docuemento_contable AND  qsskz IN r_retefuente )
+                                         NEXT retencion += COND wrbtr( WHEN es_detalle-qsskz = 'IS' AND es_detalle-wt_withcd = '07' THEN
+                                                                    0
+                                                                   ELSE
+                                                                    COND wrbtr( WHEN es_detalle-shkzg = gc_indicador_resta THEN
+                                                                                es_detalle-wrbtr * -1
+                                                                               ELSE
+                                                                                es_detalle-wrbtr
+                                                                              )
+                                                                 )
+                                     ).
+
+        aplicar_formato_moneda( EXPORTING i_valor_fuente = suma_retencion
+                                          i_moneda       = <fs_es_dato_pago>-moneda
+                                          i_shkzg        = <fs_es_dato_pago>-shkzg
+                                CHANGING  c_valor_destino = <fs_es_dato_pago>-rete_fuente ).
+      ENDIF.
+
+      "Para sociedades 1100 y 1800 dejar la descripción o que no sea Colombia{
+      IF ( i_bukrs EQ '1100' OR i_bukrs EQ '1800' ) AND e_es_cabecera-land1 NE 'CO'.
+        CONDENSE <fs_es_dato_pago>-desc.
+      ELSE.
+*        <fs_es_dato_pago>-desc = space.
+        WRITE <fs_es_dato_pago>-sknto TO descuento CURRENCY <fs_es_dato_pago>-moneda.
+        CONDENSE descuento NO-GAPS.
+        <fs_es_dato_pago>-desc = descuento.
+      ENDIF.
+      "}
+
+      WRITE <fs_es_dato_pago>-importe_neto TO <fs_es_dato_pago>-importe_neto_s CURRENCY <fs_es_dato_pago>-moneda.
+      CONDENSE <fs_es_dato_pago>-importe_neto_s NO-GAPS.
+    ENDLOOP.
+    "}
+
+    consolidar_detalle_pagos( CHANGING c_ti_detalle_pago = e_ti_detalle_pago ).
+
+    "pie de pagina
+    e_es_pie_pagina = consolidar_pie_pagina( CHANGING c_ti_detalle_pago = e_ti_detalle_pago ).
+
+  ENDMETHOD.
+
+
+  METHOD consolidar_detalle_pagos.
+
+  ENDMETHOD.
+
+
+  METHOD consolidar_pie_pagina.
+
+    r_es_pie_pagina = CORRESPONDING #( c_ti_detalle_pago[ 1 ] MAPPING documento = documento_pago fecha_pago = fecha ).
+
+    r_es_pie_pagina-importe_pago = REDUCE wrbtr( INIT importe_pago TYPE wrbtr
+                                                 FOR  es_datos IN c_ti_detalle_pago
+                                                 NEXT importe_pago += es_datos-importe_neto ).
+
+    WRITE r_es_pie_pagina-importe_pago TO r_es_pie_pagina-importe_pago_s CURRENCY r_es_pie_pagina-moneda.
+
+    CONDENSE r_es_pie_pagina-importe_pago_s NO-GAPS.
+
+  ENDMETHOD.
+
+
+  METHOD determinar_logo.
+
+    DATA: ti_logo TYPE RANGE OF ztcxr1000_2-low.
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_comodin               = CONV #( i_bukrs )
+        i_idparam               = |LOGO_{ i_bukrs }|
+      IMPORTING
+        e_ti_valrango           = ti_logo
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    IF sy-subrc <> 0.
+*      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+*        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      r_nombre_logo = ti_logo[ 1 ]-low.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD class_constructor.
+
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = gc_ricefw ).
+
+  ENDMETHOD.
+
+
+  METHOD determinar_idioma_x_via_pago.
+
+    SELECT *
+    FROM ztfif1001_1
+    INTO TABLE @DATA(ti_traduccion).
+
+    TRY.
+
+        r_es_traduccion = ti_traduccion[ rzawe = i_via_pago ].
+
+      CATCH cx_sy_itab_line_not_found.
+
+        r_es_traduccion = ti_traduccion[ rzawe = space ].
+
+    ENDTRY.
+
+    SPLIT r_es_traduccion-texto_largo_h AT '|' INTO DATA(pago_normal) DATA(pago_otro).
+
+    IF i_es_cabecera-empfg IS NOT INITIAL.
+
+      SELECT SINGLE name1, stras, mcod3
+      FROM lfa1
+      WHERE lifnr = @i_es_cabecera-lifnr
+      INTO @DATA(es_datos).
+
+      r_es_traduccion-texto_largo_h = |{ pago_normal }{ cl_abap_char_utilities=>newline }{ pago_otro }{ cl_abap_char_utilities=>newline }{ es_datos-name1 }|.
+      r_es_traduccion-texto_largo_h = |{ r_es_traduccion-texto_largo_h }{ cl_abap_char_utilities=>newline }{ es_datos-stras }{ cl_abap_char_utilities=>newline }{ es_datos-mcod3 }|.
+    ELSE.
+      r_es_traduccion-texto_largo_h = pago_normal.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD modifica_avisopago_bcvirtual.
+
+    DATA: r_banco_virtual TYPE RANGE OF hbkid.
+
+    NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = 'E1017' )->get_parametro( EXPORTING i_idparam     = 'HBKID_VT'
+                                                                                    IMPORTING e_ti_valrango = r_banco_virtual
+                                                                                    EXCEPTIONS parametro_no_encontrado = 1  ).
+
+    SELECT SINGLE hbkid
+    FROM reguh
+    WHERE laufd = @i_laufd
+    AND   laufi = @i_laufi
+    AND   xvorl NE @abap_true
+    AND   hbkid NE @space
+    INTO @DATA(id_banco).
+
+    ASSIGN ('(RFFOAVIS_FPAYM)SY-REPID') TO FIELD-SYMBOL(<fs_nombre_reporte>).
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'F1001' ) = abap_true
+    AND <fs_nombre_reporte> IS ASSIGNED
+    AND id_banco IN r_banco_virtual
+    AND r_banco_virtual IS NOT INITIAL.
+
+    c_r_zbukr = c_r_absbu.
+
+    CLEAR: c_r_absbu, c_r_hbki, c_r_hkti.
+
+  ENDMETHOD.
+
+
+  METHOD aplicar_formato_moneda.
+
+    DATA: str_valor_retencion TYPE char30,
+          valor_fuente        TYPE bseg-wrbtr.
+
+***    valor_fuente = COND #( WHEN i_shkzg = gc_indicador_resta THEN
+***                            i_valor_fuente * -1
+***                           ELSE
+***                            i_valor_fuente ).
+
+    valor_fuente = i_valor_fuente.
+
+    WRITE valor_fuente TO str_valor_retencion CURRENCY i_moneda.
+    CONDENSE str_valor_retencion NO-GAPS.
+    c_valor_destino = str_valor_retencion.
+    "Cambiar posición del signo negativo
+    IF c_valor_destino CS '-'.
+      REPLACE ALL OCCURRENCES OF '-' IN c_valor_destino WITH space.
+      c_valor_destino = |-{ c_valor_destino }|.
+    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclfif1001_avisopago_proveedor DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_ricefw          TYPE ztcxr1000_1-ricefw VALUE 'F1001',
+               gc_indicador_resta TYPE bseg-shkzg VALUE 'S'.
+
+    TYPES: BEGIN OF tp_es_cabecera,
+             documento         TYPE reguh-vblnr,
+             titulo            TYPE reguh-zanre,
+             lifnr             TYPE reguh-lifnr,
+             nombre            TYPE string,
+             dir_receptor_pago TYPE reguh-zstra,
+             ciudad            TYPE reguh-ort01,
+             fecha_pago        TYPE reguh-zaldt,
+             cuenta_proveedor  TYPE reguh-zbnkn,
+             nit_empresa       TYPE t001z-paval,
+             sociedad          TYPE regup-bukrs,
+             land1             TYPE reguh-land1,
+             empfg             TYPE reguh-empfg , "Codigo del cliente al que se le está pagando
+           END OF tp_es_cabecera,
+
+           BEGIN OF tp_es_detalle_pago,
+             docuemento_contable TYPE regup-belnr,
+             documento_pago      TYPE regup-vblnr,
+             su_doc              TYPE regup-xblnr,
+             fecha               TYPE regup-bldat,
+             base                TYPE string,
+             iva_soport_compra   TYPE string,
+             rete_iva            TYPE string,
+             rete_ica_generales  TYPE string,
+             rete_fuente         TYPE string,
+             desc                TYPE string, "descueto/descripción
+             shkzg               TYPE regup-shkzg, "Indicador de deber o haber
+             importe_neto        TYPE regup-wrbtr,
+             importe_neto_s      TYPE char20,
+             moneda              TYPE regup-waers,
+             sknto               TYPE regup-sknto,
+             wrbtr               TYPE regup-wrbtr,
+             dmbtr               TYPE regup-dmbtr,
+           END OF tp_es_detalle_pago,
+
+           BEGIN OF tp_es_pie_pagina,
+             documento      TYPE reguh-vblnr,
+             fecha_pago     TYPE reguh-zaldt,
+             moneda         TYPE regup-waers,
+             importe_pago   TYPE regup-wrbtr,
+             importe_pago_s TYPE char20,
+           END OF tp_es_pie_pagina.
+
+    TYPES: tp_ti_detalle_pago TYPE STANDARD TABLE OF tp_es_detalle_pago WITH EMPTY KEY,
+           tp_es_traduccion   TYPE ztfif1001_1.
+
+    CLASS-METHODS:
+      class_constructor,
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Modificar variante para aviso de pago cuando son bancos propios
+      "! </p>
+      "! <strong>Identificador:</strong> F1001
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Sebastian Londono
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 20.10.2021  \ S4DK900789 \ Sebastian Londono \ Creacion Inicial \
+      "!
+      "! @parameter i_laufd |
+      "! @parameter i_laufi |
+      "! @parameter c_r_zbukr |
+      "! @parameter c_r_absbu |
+      "! @parameter c_r_hbki |
+      "! @parameter c_r_hkti |
+      modifica_avisopago_bcvirtual
+        IMPORTING
+          i_laufd   TYPE reguh-laufd
+          i_laufi   TYPE reguh-laufi
+        CHANGING
+          c_r_zbukr TYPE any
+          c_r_absbu TYPE any
+          c_r_hbki  TYPE any
+          c_r_hkti  TYPE any,
+      determinar_logo
+        IMPORTING
+          i_bukrs              TYPE regup-bukrs
+        RETURNING
+          VALUE(r_nombre_logo) TYPE string,
+      determinar_idioma_x_via_pago
+        IMPORTING
+          i_via_pago             TYPE fpayh-rzawe
+          i_es_cabecera          TYPE tp_es_cabecera
+        RETURNING
+          VALUE(r_es_traduccion) TYPE ztfif1001_1,
+      consultar_pago_cliente
+        IMPORTING
+          i_bukrs           TYPE regup-bukrs
+          i_vblnr           TYPE reguh-vblnr
+          i_es_fpayh        TYPE fpayh
+          i_es_fpayp        TYPE fpayp
+        EXPORTING
+          e_es_cabecera     TYPE tp_es_cabecera
+          e_ti_detalle_pago TYPE tp_ti_detalle_pago
+          e_es_pie_pagina   TYPE tp_es_pie_pagina.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    CLASS-DATA: go_parametros TYPE REF TO zclcxr1000_parametros.
+
+    CLASS-METHODS:
+      consolidar_detalle_pagos
+        CHANGING
+          c_ti_detalle_pago TYPE tp_ti_detalle_pago,
+      consolidar_pie_pagina
+        CHANGING
+          c_ti_detalle_pago      TYPE tp_ti_detalle_pago
+        RETURNING
+          VALUE(r_es_pie_pagina) TYPE tp_es_pie_pagina,
+      aplicar_formato_moneda
+        IMPORTING
+          i_valor_fuente  TYPE bseg-wrbtr
+          i_moneda        TYPE regup-waers
+          i_shkzg         TYPE bseg-shkzg
+        CHANGING
+          c_valor_destino TYPE string.
+
+ENDCLASS.
+
+
+
+CLASS zclfif1001_avisopago_proveedor IMPLEMENTATION.
+
+
+  METHOD consultar_pago_cliente.
+
+    DATA: descuento      TYPE char20,
+          suma_retencion TYPE bseg-pswbt,
+          base           TYPE bseg-wrbtr,
+          r_rete_ica     TYPE RANGE OF with_item-witht,
+          r_retefuente   TYPE RANGE OF with_item-witht,
+          r_rete_iva     TYPE RANGE OF with_item-witht.
+
+    SELECT c~vblnr AS documento, c~zanre AS titulo, c~land1, c~lifnr,
+    c~znme1 AS nombre,"concat( concat( c~znme1, c~znme2 ), concat( c~znme3, c~znme4 ) ) AS nombre,
+    c~zstra AS dir_receptor_pago, c~ort01 AS ciudad, c~zaldt AS fecha_pago, c~zbnkn AS cuenta_proveedor,
+    c~waers AS moneda, s~paval AS nit_empresa,
+    p~belnr AS docuemento_contable, p~xblnr AS su_doc, p~gjahr, p~bldat AS fecha, p~bukrs AS sociedad, rzawe, t~waers AS waers_s,
+    "Cliente del que se está haciendo el págo
+    c~empfg,
+    "Descuento
+    p~sknto,
+    "Importe neto
+    ( p~wrbtr - p~sknto ) AS importe_neto,
+    "Descripción
+    b~sgtxt AS desc,
+    "Indicador de deber o haber
+    p~shkzg
+    FROM reguh AS c
+    INNER JOIN regup AS p
+    ON p~laufd = c~laufd
+    AND p~laufi = c~laufi
+    AND p~zbukr = c~zbukr
+    AND p~vblnr = c~vblnr
+    LEFT JOIN t001 AS t
+    ON t~bukrs = p~bukrs
+    LEFT JOIN t001z AS s
+    ON s~bukrs = p~bukrs
+    AND s~party = 'CO_NIT'
+    LEFT JOIN bseg AS b ON b~bukrs = c~zbukr
+    AND b~belnr = p~belnr
+    AND b~gjahr = p~gjahr
+    AND b~buzei = p~buzei
+    WHERE c~laufd = @i_es_fpayh-laufd
+    AND   c~laufi = @i_es_fpayh-laufi
+    AND   c~xvorl = @space
+    AND   c~zbukr = @i_bukrs
+    AND   c~lifnr = @i_es_fpayp-gpa2r
+    AND   c~vblnr = @i_vblnr
+
+    INTO TABLE @DATA(ti_datos_pago).
+
+    CHECK ti_datos_pago IS NOT INITIAL.
+
+    "Cabecera
+    TRY.
+        e_es_cabecera = CORRESPONDING #( ti_datos_pago[ 1 ] ).
+
+        IF e_es_cabecera-dir_receptor_pago IS INITIAL.
+          e_es_cabecera-dir_receptor_pago = i_es_fpayh-zbstr.
+        ENDIF.
+
+        CONDENSE e_es_cabecera-dir_receptor_pago.
+
+        IF e_es_cabecera-ciudad IS INITIAL.
+          e_es_cabecera-ciudad = i_es_fpayh-zbort.
+        ENDIF.
+
+      CATCH cx_sy_itab_line_not_found.
+    ENDTRY.
+    "+SLS 14022022 - Agregar valores en detalle solo para pagos nacionales{
+    SELECT b~bukrs, b~belnr, b~gjahr, b~buzei, buzid, b~koart, shkzg, qsskz, wrbtr, pswbt, r~wt_withcd, t~text40
+    FROM bseg AS b
+    LEFT JOIN with_item AS r
+    ON r~bukrs = b~bukrs
+    AND r~belnr = b~belnr
+    AND r~gjahr = b~gjahr
+    AND r~witht = b~qsskz
+    LEFT JOIN t059zt AS t
+    ON t~witht = r~witht
+    AND t~wt_withcd = r~wt_withcd
+    AND t~land1     = 'CO'
+    FOR ALL ENTRIES IN @ti_datos_pago
+    WHERE b~bukrs = @ti_datos_pago-sociedad
+    AND   b~belnr = @ti_datos_pago-docuemento_contable
+    AND   b~gjahr = @ti_datos_pago-gjahr
+    INTO TABLE @DATA(ti_detalle_documento_contable).
+
+    "Consultar parametros de retención
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'RETEFUENTE'
+      IMPORTING
+        e_ti_valrango           = r_retefuente
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'RETE_ICA'
+      IMPORTING
+        e_ti_valrango           = r_rete_ica
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'RETE_IVA'
+      IMPORTING
+        e_ti_valrango           = r_rete_iva
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+    "}
+
+    "Detalle del pago{
+    e_ti_detalle_pago = CORRESPONDING #( ti_datos_pago MAPPING documento_pago = documento ).
+
+    LOOP AT e_ti_detalle_pago ASSIGNING FIELD-SYMBOL(<fs_es_dato_pago>).
+
+      CLEAR: base, suma_retencion.
+
+      "Si el valor es Debe, restar
+      IF <fs_es_dato_pago>-shkzg EQ 'S'.
+        <fs_es_dato_pago>-importe_neto = <fs_es_dato_pago>-importe_neto * -1.
+      ENDIF.
+
+      "Base
+      LOOP AT ti_detalle_documento_contable ASSIGNING FIELD-SYMBOL(<fs_es_doc_contable>)
+                                            WHERE belnr = <fs_es_dato_pago>-docuemento_contable
+                                             AND  buzid <> 'T'
+                                             "{ Inicio SGR 30.07.2024 | Excluir las posiciones tipo S  " Cuenta de mayor general
+                                             AND  buzid <> 'S'
+                                             "{ Fin SGR 30.07.2024
+                                             AND  koart = 'S'
+                                             AND  shkzg = 'S'
+                                             AND  qsskz = space.
+
+        base = base + <fs_es_doc_contable>-wrbtr.
+      ENDLOOP.
+
+      aplicar_formato_moneda( EXPORTING i_valor_fuente = base
+                                          i_moneda       = <fs_es_dato_pago>-moneda
+                                          i_shkzg        = <fs_es_dato_pago>-shkzg
+                                CHANGING c_valor_destino = <fs_es_dato_pago>-base ).
+
+      "Iva soportado
+      suma_retencion = VALUE #( ti_detalle_documento_contable[ belnr = <fs_es_dato_pago>-docuemento_contable
+                                                                                    buzid = 'T'
+                                                                                    koart = 'S'
+                                                                                    shkzg = 'S' ]-wrbtr OPTIONAL ).
+
+      aplicar_formato_moneda( EXPORTING i_valor_fuente = suma_retencion
+                                        i_moneda       = <fs_es_dato_pago>-moneda
+                                        i_shkzg        = 'S'
+                               CHANGING c_valor_destino = <fs_es_dato_pago>-iva_soport_compra ).
+
+      "retenciones
+      IF r_rete_ica IS NOT INITIAL.
+        suma_retencion = REDUCE wrbtr( INIT retencion TYPE wrbtr
+                                         FOR  es_detalle IN ti_detalle_documento_contable
+                                         WHERE ( belnr = <fs_es_dato_pago>-docuemento_contable AND qsskz IN r_rete_ica )
+                                         NEXT retencion += COND wrbtr( WHEN es_detalle-shkzg = gc_indicador_resta THEN
+                                                                        es_detalle-wrbtr * -1
+                                                                       ELSE
+                                                                        es_detalle-wrbtr
+                                                                     )
+                                     ).
+
+        aplicar_formato_moneda( EXPORTING i_valor_fuente = suma_retencion
+                                          i_moneda       = <fs_es_dato_pago>-moneda
+                                          i_shkzg        = <fs_es_dato_pago>-shkzg
+                               CHANGING   c_valor_destino = <fs_es_dato_pago>-rete_ica_generales ).
+
+      ENDIF.
+
+      IF r_rete_iva IS NOT INITIAL.
+        suma_retencion = REDUCE wrbtr( INIT retencion TYPE wrbtr
+                                         FOR  es_detalle IN ti_detalle_documento_contable
+                                         WHERE ( belnr = <fs_es_dato_pago>-docuemento_contable AND
+                                                 qsskz IN r_rete_iva )
+                                         NEXT retencion += COND wrbtr( WHEN es_detalle-qsskz = 'IS' AND es_detalle-wt_withcd = '07' THEN
+                                                                    0
+                                                                   ELSE
+                                                                    COND wrbtr( WHEN es_detalle-shkzg = gc_indicador_resta THEN
+                                                                                es_detalle-wrbtr * -1
+                                                                               ELSE
+                                                                                es_detalle-wrbtr
+                                                                              )
+                                                                 )
+                                     ).
+
+        aplicar_formato_moneda( EXPORTING i_valor_fuente = suma_retencion
+                                          i_moneda       = <fs_es_dato_pago>-moneda
+                                          i_shkzg        = <fs_es_dato_pago>-shkzg
+                                CHANGING  c_valor_destino = <fs_es_dato_pago>-rete_iva ).
+      ENDIF.
+
+      IF r_retefuente IS NOT INITIAL.
+        suma_retencion = REDUCE wrbtr( INIT retencion TYPE wrbtr
+                                         FOR  es_detalle IN ti_detalle_documento_contable
+                                         WHERE ( belnr = <fs_es_dato_pago>-docuemento_contable AND  qsskz IN r_retefuente )
+                                         NEXT retencion += COND wrbtr( WHEN es_detalle-qsskz = 'IS' AND es_detalle-wt_withcd = '07' THEN
+                                                                    0
+                                                                   ELSE
+                                                                    COND wrbtr( WHEN es_detalle-shkzg = gc_indicador_resta THEN
+                                                                                es_detalle-wrbtr * -1
+                                                                               ELSE
+                                                                                es_detalle-wrbtr
+                                                                              )
+                                                                 )
+                                     ).
+
+        aplicar_formato_moneda( EXPORTING i_valor_fuente = suma_retencion
+                                          i_moneda       = <fs_es_dato_pago>-moneda
+                                          i_shkzg        = <fs_es_dato_pago>-shkzg
+                                CHANGING  c_valor_destino = <fs_es_dato_pago>-rete_fuente ).
+      ENDIF.
+
+      "Para sociedades 1100 y 1800 dejar la descripción o que no sea Colombia{
+      IF ( i_bukrs EQ '1100' OR i_bukrs EQ '1800' ) AND e_es_cabecera-land1 NE 'CO'.
+        CONDENSE <fs_es_dato_pago>-desc.
+      ELSE.
+*        <fs_es_dato_pago>-desc = space.
+        WRITE <fs_es_dato_pago>-sknto TO descuento CURRENCY <fs_es_dato_pago>-moneda.
+        CONDENSE descuento NO-GAPS.
+        <fs_es_dato_pago>-desc = descuento.
+      ENDIF.
+      "}
+
+      WRITE <fs_es_dato_pago>-importe_neto TO <fs_es_dato_pago>-importe_neto_s CURRENCY <fs_es_dato_pago>-moneda.
+      CONDENSE <fs_es_dato_pago>-importe_neto_s NO-GAPS.
+    ENDLOOP.
+    "}
+
+    consolidar_detalle_pagos( CHANGING c_ti_detalle_pago = e_ti_detalle_pago ).
+
+    "pie de pagina
+    e_es_pie_pagina = consolidar_pie_pagina( CHANGING c_ti_detalle_pago = e_ti_detalle_pago ).
+
+  ENDMETHOD.
+
+
+  METHOD consolidar_detalle_pagos.
+
+  ENDMETHOD.
+
+
+  METHOD consolidar_pie_pagina.
+
+    r_es_pie_pagina = CORRESPONDING #( c_ti_detalle_pago[ 1 ] MAPPING documento = documento_pago fecha_pago = fecha ).
+
+    r_es_pie_pagina-importe_pago = REDUCE wrbtr( INIT importe_pago TYPE wrbtr
+                                                 FOR  es_datos IN c_ti_detalle_pago
+                                                 NEXT importe_pago += es_datos-importe_neto ).
+
+    WRITE r_es_pie_pagina-importe_pago TO r_es_pie_pagina-importe_pago_s CURRENCY r_es_pie_pagina-moneda.
+
+    CONDENSE r_es_pie_pagina-importe_pago_s NO-GAPS.
+
+  ENDMETHOD.
+
+
+  METHOD determinar_logo.
+
+    DATA: ti_logo TYPE RANGE OF ztcxr1000_2-low.
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_comodin               = CONV #( i_bukrs )
+        i_idparam               = |LOGO_{ i_bukrs }|
+      IMPORTING
+        e_ti_valrango           = ti_logo
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    IF sy-subrc <> 0.
+*      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+*        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ELSE.
+      r_nombre_logo = ti_logo[ 1 ]-low.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD class_constructor.
+
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = gc_ricefw ).
+
+  ENDMETHOD.
+
+
+  METHOD determinar_idioma_x_via_pago.
+
+    SELECT *
+    FROM ztfif1001_1
+    INTO TABLE @DATA(ti_traduccion).
+
+    TRY.
+
+        r_es_traduccion = ti_traduccion[ rzawe = i_via_pago ].
+
+      CATCH cx_sy_itab_line_not_found.
+
+        r_es_traduccion = ti_traduccion[ rzawe = space ].
+
+    ENDTRY.
+
+    SPLIT r_es_traduccion-texto_largo_h AT '|' INTO DATA(pago_normal) DATA(pago_otro).
+
+    IF i_es_cabecera-empfg IS NOT INITIAL.
+
+      SELECT SINGLE name1, stras, mcod3
+      FROM lfa1
+      WHERE lifnr = @i_es_cabecera-lifnr
+      INTO @DATA(es_datos).
+
+      r_es_traduccion-texto_largo_h = |{ pago_normal }{ cl_abap_char_utilities=>newline }{ pago_otro }{ cl_abap_char_utilities=>newline }{ es_datos-name1 }|.
+      r_es_traduccion-texto_largo_h = |{ r_es_traduccion-texto_largo_h }{ cl_abap_char_utilities=>newline }{ es_datos-stras }{ cl_abap_char_utilities=>newline }{ es_datos-mcod3 }|.
+    ELSE.
+      r_es_traduccion-texto_largo_h = pago_normal.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD modifica_avisopago_bcvirtual.
+
+    DATA: r_banco_virtual TYPE RANGE OF hbkid.
+
+    NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = 'E1017' )->get_parametro( EXPORTING i_idparam     = 'HBKID_VT'
+                                                                                    IMPORTING e_ti_valrango = r_banco_virtual
+                                                                                    EXCEPTIONS parametro_no_encontrado = 1  ).
+
+    SELECT SINGLE hbkid
+    FROM reguh
+    WHERE laufd = @i_laufd
+    AND   laufi = @i_laufi
+    AND   xvorl NE @abap_true
+    AND   hbkid NE @space
+    INTO @DATA(id_banco).
+
+    ASSIGN ('(RFFOAVIS_FPAYM)SY-REPID') TO FIELD-SYMBOL(<fs_nombre_reporte>).
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'F1001' ) = abap_true
+    AND <fs_nombre_reporte> IS ASSIGNED
+    AND id_banco IN r_banco_virtual
+    AND r_banco_virtual IS NOT INITIAL.
+
+    c_r_zbukr = c_r_absbu.
+
+    CLEAR: c_r_absbu, c_r_hbki, c_r_hkti.
+
+  ENDMETHOD.
+
+
+  METHOD aplicar_formato_moneda.
+
+    DATA: str_valor_retencion TYPE char30,
+          valor_fuente        TYPE bseg-wrbtr.
+
+***    valor_fuente = COND #( WHEN i_shkzg = gc_indicador_resta THEN
+***                            i_valor_fuente * -1
+***                           ELSE
+***                            i_valor_fuente ).
+
+    valor_fuente = i_valor_fuente.
+
+    WRITE valor_fuente TO str_valor_retencion CURRENCY i_moneda.
+    CONDENSE str_valor_retencion NO-GAPS.
+    c_valor_destino = str_valor_retencion.
+    "Cambiar posición del signo negativo
+    IF c_valor_destino CS '-'.
+      REPLACE ALL OCCURRENCES OF '-' IN c_valor_destino WITH space.
+      c_valor_destino = |-{ c_valor_destino }|.
+    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.

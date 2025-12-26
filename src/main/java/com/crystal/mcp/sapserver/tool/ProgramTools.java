@@ -89,7 +89,7 @@ public class ProgramTools {
                         @McpToolParam(description = "Version to retrieve: 'active' for activated code or 'inactive' for draft. "
                                         +
                                         "Default: 'active'", required = false) String version) {
-                return programService.getProgramSource(programName, version);
+                return programService.getProgramSource(programName, version, "");
         }
 
         /**
