@@ -134,7 +134,20 @@
       "WebFetch(domain:www.se80.co.uk)",
       "WebFetch(domain:leanx.eu)",
       "WebFetch(domain:dev-workbench.com)",
-      "WebFetch(domain:www.saptechnicalguru.com)"
+      "WebFetch(domain:www.saptechnicalguru.com)",
+      "Skill(sap-mcp-tool-developer)",
+      "mcp__gdcmcp__getInactiveObjects",
+      "mcp__gdcmcp__activateObjects",
+      "mcp__gdcmcp__check_syntax",
+      "mcp__giralmcp__modify_function_module",
+      "mcp__giralmcp__modify_class",
+      "mcp__giralmcp__get_object_structure",
+      "mcp__gdcmcp__get_transport_log",
+      "mcp__gdcmcp__get_transport_info",
+      "WebFetch(domain:www.leanx.eu)",
+      "WebFetch(domain:stackoverflow.com)",
+      "mcp__gdcmcp__getPackageHierarchy",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

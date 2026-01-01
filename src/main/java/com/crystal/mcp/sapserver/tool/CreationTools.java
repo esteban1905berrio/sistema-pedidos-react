@@ -123,7 +123,12 @@ public class CreationTools {
                     "Function group must exist before creating function module. " +
                     "\n\n⚠️ CRITICAL: " +
                     "Signatures must NEVER include comments (*\" blocks). " +
-                    "\n\nExample: create_function_module('Z_TEST_FM', 'ZTEST_FG', 'Test Function Module', null)"
+                    "\n\n📡 RFC-ENABLED FUNCTION MODULES: " +
+                    "To create an RFC-enabled function module (callable remotely from other SAP systems or external applications), " +
+                    "set processingType='rfc'. Only use 'rfc' when explicitly requested by the user. " +
+                    "Default behavior creates a normal (non-RFC) function module. " +
+                    "\n\nExample: create_function_module('Z_TEST_FM', 'ZTEST_FG', 'Test Function Module', null, null) " +
+                    "\nExample RFC: create_function_module('Z_RFC_TEST', 'ZTEST_FG', 'RFC Function Module', null, 'rfc')"
     )
     public CreationResult create_function_module(
             @McpToolParam(
@@ -152,9 +157,19 @@ public class CreationTools {
                             "Examples: 'CADK911122', 'DEVK900123', null",
                     required = false
             )
-            String transport
+            String transport,
+            @McpToolParam(
+                    description = "Processing type of the function module. " +
+                            "ONLY set to 'rfc' when the user EXPLICITLY requests an RFC-enabled function module. " +
+                            "Values: null/empty (default, normal FM), 'rfc' (RFC-enabled for remote calls). " +
+                            "RFC-enabled FMs can be called remotely from other SAP systems or external applications via RFC. " +
+                            "If not specified or null, creates a normal function module (NOT RFC-enabled). " +
+                            "Examples: null (normal FM), 'rfc' (RFC-enabled FM)",
+                    required = false
+            )
+            String processingType
     ) {
-        return creationService.createFunctionModule(functionModuleName, functionGroupName, description, transport);
+        return creationService.createFunctionModule(functionModuleName, functionGroupName, description, transport, processingType);
     }
 
     /**

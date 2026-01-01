@@ -196,4 +196,18 @@ public class ClassModifyResult {
     public void addMessage(String type, String text, String step) {
         this.messages.add(new Message(type, text, step));
     }
+
+    /**
+     * Get first error message or generic failure message.
+     */
+    public String getMessage() {
+        if (messages != null) {
+            for (Message msg : messages) {
+                if ("error".equalsIgnoreCase(msg.getType())) {
+                    return msg.getText();
+                }
+            }
+        }
+        return success ? "Success" : "Modification failed";
+    }
 }
