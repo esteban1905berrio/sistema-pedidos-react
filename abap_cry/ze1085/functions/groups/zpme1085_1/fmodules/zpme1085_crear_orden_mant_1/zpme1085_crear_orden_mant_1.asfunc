@@ -1,0 +1,15 @@
+FUNCTION zpme1085_crear_orden_mant_1
+  IMPORTING
+    VALUE(i_ti_imrg) TYPE imrg_tab
+    VALUE(i_es_imptt) TYPE impt
+    VALUE(i_numero_equipo) TYPE itob-equnr.
+
+
+
+
+  NEW zclpme1085_orden_mantenimiento( )->crear_avisoorden_mantenimiento(  i_ti_imrg                   = i_ti_imrg
+                                                                          i_es_imptt                  = i_es_imptt
+                                                                          i_numero_equipo             = i_numero_equipo ).
+
+
+ENDFUNCTION.

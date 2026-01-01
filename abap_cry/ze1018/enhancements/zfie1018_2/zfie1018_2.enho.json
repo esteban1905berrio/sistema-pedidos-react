@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFIE1018_2",
+  "header" : {
+    "enhancementName" : "ZFIE1018_2",
+    "description" : "Activar Gestion de Creditos",
+    "toolType" : "BADI_IMPL",
+    "toolTypeText" : "BAdI Implementation",
+    "devclass" : "ZE1018",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-07-01",
+    "changedBy" : "CAEDMART",
+    "changedOn" : "2022-04-12"
+  },
+  "elements" : [ {
+    "elementType" : "BADI_IMPL",
+    "spotName" : "",
+    "programName" : "",
+    "fullName" : "",
+    "badiName" : "UKM_R3_ACTIVATE",
+    "badiImpl" : "ZFI_BADI_1",
+    "implClass" : "ZCLFI_IM_UKM_R3_ACTIVATE",
+    "interfaceName" : "IF_EX_UKM_R3_ACTIVATE",
+    "active" : true,
+    "sourceCode" : ""
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

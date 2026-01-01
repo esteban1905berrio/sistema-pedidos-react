@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZEWM_SCWMESCORECONS_1",
+  "header" : {
+    "enhancementName" : "ZEWM_SCWMESCORECONS_1",
+    "description" : "Modificar_Grupo_Consolidación",
+    "toolType" : "BADI_IMPL",
+    "toolTypeText" : "BAdI Implementation",
+    "devclass" : "ZR1023",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-07-14",
+    "changedBy" : "SAGIRALD",
+    "changedOn" : "2021-07-15"
+  },
+  "elements" : [ {
+    "elementType" : "BADI_IMPL",
+    "spotName" : "",
+    "programName" : "",
+    "fullName" : "",
+    "badiName" : "/SCWM/EX_CORE_CONS",
+    "badiImpl" : "ZEWM_SCWMESCORECONS_1",
+    "implClass" : "ZCLEWM_EXITS_GESTION_BODEGA",
+    "interfaceName" : "/SCWM/IF_EX_CORE_CONS",
+    "active" : true,
+    "sourceCode" : ""
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

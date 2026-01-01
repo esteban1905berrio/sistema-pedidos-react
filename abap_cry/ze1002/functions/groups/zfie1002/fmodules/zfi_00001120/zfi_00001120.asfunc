@@ -1,0 +1,209 @@
+"! <strong>Descripción:</strong>
+"! <p>
+"! BTE 1120 - Procesos FI<br/>
+"! Remplazar valores de tablas BKPF y BSEG en procesos FI
+"! </p>
+"! <strong>Identificador:</strong>
+"! NA
+"! <br/>
+"! <strong>Autor:</strong>
+"! Sebastian Londono
+"! <br/>
+"! <strong>Historial de cambios:
+"! <br/><br/>
+"! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+"! </strong><br/>
+"! \ 20.01.2021  \S4DK900224 \ Sebastian Londono \ E1002 - #doc Solman \
+"! \ 20.01.2021  \S4DK900021 \ Jose... \ Creacion Inicial \
+"! \ 20.01.2021  \S4DK900021 \ Jose... \ Creacion Inicial \
+"! <br/>
+"! @parameter i_bkdf | Tabla BKPF
+"! @parameter i_bkdfsub | Tabla bkdfsub
+"! @parameter t_bkpf  | Tabla bkpf
+"! @parameter t_bseg  | Tabla bseg
+"! @parameter t_bkpfsub   | Tabla bkpfsub
+"! @parameter t_bsegsub   | Tabla bsegsub
+"! @parameter t_bsec   | Tabla bsec
+FUNCTION zfi_00001120
+  IMPORTING
+    VALUE(i_bkdf) TYPE bkdf OPTIONAL
+  CHANGING
+    i_bkdfsub TYPE bkdf_subst OPTIONAL
+  TABLES
+    t_bkpf LIKE bkpf
+    t_bseg LIKE bseg
+    t_bkpfsub LIKE bkpf_subst
+    t_bsegsub LIKE bseg_subst
+    t_bsec LIKE bsec OPTIONAL.
+
+
+
+  "+{SLS 25.02.2021 E1002 - Agregar validaciones Cliente/Proveedor
+  zclfi_exits_gestion_documentos=>sustituir_validar_nit_tercero( EXPORTING
+                                                                    i_bukrs = t_bkpf[ 1 ]-bukrs
+                                                                    i_blart = t_bkpf[ 1 ]-blart
+                                                                    i_tcode = sy-tcode
+                                                                 CHANGING
+                                                                    c_ti_bseg_subst = t_bsegsub[] ).
+  "}
+
+  zclfi_exits_gestion_documentos=>sustituir_validar_xref1_xref3( EXPORTING
+                                                                    i_bukrs = t_bkpf[ 1 ]-bukrs
+                                                                    i_blart = t_bkpf[ 1 ]-blart
+                                                                    i_tcode = sy-tcode
+                                                                    i_ti_bkpf  = t_bkpf[]
+                                                                 CHANGING
+                                                                    c_ti_bseg       = t_bseg[]
+                                                                    c_ti_bseg_subst = t_bsegsub[]
+                                                                    c_ti_bsec       = t_bsec[]  ).
+
+*--------------------------------------------------------------------*
+* LEMORENO Sustituir XREF1 y XREF3 Documentos Compensaciòn
+*--------------------------------------------------------------------*
+  zclfi_exits_gestion_documentos=>sustituir_xref1_xref3_compensa(
+    EXPORTING
+      i_ti_bkpf       = t_bkpf[]    " Standard Table Type for BKPF
+    CHANGING
+      c_ti_bseg_subst = t_bsegsub[] " Table Type BSEG_SUBST
+  ).
+
+*--------------------------------------------------------------------*
+
+*Inicio Adicion 12Jun2024 Sebastian Restrepo Villa
+  "Evaluar para sustituir cuenta contable
+  zclfi_exits_gestion_documentos=>sustituir_cuenta_contable(
+    EXPORTING
+      i_ti_bkpf       = t_bkpf[]    " Standard Table Type for BKPF
+    CHANGING
+      c_ti_bseg       = t_bseg[]
+      c_ti_bseg_subst = t_bsegsub[] " Table Type BSEG_SUBST
+  ).
+*Fin Adicion 12Jun2024 Sebastian Restrepo Villa
+
+
+  "...Inicio Mod CFMG 09.09.2021
+  zclfie1007_anulacion_op_caja=>verificar_doc_anulacion(
+   CHANGING
+    c_ti_bkpf     = t_bkpf[]
+    c_ti_bseg     = t_bseg[]
+    c_ti_bkpf_sub = t_bkpfsub[]
+    c_ti_bseg_sub = t_bsegsub[] ).
+  "...Fin Mod CFMG 09.09.2021
+
+* Ini EFB 29.09.2021 Migración zfi012 AFS a s4hana
+* Sustitución de ZUONR para transacción FB60 Y FB08
+* Se valida igualmente que si el campo viene vacio se lleta
+* esto reemplaza la sustitucion ZFI-COM que venia funcionando
+* en AFS
+*-----------------------------------------------------------------
+* Ini EFB 20.10.2021
+* Se incluye sustitución de bktxt ya que el campo se llena a partir
+* de lo que el usuario registra en el campo bseg-sgtxt
+* Fin EFB 20.10.2021
+  zclfi_exits_gestion_documentos=>sustituir_validar_zuonr( EXPORTING
+                                                               i_bukrs = t_bkpf[ 1 ]-bukrs
+                                                               i_blart = t_bkpf[ 1 ]-blart
+                                                               i_tcode = sy-tcode
+                                                           CHANGING
+                                                               c_ti_bseg       = t_bseg[]
+                                                               c_ti_bseg_subst = t_bsegsub[]
+                                                               c_ti_bkpf_subst = t_bkpfsub[] "EFB 20.10.2021
+                                                               c_ti_bkpf       = t_bkpf[] ). "EFB 20.10.2021
+
+*--------------------------------------------------------------------*
+* Ini LEMORENO 30.10.2021 - Sustituir XBLNR
+  zclfi_exits_gestion_documentos=>sustituir_xblnr(
+    EXPORTING
+      i_ti_bkpf = t_bkpf[]
+      i_ti_bseg = t_bseg[]
+    CHANGING
+      c_ti_bkpfsub = t_bkpfsub[]
+  ).
+* Fin LEMORENO 30.10.2021
+*--------------------------------------------------------------------*
+
+*---------------------------------------------------------------------------*
+* Sustitución campo BKPF-BKTXT por BSEG-SGTXT
+* Ini. Jose Miguel Valencia 17.12.2021
+*---------------------------------------------------------------------------*
+  zclfi_exits_gestion_documentos=>sustituir_textos_bseg(
+    EXPORTING
+      i_ti_bkpf       = t_bkpf[]
+    CHANGING
+      c_ti_bseg       = t_bseg[]
+      c_ti_bseg_subst = t_bsegsub[]
+*      c_ti_bsec       =
+  ).
+*---------------------------------------------------------------------------*
+*                SUSTITUCIÓN BAJA DE ACTIVOS FIJOS
+*---------------------------------------------------------------------------*
+****..Inicio Mod CFMG 16.11.2021
+***  zclfie1009_sustitucion_activos=>sustitucion_baja_activo(
+***   CHANGING
+***     c_ti_bkpf = t_bkpf[]
+***     c_ti_bseg = t_bseg[] ).
+****..Fin Mod CFMG 16.11.2021
+
+*---------------------------------------------------------------------------*
+*                SUSTITUCIÓN DOCUMENTOS DE CAJA
+*---------------------------------------------------------------------------*
+*..Inicio Mod CFMG 16.11.2021
+  zclfie1007_sust_dctos_caja=>sustitucion_xref1_xref3(
+  CHANGING
+    c_ti_bkpf = t_bkpf[]
+    c_ti_bseg = t_bsegsub[] ).
+*..Fin Mod CFMG 16.11.2021
+  "{Inicio SAGIRLD 01.02.2022 Validacion del XBLNR
+  zclfie1045_validar_referencia=>validacion_xblnr_por_proveedor( i_lifnr = VALUE #( t_bseg[ 1 ]-lifnr OPTIONAL )
+                                                                 i_xblnr = VALUE #( t_bkpf[ 1 ]-xblnr OPTIONAL )
+                                                                 i_blart = VALUE #( t_bkpf[ 1 ]-blart OPTIONAL ) ).
+  "{Fin SAGIRLD 01.02.2022 Validacion del XBLNR
+
+
+*---------------------------------------------------------------------------*
+* SUSTITUCIÓN CAMPO REFERENCIA PARA DOCUMENTO SOPORTE Y NOTAS DE AJUSTE
+*---------------------------------------------------------------------------*
+*****..Inicio Mod CFMG29.07.2022
+  DATA(lo_ds)  = NEW zclfii1138_documento_soporte( ).
+  lo_ds->sustituir_xblnr( EXPORTING i_ti_bkpf    = t_bkpf[]                 " Standard Table Type for BKPF
+                                    i_ti_bseg    = t_bseg[]                 " Clase tabla p.BSEG
+                           CHANGING c_ti_bkpfsub = t_bkpfsub[]              " Table Type BKPF_SUBST
+                                    c_ti_bsegsub = t_bsegsub[]  ).          " Table Type BSEG_SUBST
+
+*--------------------------------------------------------------------*
+* SUSTITUCIÓN I1042 COMPRAS LEGACY
+*--------------------------------------------------------------------*
+* LEMORENO 02.11.2022
+  DATA(lo_legacy) = NEW zclmmi1042_entradas_legacy( ).
+  lo_legacy->sustituir_xref1_xref3( EXPORTING
+                                      i_ti_bkpf     = t_bkpf[]
+                                      i_ti_bseg     = t_bseg[]
+                                      i_ti_bsec     = t_bsec[]
+                                    CHANGING
+                                      c_ti_bseg_sub = t_bsegsub[] ).
+*--------------------------------------------------------------------*
+
+*--------------------------------------------------------------------*
+* DV-FI-R1142 Reporte para el ICA
+*--------------------------------------------------------------------*
+* JPVELEV 26.02.2023
+
+  DATA(lo_ica) = NEW zclfir1142_reporteica( ).
+  lo_ica->sustituir_zuonr(  EXPORTING
+                              i_ti_bkpf     = t_bkpf[]
+                              i_ti_bseg     = t_bseg[]
+                              i_ti_bsec     = t_bsec[]
+                            CHANGING
+                              c_ti_bseg_sub = t_bsegsub[] ).
+
+*---------------------------------------------------------------------------*
+*                SUSTITUCIÓN CAJA MENOR
+*---------------------------------------------------------------------------*
+*..Inicio JGM 13.03.2025
+  zclfii1138_sust_xref_caja=>sustitucion_xref1_xref3(
+  CHANGING
+    c_ti_bkpf = t_bkpf[]
+    c_ti_bseg = t_bsegsub[] ).
+*..Fin JGM 13.03.2025
+
+ENDFUNCTION.

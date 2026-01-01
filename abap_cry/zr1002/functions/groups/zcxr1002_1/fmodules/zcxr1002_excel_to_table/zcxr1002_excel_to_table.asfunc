@@ -1,0 +1,156 @@
+FUNCTION zcxr1002_excel_to_table
+  IMPORTING
+    i_c_file TYPE rlgrap-filename
+    i_i_begincol TYPE i OPTIONAL
+    i_i_beginrow TYPE i OPTIONAL
+    i_i_endcol TYPE i OPTIONAL
+    i_i_endrow TYPE i OPTIONAL
+    i_c_typfecha TYPE char62 OPTIONAL
+    i_ti_types TYPE zttbc0001 OPTIONAL
+  EXPORTING
+    VALUE(e_ti_table) TYPE ANY TABLE
+  EXCEPTIONS
+    not_found
+    format_error.
+
+
+
+*----------------------------------------------------------------------*
+* Información General
+*----------------------------------------------------------------------*
+* Identificador: E00705 copia AFS
+* Programa     : Z_MM_EXCEL_TO_TABLE
+* Descripción  : Cargar Archivos Excel a Tabla Interna.
+* Autor Prog.  : Cristian Felipe Montoya Gallego Dynpra
+* Fecha Creac. : 09.08.2018
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 09.08.2018    EADK927543    Cristian Felipe M  Creación
+*----------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+*.Definición Tablas Internas.
+*----------------------------------------------------------------------*
+  DATA:
+   l_ti_excel_file TYPE STANDARD TABLE OF alsmex_tabline.
+*----------------------------------------------------------------------*
+*.Definición Estructuras.
+*----------------------------------------------------------------------*
+  DATA:
+    l_es_excel_file TYPE alsmex_tabline.
+*----------------------------------------------------------------------*
+*.Definición Variables
+*----------------------------------------------------------------------*
+  DATA:
+    l_s_atend.
+*----------------------------------------------------------------------*
+*.Definición Objetos Referencia.
+*----------------------------------------------------------------------*
+  DATA:
+    l_es_table      TYPE REF TO data.
+
+*----------------------------------------------------------------------*
+*.Definición Variablas Referencia.
+*----------------------------------------------------------------------*
+  DATA:
+    l_o_ref_typ TYPE REF TO cl_abap_typedescr,
+    l_o_red_d   TYPE REF TO cl_abap_elemdescr.
+*----------------------------------------------------------------------*
+*.Definición Field Symbol.
+*----------------------------------------------------------------------*
+  FIELD-SYMBOLS:
+  <l_fs_campo>  TYPE ANY,
+  <l_fs_table>  TYPE ANY.
+
+
+*.Cargamos Archivo Excel a Tabla Interna.
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = i_c_file
+      i_begin_col             = i_i_begincol
+      i_begin_row             = i_i_beginrow
+      i_end_col               = i_i_endcol
+      i_end_row               = i_i_endrow
+    TABLES
+      intern                  = l_ti_excel_file
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+
+*.Evaluamos error.
+  IF sy-subrc NE 0.
+    MESSAGE e038(pc) RAISING not_found.
+  ENDIF.
+
+*.Creamos Tabla Interna.
+  CREATE DATA l_es_table LIKE LINE OF e_ti_table.
+*.Asignamos Tabla estructura a tabla interna.
+  ASSIGN l_es_table->* TO <l_fs_table>.
+
+*.Asigno valores tabla interna a tabla resultado.
+  LOOP AT l_ti_excel_file INTO l_es_excel_file.
+
+    TRY .
+*.......Asignamos valor del registro.
+        ASSIGN COMPONENT l_es_excel_file-col
+        OF STRUCTURE <l_fs_table> TO <l_fs_campo>.
+*.......Evaluamos Asignación de Registros.
+        IF sy-subrc = 0.
+
+*.....Obtener Información Campo.
+         CALL METHOD cl_abap_typedescr=>describe_by_data
+           EXPORTING
+            p_data      = <l_fs_campo>
+           RECEIVING
+            p_descr_ref = l_o_ref_typ.
+*.....Realizamos Casting.
+            l_o_red_d ?= l_o_ref_typ.
+
+         IF l_o_red_d IS BOUND.
+*...Para los campos Fechas se realiza la conversión
+           IF l_o_red_d->help_id EQ i_c_typfecha
+           OR ( l_o_red_d->help_id IN i_ti_types
+            AND i_ti_types[] IS NOT INITIAL ).
+*...........Campo Fecha formato Interno
+             CALL FUNCTION 'CONVERT_DATE_TO_INTERNAL'
+              EXPORTING
+               date_external                = l_es_excel_file-value
+              IMPORTING
+               date_internal                = <l_fs_campo>
+              EXCEPTIONS
+               date_external_is_invalid     = 1
+             OTHERS                         = 2.
+
+          ENDIF.
+         ENDIF.
+          IF <l_fs_campo> IS INITIAL.
+*.........Asignamos Valores.
+            <l_fs_campo> = l_es_excel_file-value.
+          ENDIF.
+       ENDIF.
+      CATCH cx_root.
+*.......Evaluamos error.
+        MESSAGE e037(pc) RAISING format_error.
+    ENDTRY.
+
+*...Si corresponde a fin de linea asignamos Valores.
+    AT END OF row.
+      l_s_atend = 'X'.
+    ENDAT.
+
+    IF l_s_atend EQ 'X'.
+      CLEAR l_s_atend.
+*.....Convertir Valores Formato Interno.
+      PERFORM convert_input CHANGING <l_fs_table>.
+*.....Asignamos Registros.
+      insert <l_fs_table> INTO TABLE e_ti_table.
+*      APPEND <l_fs_table> TO e_ti_table.
+      CLEAR <l_fs_table>.
+    ENDIF.
+
+  ENDLOOP.
+
+ENDFUNCTION.

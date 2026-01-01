@@ -1,0 +1,2098 @@
+CLASS zclfic1021_contabiliza_nomina DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_nombre_reporte            TYPE syrepid VALUE 'ZFIC1021_1',
+               gc_ricefw                    TYPE zzedricefw VALUE 'C1021',
+               gc_clve_contab_debito        TYPE bseg-bschl VALUE '40',
+               gc_clve_contab_credito       TYPE bseg-bschl VALUE '50',
+               gc_clve_contab_debito_cli    TYPE bseg-bschl VALUE '01',
+               gc_clve_contab_credito_cli   TYPE bseg-bschl VALUE '11',
+               gc_estado_contabilizacion_ok TYPE ztfic1021_1-estado_ejecucion VALUE 'S',
+               gc_modulo                    TYPE zzedmodulo VALUE 'FI',
+               gc_func_agrupar              TYPE ui_func VALUE 'AGRUPAR'.
+
+    TYPES: BEGIN OF gtp_es_cabecera,
+             sociedad              TYPE bkpf-bukrs,
+             clase_documento       TYPE bkpf-blart,
+             fecha_documentos      TYPE string, "bldbkpf-at,
+             fecha_contabilizacion TYPE string, "bkpf-budat,
+             periodo_contable      TYPE bkpf-monat,
+             texto_cabecera        TYPE bkpf-bktxt,
+             moneda                TYPE bkpf-waers,
+             ejercicio             TYPE bkpf-gjahr,
+           END OF gtp_es_cabecera,
+
+           BEGIN OF gtp_es_clave_nomina,
+             bukrs          TYPE bukrs,
+             clase_nomina   TYPE ztfic1021_2-clase_nomina,
+             periodo_nomina TYPE ztfic1021_1-periodo_nomina,
+             id_sociedad    TYPE lfa1-lifnr,
+           END OF gtp_es_clave_nomina,
+
+           BEGIN OF gtp_es_posiciones,
+             posicion              TYPE bseg-posnr,
+             clave_contabilizacion TYPE bseg-bschl,
+             importe               TYPE bseg-wrbtr,
+             asignacion            TYPE bseg-zuonr,
+             texto_posicion        TYPE bseg-sgtxt,
+             ceco                  TYPE bseg-kostl,
+             orden_interna         TYPE string,
+             proveedor             TYPE bseg-lifnr,
+             cuenta_contable       TYPE bseg-hkont,
+             clve_ref1             TYPE bseg-xref1,
+             clve_ref3             TYPE bseg-xref3,
+             estado                TYPE icon_d,
+             belnr                 TYPE bkpf-belnr,
+           END OF gtp_es_posiciones.
+
+    TYPES: gtp_ti_pos_registros_nomina TYPE STANDARD TABLE OF gtp_es_posiciones WITH EMPTY KEY.
+
+    DATA: gc_cantidad_registros_x_doc TYPE i VALUE 900,
+          gc_cebe_x_defecto           TYPE bseg-prctr VALUE '1030',
+          gc_cuenta_diferencias       TYPE bseg-hkont VALUE '2505030101',
+          ges_clave_nomina            TYPE gtp_es_clave_nomina.
+
+    METHODS:
+      constructor,
+      iniciar_proceso_de_carga
+        IMPORTING
+          i_bukrs                 TYPE bukrs
+          i_clase_nomina          TYPE ztfic1021_2-clase_nomina
+          i_periodo_nomina        TYPE ztfic1021_1-periodo_nomina
+          VALUE(i_nombre_archivo) TYPE localfile,
+      validar_contabilizacion_previa
+        IMPORTING
+          i_bukrs                           TYPE bukrs
+          i_ejercicio                       TYPE gjahr
+          i_clase_nomina                    TYPE ztfic1021_2-clase_nomina
+          i_periodo_nomina                  TYPE ztfic1021_1-periodo_nomina
+        RETURNING
+          VALUE(r_registros_contabilizados) TYPE flag,
+      visualizar_log_db
+        IMPORTING
+          i_bukrs          TYPE bukrs
+          i_clase_nomina   TYPE ztfic1021_2-clase_nomina
+          i_periodo_nomina TYPE ztfic1021_1-periodo_nomina.
+
+    "Eventos ALV
+    METHODS:
+      evento_on_user_command FOR EVENT added_function OF cl_salv_events
+        IMPORTING e_salv_function,
+      evento_on_link_click   FOR EVENT link_click OF
+        cl_salv_events_table
+        IMPORTING row column..
+
+  PROTECTED SECTION.
+
+    DATA: go_log                    TYPE REF TO zclcxr1002_log_aplicacion,
+          go_parametros             TYPE REF TO zclcxr1000_parametros,
+          go_alv                    TYPE REF TO cl_gui_alv_grid,
+          go_dock_container         TYPE REF TO cl_gui_docking_container,
+          go_alv_registros_cargados TYPE REF TO cl_salv_table,
+          go_contenedor             TYPE REF TO cl_gui_custom_container,
+*          go_events              TYPE REF TO lcl_handle_events,
+          g_okcode                  TYPE syucomm.
+
+
+  PRIVATE SECTION.
+
+    DATA: ges_cabecera         TYPE gtp_es_cabecera,
+          gti_registros_nomina TYPE gtp_ti_pos_registros_nomina,
+          gti_registros_nomina_completo TYPE gtp_ti_pos_registros_nomina.
+
+    DATA: gti_cdoexemp         TYPE RANGE OF bseg-lifnr,
+          g_contabilizacion_exitosa TYPE abap_bool.
+
+    METHODS: asignar_contenido_archivo
+      IMPORTING
+        i_ti_datos_archivo      TYPE string_t
+      CHANGING
+        c_es_cabecera_documento TYPE gtp_es_cabecera
+        c_ti_registros_nomina   TYPE gtp_ti_pos_registros_nomina,
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Contabilizar registros de nomina a partir de los datos cargados<br/>
+      "! del archivo plano. Se contabilizan un documento cada 990 (Parametro) registros del archivo.
+      "! Se tienen en cuenta las diferencias. Las cuales se agregan como una posicion mas y se llevan a una cuenta
+      "! parametrizada.
+      "! </p>
+      "! <strong>Identificador:</strong>
+      "! E00XXX <br/>
+      "! <strong>Autor:</strong>
+      "! Juan Perez
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 20.01.2021 \ S4DK900021 \ Juan Perez Lorca \ Creacion Inicial \
+      "!
+      "! @parameter c_es_cabecera_documento |
+      "! @parameter c_ti_registros_nomina |
+      contabilizar_registros
+        CHANGING
+          c_es_cabecera_documento TYPE gtp_es_cabecera
+          c_ti_registros_nomina   TYPE gtp_ti_pos_registros_nomina,
+      formatear_fecha
+        IMPORTING
+          VALUE(i_fecha) TYPE string
+        RETURNING
+          VALUE(r_fecha) TYPE string,
+      "! ALV basado en SALV, para detalle de la generación del ALV
+      "! explorar el reporte SALV_DEMO_TABLE_LAYOUT
+      "!
+      "! @parameter c_es_cabecera_documento |
+      "! @parameter c_ti_registros_nomina |
+      visualizar_registros_cargados
+        CHANGING
+          c_es_cabecera_documento TYPE zclfic1021_contabiliza_nomina=>gtp_es_cabecera
+          c_ti_registros_nomina   TYPE zclfic1021_contabiliza_nomina=>gtp_ti_pos_registros_nomina,
+      crear_encabezado_y_pie_alv
+        IMPORTING
+          VALUE(i_es_cabecera_documento) TYPE gtp_es_cabecera,
+      agrupar_posiciones
+        CHANGING
+          c_ti_registros_nomina TYPE gtp_ti_pos_registros_nomina,
+      desagrupar_posiciones.
+
+ENDCLASS.
+
+
+
+CLASS zclfic1021_contabiliza_nomina IMPLEMENTATION.
+
+
+  METHOD iniciar_proceso_de_carga.
+
+    DATA: ti_datos_archivo TYPE zclcxr1002_cargar_archivo=>tp_ti_con_name,
+          ejercicio        TYPE bseg-gjahr.
+
+    TRY.
+        ges_clave_nomina = VALUE #( bukrs = i_bukrs clase_nomina = i_clase_nomina periodo_nomina = i_periodo_nomina ).
+
+        zclcxr1002_cargar_archivo=>cargar_plano(
+          EXPORTING
+            i_c_filename = i_nombre_archivo
+          IMPORTING
+            e_ti_datos   = ti_datos_archivo ).
+
+        "Cargar la cabecera
+        zclcxr1002_util=>string_a_es(
+          EXPORTING
+            i_str        = VALUE #( ti_datos_archivo[ 1 ] OPTIONAL )
+            i_separador  = ','
+          CHANGING
+            c_es_destino = ges_cabecera ).
+
+        ejercicio = ges_cabecera-fecha_contabilizacion(4).
+
+
+        IF validar_contabilizacion_previa( i_bukrs = i_bukrs i_clase_nomina = i_clase_nomina i_periodo_nomina = i_periodo_nomina
+                                           i_ejercicio = ejercicio ) = abap_false.
+
+          asignar_contenido_archivo( EXPORTING i_ti_datos_archivo      = ti_datos_archivo
+                                     CHANGING  c_es_cabecera_documento = ges_cabecera
+                                               c_ti_registros_nomina   = gti_registros_nomina ).
+
+          IF ges_clave_nomina-bukrs = ges_cabecera-sociedad.
+            visualizar_registros_cargados( CHANGING c_es_cabecera_documento = ges_cabecera
+                                                    c_ti_registros_nomina   = gti_registros_nomina ).
+          ELSE.
+            go_log->set_es_log( i_es = VALUE #( id = 'ZFI01' type = 'E' number = '046'
+                                message_v1 = ges_cabecera-sociedad
+                                message_v2 = ges_clave_nomina-bukrs
+                                ) ).
+          ENDIF.
+
+        ENDIF.
+
+        IF go_log IS BOUND.
+          go_log->mostrar_log( i_ventana_emergente = abap_true ).
+        ENDIF.
+
+      CATCH cx_t100_msg.
+        go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty message_v1 = sy-msgv1
+                                                message_v2 = sy-msgv2 message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD asignar_contenido_archivo.
+
+    DATA: ceco TYPE bseg-kostl.
+    "Cargar la cabecera
+    zclcxr1002_util=>string_a_es(
+      EXPORTING
+        i_str        = VALUE #( i_ti_datos_archivo[ 1 ] OPTIONAL )
+        i_separador  = ','
+      CHANGING
+        c_es_destino = c_es_cabecera_documento ).
+
+    c_es_cabecera_documento-fecha_contabilizacion = formatear_fecha( c_es_cabecera_documento-fecha_contabilizacion ).
+    c_es_cabecera_documento-fecha_documentos = formatear_fecha( c_es_cabecera_documento-fecha_documentos ).
+    c_es_cabecera_documento-ejercicio = c_es_cabecera_documento-fecha_contabilizacion(4).
+
+    zclcxr1002_util=>string_a_ti(
+      EXPORTING
+        i_ti_str                      = i_ti_datos_archivo
+        i_fila_de_inicio              = 2
+        i_separador                   = ','
+        i_remover_separador_decimales = abap_true
+      CHANGING
+        c_ti_destino                  = c_ti_registros_nomina ).
+
+    gti_registros_nomina_completo = c_ti_registros_nomina.
+
+    MODIFY c_ti_registros_nomina FROM VALUE #( estado = icon_light_out )
+    TRANSPORTING estado
+    WHERE estado IS INITIAL.
+
+    LOOP AT c_ti_registros_nomina REFERENCE INTO DATA(r_es_registro_nomina).
+
+      ceco = replace( val = r_es_registro_nomina->ceco sub = '0' with = space occ = 0 ).
+      ceco = shift_left( val = ceco ).
+      IF  ceco IS INITIAL.
+        CLEAR: r_es_registro_nomina->ceco.
+      ELSE.
+        r_es_registro_nomina->ceco = |{ r_es_registro_nomina->ceco ALPHA = IN }|.
+      ENDIF.
+
+      r_es_registro_nomina->cuenta_contable = |{ r_es_registro_nomina->cuenta_contable ALPHA = IN }|.
+      r_es_registro_nomina->proveedor = |{ r_es_registro_nomina->proveedor ALPHA = IN }|.
+
+    ENDLOOP.
+
+    gti_registros_nomina_completo = c_ti_registros_nomina.
+
+  ENDMETHOD.
+
+
+  METHOD contabilizar_registros.
+
+    DATA: es_cabecera_documento      TYPE bapiache09,
+          ti_posiciones_cuenta_mayor TYPE bapiacgl09_tab,
+          es_posiciones_cuenta_mayor TYPE bapiacgl09,
+          ti_cuentas_proveedor       TYPE bapiacap09_tab,
+          es_cuentas_proveedor       TYPE bapiacap09,
+          ti_cuentas_cliente         TYPE bapiacar09_tab,
+          es_cuentas_cliente         TYPE bapiacar09,
+          es_importes                TYPE bapiaccr09,
+          ti_importes                TYPE bapiaccr09_tab,
+          ti_msj_retorno             TYPE bapiret2_t,
+          ti_msj_retorno_all         TYPE bapiret2_t,
+          estado_contabilizacion     TYPE icon_d,
+          r_posiciones_tratadas      TYPE RANGE OF gtp_es_posiciones-posicion,
+          tipo_documento             TYPE awtyp,
+          clave_documento            TYPE awkey,
+          total_debito               TYPE bapiaccr09-amt_doccur,
+          total_credito              TYPE bapiaccr09-amt_doccur,
+          id_sociedad                TYPE lfa1-lifnr,
+          consecutivo_archivo        TYPE i,
+          cantidad_registros_doc     TYPE i,
+          indice_iteracion           TYPE i.
+
+    "+{SLS 16092025 - Inicializar estado de contabilización al inicio del proceso
+    g_contabilizacion_exitosa = abap_false.
+    "}+SLS
+
+    IF go_log IS BOUND.
+      go_log->liberar( ).
+    ENDIF.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    "Validar si los registros fueron cargados anteriormente
+    IF validar_contabilizacion_previa(  i_bukrs          = ges_clave_nomina-bukrs
+                                        i_clase_nomina   = ges_clave_nomina-clase_nomina
+                                        i_periodo_nomina = ges_clave_nomina-periodo_nomina
+                                        i_ejercicio      = CONV #( ges_cabecera-fecha_contabilizacion(4) ) ) = abap_true.
+      RETURN.
+    ENDIF.
+
+    ges_clave_nomina-id_sociedad = condense( |{ ges_clave_nomina-bukrs ALPHA = IN }| ).
+
+*Inicio Modificacion 06Nov2024 Sebastian Restrepo Villa
+    CLEAR ti_msj_retorno_all.
+    LOOP AT c_ti_registros_nomina REFERENCE INTO DATA(r_es_registro_nomina).
+
+      indice_iteracion = sy-tabix.
+      ADD 1 TO cantidad_registros_doc.
+
+      r_posiciones_tratadas = VALUE #( BASE r_posiciones_tratadas
+                                       ( sign = 'I' option = 'EQ' low = indice_iteracion ) ).
+      DATA(proveedor) = condense( |{ r_es_registro_nomina->proveedor ALPHA = OUT }| ).
+      "Datos de cuenta y posicion
+      "Se tiene una metrica para proveedores y asientos a cuentas contbles enviadas.
+      IF r_es_registro_nomina->proveedor IS INITIAL.
+        es_posiciones_cuenta_mayor = VALUE bapiacgl09( itemno_acc = lines( ti_importes ) + 1
+                                                        gl_account = COND #( WHEN r_es_registro_nomina->proveedor IS INITIAL THEN
+                                                                              r_es_registro_nomina->cuenta_contable
+                                                                             ELSE
+                                                                              space )
+                                                        doc_type = c_es_cabecera_documento-clase_documento
+                                                        comp_code = c_es_cabecera_documento-sociedad
+                                                        fisc_year =  c_es_cabecera_documento-ejercicio
+                                                        fis_period = c_es_cabecera_documento-periodo_contable
+                                                        pstng_date = c_es_cabecera_documento-fecha_contabilizacion
+                                                        alloc_nmbr = c_es_cabecera_documento-fecha_contabilizacion
+                                                        costcenter = r_es_registro_nomina->ceco
+                                                        profit_ctr = gc_cebe_x_defecto
+                                                        orderid    = r_es_registro_nomina->orden_interna
+                                                        item_text = r_es_registro_nomina->texto_posicion
+                                                        vendor_no = r_es_registro_nomina->proveedor
+                                                        ref_key_1 = r_es_registro_nomina->clve_ref1
+                                                        ref_key_3 = r_es_registro_nomina->clve_ref3
+                                                       ).
+
+        APPEND es_posiciones_cuenta_mayor TO ti_posiciones_cuenta_mayor.
+
+      ELSEIF proveedor IN gti_cdoexemp.
+        es_cuentas_cliente = VALUE #( itemno_acc = lines( ti_importes ) + 1
+                                      customer  = r_es_registro_nomina->proveedor
+                                      comp_code = c_es_cabecera_documento-sociedad
+                                      item_text = r_es_registro_nomina->texto_posicion
+                                      profit_ctr = gc_cebe_x_defecto ).
+        APPEND es_cuentas_cliente TO ti_cuentas_cliente.
+      ELSE.
+        es_cuentas_proveedor = VALUE #( itemno_acc = lines( ti_importes ) + 1
+                                        vendor_no = r_es_registro_nomina->proveedor
+                                        comp_code = c_es_cabecera_documento-sociedad
+                                        item_text = r_es_registro_nomina->texto_posicion
+                                        profit_ctr = gc_cebe_x_defecto
+                                      ).
+
+        APPEND es_cuentas_proveedor TO ti_cuentas_proveedor.
+
+      ENDIF.
+
+      "Valores monectarios
+      es_importes = VALUE bapiaccr09( itemno_acc = lines( ti_importes ) + 1
+                                      amt_doccur = r_es_registro_nomina->importe
+                                      currency = c_es_cabecera_documento-moneda
+                                    ).
+
+      IF r_es_registro_nomina->clave_contabilizacion = gc_clve_contab_debito.
+        ADD es_importes-amt_doccur TO total_debito.
+      ELSE.
+        es_importes-amt_doccur = es_importes-amt_doccur * -1.
+        ADD es_importes-amt_doccur TO total_credito.
+      ENDIF.
+
+      APPEND es_importes TO ti_importes.
+
+
+      "Es hora de Contabilizar un documento, segun alguna de las condiciones
+      IF cantidad_registros_doc = gc_cantidad_registros_x_doc OR indice_iteracion = lines( c_ti_registros_nomina ).
+
+        ADD 1 TO consecutivo_archivo.
+
+        CLEAR: ti_msj_retorno.
+
+        "Cuando se realice el rompimiento en las 990 posiciones y los débitos (40) no crucen contra los créditos (50)
+        "se puede llevar la diferencia a la cuenta 2505030101 en la clave de contabilización correspondiente.
+        es_importes-amt_doccur = ( total_credito + total_debito ) * -1.
+
+        "Contrapartida
+        IF es_importes-amt_doccur IS NOT INITIAL.
+
+          "Datos de cuenta y posicion
+          es_posiciones_cuenta_mayor = VALUE #( BASE es_posiciones_cuenta_mayor
+                                                itemno_acc = lines( ti_importes ) + 1
+                                                gl_account = gc_cuenta_diferencias
+                                                item_text  = 'DIFERENCIA'
+                                                costcenter = space
+                                                vendor_no = ges_clave_nomina-id_sociedad
+                                                ref_key_1 = space
+                                                ref_key_3 = space ).
+
+          APPEND  es_posiciones_cuenta_mayor TO ti_posiciones_cuenta_mayor.
+
+          es_importes-itemno_acc = lines( ti_importes ) + 1.
+          APPEND es_importes TO ti_importes.
+
+        ENDIF.
+
+        es_cabecera_documento = VALUE #(  comp_code = c_es_cabecera_documento-sociedad
+                                          doc_date = c_es_cabecera_documento-fecha_documentos
+                                          pstng_date = c_es_cabecera_documento-fecha_contabilizacion
+                                          doc_type = c_es_cabecera_documento-clase_documento
+                                          fisc_year = c_es_cabecera_documento-ejercicio
+                                          fis_period = c_es_cabecera_documento-periodo_contable
+                                          username = sy-uname
+                                          bus_act = 'RFBU'
+                                          header_txt = c_es_cabecera_documento-texto_cabecera
+                                          ref_doc_no = ges_clave_nomina-clase_nomina
+                                        ).
+        "Primero, verificamos consistencia de los datos
+        CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+          EXPORTING
+            documentheader    = es_cabecera_documento
+          TABLES
+            accountgl         = ti_posiciones_cuenta_mayor
+            accountpayable    = ti_cuentas_proveedor
+            accountreceivable = ti_cuentas_cliente
+            currencyamount    = ti_importes
+            return            = ti_msj_retorno.
+
+        APPEND LINES OF ti_msj_retorno TO ti_msj_retorno_all.
+
+        CLEAR: ti_posiciones_cuenta_mayor,
+               ti_cuentas_proveedor,
+               ti_importes,
+               ti_msj_retorno,
+               tipo_documento,
+               r_posiciones_tratadas,
+               total_credito,
+               total_debito,
+               cantidad_registros_doc,
+               ti_cuentas_cliente.
+
+      ENDIF.
+
+    ENDLOOP.
+
+    IF line_exists( ti_msj_retorno_all[ type = 'E' ] ).
+      estado_contabilizacion = icon_red_light.
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno_all ) ).
+      RETURN.
+    ENDIF.
+
+    CLEAR:
+            cantidad_registros_doc,
+            consecutivo_archivo,
+            total_debito,
+            total_credito,
+            ti_importes,
+            ti_posiciones_cuenta_mayor,
+            tipo_documento,
+            ti_cuentas_proveedor,
+            ti_msj_retorno,
+            r_posiciones_tratadas.
+
+    LOOP AT c_ti_registros_nomina REFERENCE INTO r_es_registro_nomina.
+
+      indice_iteracion = sy-tabix.
+      ADD 1 TO cantidad_registros_doc.
+
+      r_posiciones_tratadas = VALUE #( BASE r_posiciones_tratadas
+                                       ( sign = 'I' option = 'EQ' low = indice_iteracion ) ).
+      proveedor = condense( |{ r_es_registro_nomina->proveedor ALPHA = OUT }| ).
+      "Datos de cuenta y posicion
+      "Se tiene una metrica para proveedores y asientos a cuentas contbles enviadas.
+      IF r_es_registro_nomina->proveedor IS INITIAL.
+        es_posiciones_cuenta_mayor = VALUE bapiacgl09( itemno_acc = lines( ti_importes ) + 1
+                                                        gl_account = COND #( WHEN r_es_registro_nomina->proveedor IS INITIAL THEN
+                                                                              r_es_registro_nomina->cuenta_contable
+                                                                             ELSE
+                                                                              space )
+                                                        doc_type = c_es_cabecera_documento-clase_documento
+                                                        comp_code = c_es_cabecera_documento-sociedad
+                                                        fisc_year =  c_es_cabecera_documento-ejercicio
+                                                        fis_period = c_es_cabecera_documento-periodo_contable
+                                                        pstng_date = c_es_cabecera_documento-fecha_contabilizacion
+                                                        alloc_nmbr = c_es_cabecera_documento-fecha_contabilizacion
+                                                        costcenter = r_es_registro_nomina->ceco
+                                                        profit_ctr = gc_cebe_x_defecto
+                                                        orderid    = r_es_registro_nomina->orden_interna
+                                                        item_text = r_es_registro_nomina->texto_posicion
+                                                        vendor_no = r_es_registro_nomina->proveedor
+                                                        ref_key_1 = r_es_registro_nomina->clve_ref1
+                                                        ref_key_3 = r_es_registro_nomina->clve_ref3
+                                                       ).
+
+        APPEND es_posiciones_cuenta_mayor TO ti_posiciones_cuenta_mayor.
+
+      ELSEIF proveedor IN gti_cdoexemp.
+        es_cuentas_cliente = VALUE #( itemno_acc = lines( ti_importes ) + 1
+                                      customer  = r_es_registro_nomina->proveedor
+                                      comp_code = c_es_cabecera_documento-sociedad
+                                      item_text = r_es_registro_nomina->texto_posicion
+                                      profit_ctr = gc_cebe_x_defecto ).
+        APPEND es_cuentas_cliente TO ti_cuentas_cliente.
+      ELSE.
+        es_cuentas_proveedor = VALUE #( itemno_acc = lines( ti_importes ) + 1
+                                        vendor_no = r_es_registro_nomina->proveedor
+                                        comp_code = c_es_cabecera_documento-sociedad
+                                        item_text = r_es_registro_nomina->texto_posicion
+                                        profit_ctr = gc_cebe_x_defecto
+                                      ).
+
+        APPEND es_cuentas_proveedor TO ti_cuentas_proveedor.
+
+      ENDIF.
+
+      "Valores monectarios
+      es_importes = VALUE bapiaccr09( itemno_acc = lines( ti_importes ) + 1
+                                      amt_doccur = r_es_registro_nomina->importe
+                                      currency = c_es_cabecera_documento-moneda
+                                    ).
+
+      IF r_es_registro_nomina->clave_contabilizacion = gc_clve_contab_debito.
+        ADD es_importes-amt_doccur TO total_debito.
+      ELSE.
+        es_importes-amt_doccur = es_importes-amt_doccur * -1.
+        ADD es_importes-amt_doccur TO total_credito.
+      ENDIF.
+
+      APPEND es_importes TO ti_importes.
+
+
+      "Es hora de Contabilizar un documento, segun alguna de las condiciones
+      IF cantidad_registros_doc = gc_cantidad_registros_x_doc OR indice_iteracion = lines( c_ti_registros_nomina ).
+
+        ADD 1 TO consecutivo_archivo.
+
+        CLEAR: ti_msj_retorno.
+
+        "Cuando se realice el rompimiento en las 990 posiciones y los débitos (40) no crucen contra los créditos (50)
+        "se puede llevar la diferencia a la cuenta 2505030101 en la clave de contabilización correspondiente.
+        es_importes-amt_doccur = ( total_credito + total_debito ) * -1.
+
+        "Contrapartida
+        IF es_importes-amt_doccur IS NOT INITIAL.
+
+          "Datos de cuenta y posicion
+          es_posiciones_cuenta_mayor = VALUE #( BASE es_posiciones_cuenta_mayor
+                                                itemno_acc = lines( ti_importes ) + 1
+                                                gl_account = gc_cuenta_diferencias
+                                                item_text  = 'DIFERENCIA'
+                                                costcenter = space
+                                                vendor_no = ges_clave_nomina-id_sociedad
+                                                ref_key_1 = space
+                                                ref_key_3 = space ).
+
+          APPEND  es_posiciones_cuenta_mayor TO ti_posiciones_cuenta_mayor.
+
+          es_importes-itemno_acc = lines( ti_importes ) + 1.
+          APPEND es_importes TO ti_importes.
+
+        ENDIF.
+
+        "Primero, verificamos consistencia de los datos
+        CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+          EXPORTING
+            documentheader    = es_cabecera_documento
+          TABLES
+            accountgl         = ti_posiciones_cuenta_mayor
+            accountpayable    = ti_cuentas_proveedor
+            accountreceivable = ti_cuentas_cliente
+            currencyamount    = ti_importes
+            return            = ti_msj_retorno.
+
+        APPEND LINES OF ti_msj_retorno TO ti_msj_retorno_all.
+
+        IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+          CLEAR: ti_msj_retorno.
+          "Todo Ok =) Contabilizar documento.
+          CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+            EXPORTING
+              documentheader    = es_cabecera_documento
+            IMPORTING
+              obj_type          = tipo_documento
+              obj_key           = clave_documento
+            TABLES
+              accountgl         = ti_posiciones_cuenta_mayor
+              accountpayable    = ti_cuentas_proveedor
+              accountreceivable = ti_cuentas_cliente
+              currencyamount    = ti_importes
+              return            = ti_msj_retorno.
+
+          APPEND LINES OF ti_msj_retorno TO ti_msj_retorno_all.
+
+          go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+          IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+
+            "+{SLS 16092025 - Marcar contabilización como exitosa
+            g_contabilizacion_exitosa = abap_true.
+            "}+SLS
+
+            estado_contabilizacion = icon_green_light.
+
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+          ELSE.
+            estado_contabilizacion = icon_red_light.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+          ENDIF.
+
+        ELSE.
+          estado_contabilizacion = icon_red_light.
+          go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+        ENDIF.
+
+        MODIFY c_ti_registros_nomina FROM VALUE #( estado = estado_contabilizacion belnr = clave_documento )
+        TRANSPORTING estado belnr
+        WHERE posicion IN r_posiciones_tratadas.
+        "Registrar log de proceso
+        MODIFY ztfic1021_1
+        FROM @( VALUE ztfic1021_1(
+                       sociedad = c_es_cabecera_documento-sociedad
+                       clase_nomina          = ges_clave_nomina-clase_nomina
+                       periodo_nomina        = ges_clave_nomina-periodo_nomina
+                       ejercicio             = c_es_cabecera_documento-ejercicio
+                       "Numero de documentos contabilizados por 1 Archivo
+                       consecutivo_archivo   = consecutivo_archivo
+                       clase_documento       = c_es_cabecera_documento-clase_documento
+                       fecha_documento       = c_es_cabecera_documento-fecha_documentos
+                       fecha_contabilizacion = c_es_cabecera_documento-fecha_contabilizacion
+                       periodo_contable      = c_es_cabecera_documento-periodo_contable
+                       numero_documento      = clave_documento
+                       moneda                = c_es_cabecera_documento-moneda
+                       fecha_ejecucion       = sy-datum
+                       hora_ejecucion        = sy-uzeit
+                       usuario               = sy-uname
+                       estado_ejecucion      = COND #( WHEN estado_contabilizacion = icon_green_light THEN gc_estado_contabilizacion_ok ELSE 'E' )
+                       cantidad_registros    = cantidad_registros_doc )
+               ).
+
+        CLEAR: ti_importes, ti_posiciones_cuenta_mayor, tipo_documento, ti_cuentas_proveedor, ti_msj_retorno,
+               r_posiciones_tratadas, total_credito, total_debito, cantidad_registros_doc.
+        CLEAR ti_cuentas_cliente.
+
+        IF estado_contabilizacion = icon_red_light.
+          EXIT.
+        ENDIF.
+
+      ENDIF.
+
+    ENDLOOP.
+*Fin Modificacion 06Nov2024 Sebastian Restrepo Villa
+
+  ENDMETHOD.
+
+
+  METHOD formatear_fecha.
+
+    IF i_fecha IS INITIAL. "Adicion 18Nov2024 Sebastian Restrepo Villa
+      RETURN.
+    ENDIF.
+
+    REPLACE ALL OCCURRENCES OF '.' IN i_fecha WITH space.
+    r_fecha = |{ i_fecha+4(4) }{ i_fecha+2(2) }{ i_fecha(2) }|.
+
+  ENDMETHOD.
+
+
+  METHOD visualizar_registros_cargados.
+
+    DATA: go_columnas TYPE REF TO cl_salv_columns,
+          go_columna  TYPE REF TO cl_salv_column_table,
+          go_eventos  TYPE REF TO cl_salv_events_table.
+
+    TRY.
+        cl_salv_table=>factory(
+          EXPORTING
+            list_display = abap_false
+          IMPORTING
+            r_salv_table = go_alv_registros_cargados
+          CHANGING
+            t_table      = c_ti_registros_nomina ).
+      CATCH cx_salv_msg.                                "#EC NO_HANDLER
+    ENDTRY.
+
+    DATA(o_functions) = go_alv_registros_cargados->get_functions( ). "Adicion 05Nov2024 Sebastian Restrepo Villa
+    o_functions->set_all( abap_true ).                               "Adicion 05Nov2024 Sebastian Restrepo Villa
+
+    go_alv_registros_cargados->set_screen_status( pfstatus      = 'GS_001'
+                                                  report        = gc_nombre_reporte
+                                                  set_functions = go_alv_registros_cargados->c_functions_all ).
+
+    crear_encabezado_y_pie_alv( i_es_cabecera_documento = c_es_cabecera_documento ).
+
+
+    go_columnas = go_alv_registros_cargados->get_columns( ).
+    go_columnas->set_optimize( abap_true ).                          "Adicion 05Nov2024 Sebastian Restrepo Villa
+
+    TRY.
+        go_columna ?= go_columnas->get_column( 'ESTADO' ).
+        go_columna->set_short_text( CONV #( TEXT-est ) ).
+        go_columna->set_medium_text( CONV #( TEXT-est ) ).
+        go_columna->set_long_text( CONV #( TEXT-est ) ).
+
+        go_columna ?= go_columnas->get_column( 'ORDEN_INTERNA' ).
+        go_columna->set_short_text( CONV #( TEXT-ori ) ).
+        go_columna->set_medium_text( CONV #( TEXT-ori ) ).
+        go_columna->set_long_text( CONV #( TEXT-ori ) ).
+
+        go_columna ?= go_columnas->get_column( 'BELNR' ).
+        go_columna->set_cell_type( if_salv_c_cell_type=>hotspot ).
+
+        go_columnas->set_column_position( columnname = 'BELNR'
+                                          position   = 1 ).
+        go_columnas->set_column_position( columnname = 'ESTADO'
+                                          position   = 1 ).
+
+      CATCH cx_salv_not_found.                          "#EC NO_HANDLER
+    ENDTRY.
+
+    "+{SLS 16092025 - Seleccionar status GUI según estado de contabilización
+    DATA(lv_status_gui) = COND #( WHEN g_contabilizacion_exitosa = abap_true
+                                  THEN 'GS_002'
+                                  ELSE 'GS_001' ).
+    "}+SLS
+
+    go_eventos = go_alv_registros_cargados->get_event( ).
+
+    SET HANDLER: me->evento_on_link_click FOR go_eventos,
+                 me->evento_on_user_command FOR go_eventos.
+
+    go_alv_registros_cargados->display( ).
+
+  ENDMETHOD.
+
+
+  METHOD crear_encabezado_y_pie_alv.
+
+    DATA: go_encabezado TYPE REF TO cl_salv_form_layout_grid,
+          go_grid       TYPE REF TO cl_salv_form_layout_grid.
+
+    go_encabezado = NEW cl_salv_form_layout_grid( columns = 4 ).
+    go_grid = go_encabezado->create_grid( row    = 4
+                                          column = 4 ).
+
+    go_grid->create_text( row    = 1
+                          column = 1
+                          text   = |Sociedad:| ).
+
+    go_grid->create_text( row    = 1
+                          column = 2
+                          text   = | { i_es_cabecera_documento-sociedad }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 1
+                          column = 3
+                          text   = |Ejercicio:| ).
+
+    go_grid->create_text( row    = 1
+                          column = 4
+                          text   = | { i_es_cabecera_documento-ejercicio }| ).
+
+    go_grid->create_text( row    = 2
+                          column = 1
+                          text   = |Clase documento: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 2
+                          column = 2
+                          text   = |{ i_es_cabecera_documento-clase_documento }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 3
+                          column = 1
+                          text   = |Fecha documento: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 3
+                          column = 2
+                          text   = |{ i_es_cabecera_documento-fecha_documentos }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 4
+                          column = 1
+                          text   = |Fecha contabilización: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 4
+                          column = 2
+                          text   = |{ i_es_cabecera_documento-fecha_contabilizacion }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 2
+                          column = 3
+                          text   = |Periodo: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 2
+                          column = 4
+                          text   = |{ i_es_cabecera_documento-periodo_contable }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 3
+                          column = 3
+                          text   = |Moneda: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 3
+                          column = 4
+                          text   = |{ i_es_cabecera_documento-moneda }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 4
+                          column = 3
+                          text   = |Texto cabecera: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 4
+                          column = 4
+                          text   = |{ i_es_cabecera_documento-texto_cabecera }| ).
+
+    go_grid->create_text( row    = 5
+                          column = 1
+                          text   = |Cantidad registros: | ).
+
+    go_grid->create_text( row    = 5
+                          column = 2
+                          text   = |{ lines( gti_registros_nomina ) }| ).
+
+    go_alv_registros_cargados->set_top_of_list( go_encabezado ).
+
+  ENDMETHOD.
+
+
+  METHOD evento_on_user_command.
+
+    CASE e_salv_function.
+      WHEN 'CONTAB'.
+
+        contabilizar_registros(
+          CHANGING
+            c_es_cabecera_documento = ges_cabecera
+            c_ti_registros_nomina   = gti_registros_nomina ).
+
+        "+{SLS 16092025 - Cambiar status GUI después de contabilización exitosa
+        IF g_contabilizacion_exitosa = abap_true.
+          go_alv_registros_cargados->set_screen_status( pfstatus      = 'GS_002'
+                                                      report        = gc_nombre_reporte
+                                                      set_functions = go_alv_registros_cargados->c_functions_all ).
+        ENDIF.
+        "}+SLS
+
+        go_alv_registros_cargados->refresh( ).
+
+        go_log->mostrar_log( i_ventana_emergente = abap_true i_limpiar_mensajes = abap_true ).
+
+      WHEN gc_func_agrupar.
+        "+{SLS 16092025 - Agregar funcionalidad de agrupación de posiciones en ALV
+        agrupar_posiciones( CHANGING c_ti_registros_nomina = gti_registros_nomina ).
+        crear_encabezado_y_pie_alv( i_es_cabecera_documento = ges_cabecera ).
+
+        go_alv_registros_cargados->refresh( ).
+        message |Posiciones agrupadas correctamente.| type 'S'.
+        "}+SLS
+
+      WHEN 'DESAGRUPAR'.
+        "+{SLS 16092025 - Implementar desagrupar posiciones en ALV
+        desagrupar_posiciones( ).
+        crear_encabezado_y_pie_alv( i_es_cabecera_documento = ges_cabecera ).
+        go_alv_registros_cargados->refresh( ).
+        message |Posiciones restauradas correctamente.| type 'S'.
+        "}+SLS
+
+      WHEN 'BACK' OR 'EXIT' OR 'CANCEL'.
+
+      WHEN OTHERS.
+        EXIT.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD evento_on_link_click.
+    READ TABLE gti_registros_nomina INTO DATA(es_registro) INDEX row.
+
+    CHECK sy-subrc = 0 AND es_registro-belnr IS NOT INITIAL.
+
+    CASE column.
+
+      WHEN 'BELNR'.
+        SET PARAMETER ID 'BLN'  FIELD es_registro-belnr.
+        SET PARAMETER ID 'BUK'  FIELD ges_cabecera-sociedad.
+        SET PARAMETER ID 'GJR'  FIELD ges_cabecera-ejercicio.
+
+        CALL TRANSACTION 'FB03' AND SKIP FIRST SCREEN.
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD agrupar_posiciones.
+
+    DATA: ti_registros_agrupados TYPE gtp_ti_pos_registros_nomina,
+          lv_pos     TYPE bseg-posnr VALUE 0.
+
+    CHECK c_ti_registros_nomina IS NOT INITIAL.
+    SORT c_ti_registros_nomina BY
+         clave_contabilizacion
+         asignacion
+         ceco
+         orden_interna
+         proveedor
+         cuenta_contable.
+    BREAK seblondo.
+
+    LOOP AT c_ti_registros_nomina REFERENCE INTO DATA(r_registro_nomina_gr)
+         GROUP BY (
+           clave_contabilizacion = r_registro_nomina_gr->clave_contabilizacion
+           asignacion            = r_registro_nomina_gr->asignacion
+           ceco                  = r_registro_nomina_gr->ceco
+           orden_interna         = r_registro_nomina_gr->orden_interna
+           proveedor             = r_registro_nomina_gr->proveedor
+           cuenta_contable       = r_registro_nomina_gr->cuenta_contable ).
+
+      DATA(lv_total) = REDUCE bseg-wrbtr( INIT s = CONV bseg-wrbtr( 0 )
+                                          FOR r IN GROUP r_registro_nomina_gr
+                                          NEXT s = s + r-importe ).
+
+      ADD 1 TO lv_pos.
+
+      APPEND VALUE gtp_es_posiciones(
+        posicion              = lv_pos
+        clave_contabilizacion = r_registro_nomina_gr->clave_contabilizacion
+        importe               = lv_total
+        asignacion            = r_registro_nomina_gr->asignacion
+        texto_posicion        = r_registro_nomina_gr->texto_posicion
+        ceco                  = r_registro_nomina_gr->ceco
+        orden_interna         = r_registro_nomina_gr->orden_interna
+        proveedor             = r_registro_nomina_gr->proveedor
+        cuenta_contable       = r_registro_nomina_gr->cuenta_contable
+        clve_ref1             = r_registro_nomina_gr->clve_ref1
+        clve_ref3             = r_registro_nomina_gr->clve_ref3
+        estado                = r_registro_nomina_gr->estado
+        belnr                 = space )
+      TO ti_registros_agrupados.
+
+    ENDLOOP.
+
+    IF ti_registros_agrupados IS NOT INITIAL.
+      c_ti_registros_nomina = ti_registros_agrupados.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD desagrupar_posiciones.
+
+    CHECK gti_registros_nomina_completo IS NOT INITIAL.
+    gti_registros_nomina = gti_registros_nomina_completo.
+
+  ENDMETHOD.
+
+
+  METHOD constructor.
+
+    go_parametros = NEW zclcxr1000_parametros(
+      i_modulo = gc_modulo
+      i_ricefw = gc_ricefw ).
+
+    gc_cantidad_registros_x_doc = VALUE #( go_parametros->gti_parametros[ idparam = 'CANT_RGCON' ]-low OPTIONAL ).
+    gc_cebe_x_defecto = VALUE #( go_parametros->gti_parametros[ idparam = 'CEBE' ]-low OPTIONAL ).
+    gc_cuenta_diferencias = VALUE #( go_parametros->gti_parametros[ idparam = 'CUENTA_DIF' ]-low OPTIONAL ).
+
+    gc_cebe_x_defecto = |{ gc_cebe_x_defecto ALPHA = IN }|.
+    gc_cuenta_diferencias = |{ gc_cuenta_diferencias ALPHA = IN }|.
+
+    "+{SLS 16092025 - Cargar rango de ex-empleados CDOEXEMP para redirección a cliente
+    TRY.
+        go_parametros->get_parametro(
+          EXPORTING
+            i_idparam               = 'CDOEXEMP'
+          IMPORTING
+            e_ti_valrango           = gti_cdoexemp
+          EXCEPTIONS
+            parametro_no_encontrado = 1 ).
+      CATCH cx_root.
+        CLEAR gti_cdoexemp.
+    ENDTRY.
+    "}+SLS
+
+    "+{SLS 16092025 - Inicializar estado de contabilización
+    g_contabilizacion_exitosa = abap_false.
+    "}+SLS
+
+  ENDMETHOD.
+
+
+  METHOD validar_contabilizacion_previa.
+
+    IF go_log IS BOUND.
+      go_log->liberar( ).
+    ENDIF.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    SELECT * FROM ztfic1021_1
+    WHERE sociedad = @i_bukrs
+          AND ejercicio    = @i_ejercicio "+SLS 10.06.2025 - incluir el ejercicio para validar documentos solo del ejercio en curso
+          AND clase_nomina = @i_clase_nomina
+          AND periodo_nomina = @i_periodo_nomina
+          AND estado_ejecucion = @gc_estado_contabilizacion_ok
+    INTO TABLE @DATA(ti_documento_contabilizado).
+
+    LOOP AT ti_documento_contabilizado INTO DATA(es_documento_contabilizado).
+
+      r_registros_contabilizados = abap_true.
+
+      go_log->set_es_log( i_es = VALUE #( id = 'ZFI01' type = 'E' number = '045'
+                          message_v1 = es_documento_contabilizado-sociedad
+                          message_v2 = es_documento_contabilizado-ejercicio
+                          message_v3 = es_documento_contabilizado-numero_documento
+                          ) ).
+
+    ENDLOOP..
+
+  ENDMETHOD.
+
+
+  METHOD visualizar_log_db.
+
+    SELECT  *
+    FROM ztfic1021_1
+    WHERE sociedad = @i_bukrs
+      AND clase_nomina = @i_clase_nomina
+      AND periodo_nomina = @i_periodo_nomina
+    INTO TABLE @DATA(ti_log_db).
+
+    SORT ti_log_db BY fecha_ejecucion.
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos = REF #( ti_log_db ).
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclfic1021_contabiliza_nomina DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_nombre_reporte            TYPE syrepid VALUE 'ZFIC1021_1',
+               gc_ricefw                    TYPE zzedricefw VALUE 'C1021',
+               gc_clve_contab_debito        TYPE bseg-bschl VALUE '40',
+               gc_clve_contab_credito       TYPE bseg-bschl VALUE '50',
+               gc_clve_contab_debito_cli    TYPE bseg-bschl VALUE '01',
+               gc_clve_contab_credito_cli   TYPE bseg-bschl VALUE '11',
+               gc_estado_contabilizacion_ok TYPE ztfic1021_1-estado_ejecucion VALUE 'S',
+               gc_modulo                    TYPE zzedmodulo VALUE 'FI',
+               gc_func_agrupar              TYPE ui_func VALUE 'AGRUPAR'.
+
+    TYPES: BEGIN OF gtp_es_cabecera,
+             sociedad              TYPE bkpf-bukrs,
+             clase_documento       TYPE bkpf-blart,
+             fecha_documentos      TYPE string, "bldbkpf-at,
+             fecha_contabilizacion TYPE string, "bkpf-budat,
+             periodo_contable      TYPE bkpf-monat,
+             texto_cabecera        TYPE bkpf-bktxt,
+             moneda                TYPE bkpf-waers,
+             ejercicio             TYPE bkpf-gjahr,
+           END OF gtp_es_cabecera,
+
+           BEGIN OF gtp_es_clave_nomina,
+             bukrs          TYPE bukrs,
+             clase_nomina   TYPE ztfic1021_2-clase_nomina,
+             periodo_nomina TYPE ztfic1021_1-periodo_nomina,
+             id_sociedad    TYPE lfa1-lifnr,
+           END OF gtp_es_clave_nomina,
+
+           BEGIN OF gtp_es_posiciones,
+             posicion              TYPE bseg-posnr,
+             clave_contabilizacion TYPE bseg-bschl,
+             importe               TYPE bseg-wrbtr,
+             asignacion            TYPE bseg-zuonr,
+             texto_posicion        TYPE bseg-sgtxt,
+             ceco                  TYPE bseg-kostl,
+             orden_interna         TYPE string,
+             proveedor             TYPE bseg-lifnr,
+             cuenta_contable       TYPE bseg-hkont,
+             clve_ref1             TYPE bseg-xref1,
+             clve_ref3             TYPE bseg-xref3,
+             estado                TYPE icon_d,
+             belnr                 TYPE bkpf-belnr,
+           END OF gtp_es_posiciones.
+
+    TYPES: gtp_ti_pos_registros_nomina TYPE STANDARD TABLE OF gtp_es_posiciones WITH EMPTY KEY.
+
+    DATA: gc_cantidad_registros_x_doc TYPE i VALUE 900,
+          gc_cebe_x_defecto           TYPE bseg-prctr VALUE '1030',
+          gc_cuenta_diferencias       TYPE bseg-hkont VALUE '2505030101',
+          ges_clave_nomina            TYPE gtp_es_clave_nomina.
+
+    METHODS:
+      constructor,
+      iniciar_proceso_de_carga
+        IMPORTING
+          i_bukrs                 TYPE bukrs
+          i_clase_nomina          TYPE ztfic1021_2-clase_nomina
+          i_periodo_nomina        TYPE ztfic1021_1-periodo_nomina
+          VALUE(i_nombre_archivo) TYPE localfile,
+      validar_contabilizacion_previa
+        IMPORTING
+          i_bukrs                           TYPE bukrs
+          i_ejercicio                       TYPE gjahr
+          i_clase_nomina                    TYPE ztfic1021_2-clase_nomina
+          i_periodo_nomina                  TYPE ztfic1021_1-periodo_nomina
+        RETURNING
+          VALUE(r_registros_contabilizados) TYPE flag,
+      visualizar_log_db
+        IMPORTING
+          i_bukrs          TYPE bukrs
+          i_clase_nomina   TYPE ztfic1021_2-clase_nomina
+          i_periodo_nomina TYPE ztfic1021_1-periodo_nomina.
+
+    "Eventos ALV
+    METHODS:
+      evento_on_user_command FOR EVENT added_function OF cl_salv_events
+        IMPORTING e_salv_function,
+      evento_on_link_click   FOR EVENT link_click OF
+        cl_salv_events_table
+        IMPORTING row column..
+
+  PROTECTED SECTION.
+
+    DATA: go_log                    TYPE REF TO zclcxr1002_log_aplicacion,
+          go_parametros             TYPE REF TO zclcxr1000_parametros,
+          go_alv                    TYPE REF TO cl_gui_alv_grid,
+          go_dock_container         TYPE REF TO cl_gui_docking_container,
+          go_alv_registros_cargados TYPE REF TO cl_salv_table,
+          go_contenedor             TYPE REF TO cl_gui_custom_container,
+*          go_events              TYPE REF TO lcl_handle_events,
+          g_okcode                  TYPE syucomm.
+
+
+  PRIVATE SECTION.
+
+    DATA: ges_cabecera         TYPE gtp_es_cabecera,
+          gti_registros_nomina TYPE gtp_ti_pos_registros_nomina,
+          gti_registros_nomina_completo TYPE gtp_ti_pos_registros_nomina.
+
+    DATA: gti_cdoexemp         TYPE RANGE OF bseg-lifnr,
+          g_contabilizacion_exitosa TYPE abap_bool.
+
+    METHODS: asignar_contenido_archivo
+      IMPORTING
+        i_ti_datos_archivo      TYPE string_t
+      CHANGING
+        c_es_cabecera_documento TYPE gtp_es_cabecera
+        c_ti_registros_nomina   TYPE gtp_ti_pos_registros_nomina,
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Contabilizar registros de nomina a partir de los datos cargados<br/>
+      "! del archivo plano. Se contabilizan un documento cada 990 (Parametro) registros del archivo.
+      "! Se tienen en cuenta las diferencias. Las cuales se agregan como una posicion mas y se llevan a una cuenta
+      "! parametrizada.
+      "! </p>
+      "! <strong>Identificador:</strong>
+      "! E00XXX <br/>
+      "! <strong>Autor:</strong>
+      "! Juan Perez
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 20.01.2021 \ S4DK900021 \ Juan Perez Lorca \ Creacion Inicial \
+      "!
+      "! @parameter c_es_cabecera_documento |
+      "! @parameter c_ti_registros_nomina |
+      contabilizar_registros
+        CHANGING
+          c_es_cabecera_documento TYPE gtp_es_cabecera
+          c_ti_registros_nomina   TYPE gtp_ti_pos_registros_nomina,
+      formatear_fecha
+        IMPORTING
+          VALUE(i_fecha) TYPE string
+        RETURNING
+          VALUE(r_fecha) TYPE string,
+      "! ALV basado en SALV, para detalle de la generación del ALV
+      "! explorar el reporte SALV_DEMO_TABLE_LAYOUT
+      "!
+      "! @parameter c_es_cabecera_documento |
+      "! @parameter c_ti_registros_nomina |
+      visualizar_registros_cargados
+        CHANGING
+          c_es_cabecera_documento TYPE zclfic1021_contabiliza_nomina=>gtp_es_cabecera
+          c_ti_registros_nomina   TYPE zclfic1021_contabiliza_nomina=>gtp_ti_pos_registros_nomina,
+      crear_encabezado_y_pie_alv
+        IMPORTING
+          VALUE(i_es_cabecera_documento) TYPE gtp_es_cabecera,
+      agrupar_posiciones
+        CHANGING
+          c_ti_registros_nomina TYPE gtp_ti_pos_registros_nomina,
+      desagrupar_posiciones.
+
+ENDCLASS.
+
+
+
+CLASS zclfic1021_contabiliza_nomina IMPLEMENTATION.
+
+
+  METHOD iniciar_proceso_de_carga.
+
+    DATA: ti_datos_archivo TYPE zclcxr1002_cargar_archivo=>tp_ti_con_name,
+          ejercicio        TYPE bseg-gjahr.
+
+    TRY.
+        ges_clave_nomina = VALUE #( bukrs = i_bukrs clase_nomina = i_clase_nomina periodo_nomina = i_periodo_nomina ).
+
+        zclcxr1002_cargar_archivo=>cargar_plano(
+          EXPORTING
+            i_c_filename = i_nombre_archivo
+          IMPORTING
+            e_ti_datos   = ti_datos_archivo ).
+
+        "Cargar la cabecera
+        zclcxr1002_util=>string_a_es(
+          EXPORTING
+            i_str        = VALUE #( ti_datos_archivo[ 1 ] OPTIONAL )
+            i_separador  = ','
+          CHANGING
+            c_es_destino = ges_cabecera ).
+
+        ejercicio = ges_cabecera-fecha_contabilizacion(4).
+
+
+        IF validar_contabilizacion_previa( i_bukrs = i_bukrs i_clase_nomina = i_clase_nomina i_periodo_nomina = i_periodo_nomina
+                                           i_ejercicio = ejercicio ) = abap_false.
+
+          asignar_contenido_archivo( EXPORTING i_ti_datos_archivo      = ti_datos_archivo
+                                     CHANGING  c_es_cabecera_documento = ges_cabecera
+                                               c_ti_registros_nomina   = gti_registros_nomina ).
+
+          IF ges_clave_nomina-bukrs = ges_cabecera-sociedad.
+            visualizar_registros_cargados( CHANGING c_es_cabecera_documento = ges_cabecera
+                                                    c_ti_registros_nomina   = gti_registros_nomina ).
+          ELSE.
+            go_log->set_es_log( i_es = VALUE #( id = 'ZFI01' type = 'E' number = '046'
+                                message_v1 = ges_cabecera-sociedad
+                                message_v2 = ges_clave_nomina-bukrs
+                                ) ).
+          ENDIF.
+
+        ENDIF.
+
+        IF go_log IS BOUND.
+          go_log->mostrar_log( i_ventana_emergente = abap_true ).
+        ENDIF.
+
+      CATCH cx_t100_msg.
+        go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty message_v1 = sy-msgv1
+                                                message_v2 = sy-msgv2 message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD asignar_contenido_archivo.
+
+    DATA: ceco TYPE bseg-kostl.
+    "Cargar la cabecera
+    zclcxr1002_util=>string_a_es(
+      EXPORTING
+        i_str        = VALUE #( i_ti_datos_archivo[ 1 ] OPTIONAL )
+        i_separador  = ','
+      CHANGING
+        c_es_destino = c_es_cabecera_documento ).
+
+    c_es_cabecera_documento-fecha_contabilizacion = formatear_fecha( c_es_cabecera_documento-fecha_contabilizacion ).
+    c_es_cabecera_documento-fecha_documentos = formatear_fecha( c_es_cabecera_documento-fecha_documentos ).
+    c_es_cabecera_documento-ejercicio = c_es_cabecera_documento-fecha_contabilizacion(4).
+
+    zclcxr1002_util=>string_a_ti(
+      EXPORTING
+        i_ti_str                      = i_ti_datos_archivo
+        i_fila_de_inicio              = 2
+        i_separador                   = ','
+        i_remover_separador_decimales = abap_true
+      CHANGING
+        c_ti_destino                  = c_ti_registros_nomina ).
+
+    gti_registros_nomina_completo = c_ti_registros_nomina.
+
+    MODIFY c_ti_registros_nomina FROM VALUE #( estado = icon_light_out )
+    TRANSPORTING estado
+    WHERE estado IS INITIAL.
+
+    LOOP AT c_ti_registros_nomina REFERENCE INTO DATA(r_es_registro_nomina).
+
+      ceco = replace( val = r_es_registro_nomina->ceco sub = '0' with = space occ = 0 ).
+      ceco = shift_left( val = ceco ).
+      IF  ceco IS INITIAL.
+        CLEAR: r_es_registro_nomina->ceco.
+      ELSE.
+        r_es_registro_nomina->ceco = |{ r_es_registro_nomina->ceco ALPHA = IN }|.
+      ENDIF.
+
+      r_es_registro_nomina->cuenta_contable = |{ r_es_registro_nomina->cuenta_contable ALPHA = IN }|.
+      r_es_registro_nomina->proveedor = |{ r_es_registro_nomina->proveedor ALPHA = IN }|.
+
+    ENDLOOP.
+
+    gti_registros_nomina_completo = c_ti_registros_nomina.
+
+  ENDMETHOD.
+
+
+  METHOD contabilizar_registros.
+
+    DATA: es_cabecera_documento      TYPE bapiache09,
+          ti_posiciones_cuenta_mayor TYPE bapiacgl09_tab,
+          es_posiciones_cuenta_mayor TYPE bapiacgl09,
+          ti_cuentas_proveedor       TYPE bapiacap09_tab,
+          es_cuentas_proveedor       TYPE bapiacap09,
+          ti_cuentas_cliente         TYPE bapiacar09_tab,
+          es_cuentas_cliente         TYPE bapiacar09,
+          es_importes                TYPE bapiaccr09,
+          ti_importes                TYPE bapiaccr09_tab,
+          ti_msj_retorno             TYPE bapiret2_t,
+          ti_msj_retorno_all         TYPE bapiret2_t,
+          estado_contabilizacion     TYPE icon_d,
+          r_posiciones_tratadas      TYPE RANGE OF gtp_es_posiciones-posicion,
+          tipo_documento             TYPE awtyp,
+          clave_documento            TYPE awkey,
+          total_debito               TYPE bapiaccr09-amt_doccur,
+          total_credito              TYPE bapiaccr09-amt_doccur,
+          id_sociedad                TYPE lfa1-lifnr,
+          consecutivo_archivo        TYPE i,
+          cantidad_registros_doc     TYPE i,
+          indice_iteracion           TYPE i.
+
+    "+{SLS 16092025 - Inicializar estado de contabilización al inicio del proceso
+    g_contabilizacion_exitosa = abap_false.
+    "}+SLS
+
+    IF go_log IS BOUND.
+      go_log->liberar( ).
+    ENDIF.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    "Validar si los registros fueron cargados anteriormente
+    IF validar_contabilizacion_previa(  i_bukrs          = ges_clave_nomina-bukrs
+                                        i_clase_nomina   = ges_clave_nomina-clase_nomina
+                                        i_periodo_nomina = ges_clave_nomina-periodo_nomina
+                                        i_ejercicio      = CONV #( ges_cabecera-fecha_contabilizacion(4) ) ) = abap_true.
+      RETURN.
+    ENDIF.
+
+    ges_clave_nomina-id_sociedad = condense( |{ ges_clave_nomina-bukrs ALPHA = IN }| ).
+
+*Inicio Modificacion 06Nov2024 Sebastian Restrepo Villa
+    CLEAR ti_msj_retorno_all.
+    LOOP AT c_ti_registros_nomina REFERENCE INTO DATA(r_es_registro_nomina).
+
+      indice_iteracion = sy-tabix.
+      ADD 1 TO cantidad_registros_doc.
+
+      r_posiciones_tratadas = VALUE #( BASE r_posiciones_tratadas
+                                       ( sign = 'I' option = 'EQ' low = indice_iteracion ) ).
+      DATA(proveedor) = condense( |{ r_es_registro_nomina->proveedor ALPHA = OUT }| ).
+      "Datos de cuenta y posicion
+      "Se tiene una metrica para proveedores y asientos a cuentas contbles enviadas.
+      IF r_es_registro_nomina->proveedor IS INITIAL.
+        es_posiciones_cuenta_mayor = VALUE bapiacgl09( itemno_acc = lines( ti_importes ) + 1
+                                                        gl_account = COND #( WHEN r_es_registro_nomina->proveedor IS INITIAL THEN
+                                                                              r_es_registro_nomina->cuenta_contable
+                                                                             ELSE
+                                                                              space )
+                                                        doc_type = c_es_cabecera_documento-clase_documento
+                                                        comp_code = c_es_cabecera_documento-sociedad
+                                                        fisc_year =  c_es_cabecera_documento-ejercicio
+                                                        fis_period = c_es_cabecera_documento-periodo_contable
+                                                        pstng_date = c_es_cabecera_documento-fecha_contabilizacion
+                                                        alloc_nmbr = c_es_cabecera_documento-fecha_contabilizacion
+                                                        costcenter = r_es_registro_nomina->ceco
+                                                        profit_ctr = gc_cebe_x_defecto
+                                                        orderid    = r_es_registro_nomina->orden_interna
+                                                        item_text = r_es_registro_nomina->texto_posicion
+                                                        vendor_no = r_es_registro_nomina->proveedor
+                                                        ref_key_1 = r_es_registro_nomina->clve_ref1
+                                                        ref_key_3 = r_es_registro_nomina->clve_ref3
+                                                       ).
+
+        APPEND es_posiciones_cuenta_mayor TO ti_posiciones_cuenta_mayor.
+
+      ELSEIF proveedor IN gti_cdoexemp.
+        es_cuentas_cliente = VALUE #( itemno_acc = lines( ti_importes ) + 1
+                                      customer  = r_es_registro_nomina->proveedor
+                                      comp_code = c_es_cabecera_documento-sociedad
+                                      item_text = r_es_registro_nomina->texto_posicion
+                                      profit_ctr = gc_cebe_x_defecto ).
+        APPEND es_cuentas_cliente TO ti_cuentas_cliente.
+      ELSE.
+        es_cuentas_proveedor = VALUE #( itemno_acc = lines( ti_importes ) + 1
+                                        vendor_no = r_es_registro_nomina->proveedor
+                                        comp_code = c_es_cabecera_documento-sociedad
+                                        item_text = r_es_registro_nomina->texto_posicion
+                                        profit_ctr = gc_cebe_x_defecto
+                                      ).
+
+        APPEND es_cuentas_proveedor TO ti_cuentas_proveedor.
+
+      ENDIF.
+
+      "Valores monectarios
+      es_importes = VALUE bapiaccr09( itemno_acc = lines( ti_importes ) + 1
+                                      amt_doccur = r_es_registro_nomina->importe
+                                      currency = c_es_cabecera_documento-moneda
+                                    ).
+
+      IF r_es_registro_nomina->clave_contabilizacion = gc_clve_contab_debito.
+        ADD es_importes-amt_doccur TO total_debito.
+      ELSE.
+        es_importes-amt_doccur = es_importes-amt_doccur * -1.
+        ADD es_importes-amt_doccur TO total_credito.
+      ENDIF.
+
+      APPEND es_importes TO ti_importes.
+
+
+      "Es hora de Contabilizar un documento, segun alguna de las condiciones
+      IF cantidad_registros_doc = gc_cantidad_registros_x_doc OR indice_iteracion = lines( c_ti_registros_nomina ).
+
+        ADD 1 TO consecutivo_archivo.
+
+        CLEAR: ti_msj_retorno.
+
+        "Cuando se realice el rompimiento en las 990 posiciones y los débitos (40) no crucen contra los créditos (50)
+        "se puede llevar la diferencia a la cuenta 2505030101 en la clave de contabilización correspondiente.
+        es_importes-amt_doccur = ( total_credito + total_debito ) * -1.
+
+        "Contrapartida
+        IF es_importes-amt_doccur IS NOT INITIAL.
+
+          "Datos de cuenta y posicion
+          es_posiciones_cuenta_mayor = VALUE #( BASE es_posiciones_cuenta_mayor
+                                                itemno_acc = lines( ti_importes ) + 1
+                                                gl_account = gc_cuenta_diferencias
+                                                item_text  = 'DIFERENCIA'
+                                                costcenter = space
+                                                vendor_no = ges_clave_nomina-id_sociedad
+                                                ref_key_1 = space
+                                                ref_key_3 = space ).
+
+          APPEND  es_posiciones_cuenta_mayor TO ti_posiciones_cuenta_mayor.
+
+          es_importes-itemno_acc = lines( ti_importes ) + 1.
+          APPEND es_importes TO ti_importes.
+
+        ENDIF.
+
+        es_cabecera_documento = VALUE #(  comp_code = c_es_cabecera_documento-sociedad
+                                          doc_date = c_es_cabecera_documento-fecha_documentos
+                                          pstng_date = c_es_cabecera_documento-fecha_contabilizacion
+                                          doc_type = c_es_cabecera_documento-clase_documento
+                                          fisc_year = c_es_cabecera_documento-ejercicio
+                                          fis_period = c_es_cabecera_documento-periodo_contable
+                                          username = sy-uname
+                                          bus_act = 'RFBU'
+                                          header_txt = c_es_cabecera_documento-texto_cabecera
+                                          ref_doc_no = ges_clave_nomina-clase_nomina
+                                        ).
+        "Primero, verificamos consistencia de los datos
+        CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+          EXPORTING
+            documentheader    = es_cabecera_documento
+          TABLES
+            accountgl         = ti_posiciones_cuenta_mayor
+            accountpayable    = ti_cuentas_proveedor
+            accountreceivable = ti_cuentas_cliente
+            currencyamount    = ti_importes
+            return            = ti_msj_retorno.
+
+        APPEND LINES OF ti_msj_retorno TO ti_msj_retorno_all.
+
+        CLEAR: ti_posiciones_cuenta_mayor,
+               ti_cuentas_proveedor,
+               ti_importes,
+               ti_msj_retorno,
+               tipo_documento,
+               r_posiciones_tratadas,
+               total_credito,
+               total_debito,
+               cantidad_registros_doc,
+               ti_cuentas_cliente.
+
+      ENDIF.
+
+    ENDLOOP.
+
+    IF line_exists( ti_msj_retorno_all[ type = 'E' ] ).
+      estado_contabilizacion = icon_red_light.
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno_all ) ).
+      RETURN.
+    ENDIF.
+
+    CLEAR:
+            cantidad_registros_doc,
+            consecutivo_archivo,
+            total_debito,
+            total_credito,
+            ti_importes,
+            ti_posiciones_cuenta_mayor,
+            tipo_documento,
+            ti_cuentas_proveedor,
+            ti_msj_retorno,
+            r_posiciones_tratadas.
+
+    LOOP AT c_ti_registros_nomina REFERENCE INTO r_es_registro_nomina.
+
+      indice_iteracion = sy-tabix.
+      ADD 1 TO cantidad_registros_doc.
+
+      r_posiciones_tratadas = VALUE #( BASE r_posiciones_tratadas
+                                       ( sign = 'I' option = 'EQ' low = indice_iteracion ) ).
+      proveedor = condense( |{ r_es_registro_nomina->proveedor ALPHA = OUT }| ).
+      "Datos de cuenta y posicion
+      "Se tiene una metrica para proveedores y asientos a cuentas contbles enviadas.
+      IF r_es_registro_nomina->proveedor IS INITIAL.
+        es_posiciones_cuenta_mayor = VALUE bapiacgl09( itemno_acc = lines( ti_importes ) + 1
+                                                        gl_account = COND #( WHEN r_es_registro_nomina->proveedor IS INITIAL THEN
+                                                                              r_es_registro_nomina->cuenta_contable
+                                                                             ELSE
+                                                                              space )
+                                                        doc_type = c_es_cabecera_documento-clase_documento
+                                                        comp_code = c_es_cabecera_documento-sociedad
+                                                        fisc_year =  c_es_cabecera_documento-ejercicio
+                                                        fis_period = c_es_cabecera_documento-periodo_contable
+                                                        pstng_date = c_es_cabecera_documento-fecha_contabilizacion
+                                                        alloc_nmbr = c_es_cabecera_documento-fecha_contabilizacion
+                                                        costcenter = r_es_registro_nomina->ceco
+                                                        profit_ctr = gc_cebe_x_defecto
+                                                        orderid    = r_es_registro_nomina->orden_interna
+                                                        item_text = r_es_registro_nomina->texto_posicion
+                                                        vendor_no = r_es_registro_nomina->proveedor
+                                                        ref_key_1 = r_es_registro_nomina->clve_ref1
+                                                        ref_key_3 = r_es_registro_nomina->clve_ref3
+                                                       ).
+
+        APPEND es_posiciones_cuenta_mayor TO ti_posiciones_cuenta_mayor.
+
+      ELSEIF proveedor IN gti_cdoexemp.
+        es_cuentas_cliente = VALUE #( itemno_acc = lines( ti_importes ) + 1
+                                      customer  = r_es_registro_nomina->proveedor
+                                      comp_code = c_es_cabecera_documento-sociedad
+                                      item_text = r_es_registro_nomina->texto_posicion
+                                      profit_ctr = gc_cebe_x_defecto ).
+        APPEND es_cuentas_cliente TO ti_cuentas_cliente.
+      ELSE.
+        es_cuentas_proveedor = VALUE #( itemno_acc = lines( ti_importes ) + 1
+                                        vendor_no = r_es_registro_nomina->proveedor
+                                        comp_code = c_es_cabecera_documento-sociedad
+                                        item_text = r_es_registro_nomina->texto_posicion
+                                        profit_ctr = gc_cebe_x_defecto
+                                      ).
+
+        APPEND es_cuentas_proveedor TO ti_cuentas_proveedor.
+
+      ENDIF.
+
+      "Valores monectarios
+      es_importes = VALUE bapiaccr09( itemno_acc = lines( ti_importes ) + 1
+                                      amt_doccur = r_es_registro_nomina->importe
+                                      currency = c_es_cabecera_documento-moneda
+                                    ).
+
+      IF r_es_registro_nomina->clave_contabilizacion = gc_clve_contab_debito.
+        ADD es_importes-amt_doccur TO total_debito.
+      ELSE.
+        es_importes-amt_doccur = es_importes-amt_doccur * -1.
+        ADD es_importes-amt_doccur TO total_credito.
+      ENDIF.
+
+      APPEND es_importes TO ti_importes.
+
+
+      "Es hora de Contabilizar un documento, segun alguna de las condiciones
+      IF cantidad_registros_doc = gc_cantidad_registros_x_doc OR indice_iteracion = lines( c_ti_registros_nomina ).
+
+        ADD 1 TO consecutivo_archivo.
+
+        CLEAR: ti_msj_retorno.
+
+        "Cuando se realice el rompimiento en las 990 posiciones y los débitos (40) no crucen contra los créditos (50)
+        "se puede llevar la diferencia a la cuenta 2505030101 en la clave de contabilización correspondiente.
+        es_importes-amt_doccur = ( total_credito + total_debito ) * -1.
+
+        "Contrapartida
+        IF es_importes-amt_doccur IS NOT INITIAL.
+
+          "Datos de cuenta y posicion
+          es_posiciones_cuenta_mayor = VALUE #( BASE es_posiciones_cuenta_mayor
+                                                itemno_acc = lines( ti_importes ) + 1
+                                                gl_account = gc_cuenta_diferencias
+                                                item_text  = 'DIFERENCIA'
+                                                costcenter = space
+                                                vendor_no = ges_clave_nomina-id_sociedad
+                                                ref_key_1 = space
+                                                ref_key_3 = space ).
+
+          APPEND  es_posiciones_cuenta_mayor TO ti_posiciones_cuenta_mayor.
+
+          es_importes-itemno_acc = lines( ti_importes ) + 1.
+          APPEND es_importes TO ti_importes.
+
+        ENDIF.
+
+        "Primero, verificamos consistencia de los datos
+        CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+          EXPORTING
+            documentheader    = es_cabecera_documento
+          TABLES
+            accountgl         = ti_posiciones_cuenta_mayor
+            accountpayable    = ti_cuentas_proveedor
+            accountreceivable = ti_cuentas_cliente
+            currencyamount    = ti_importes
+            return            = ti_msj_retorno.
+
+        APPEND LINES OF ti_msj_retorno TO ti_msj_retorno_all.
+
+        IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+          CLEAR: ti_msj_retorno.
+          "Todo Ok =) Contabilizar documento.
+          CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+            EXPORTING
+              documentheader    = es_cabecera_documento
+            IMPORTING
+              obj_type          = tipo_documento
+              obj_key           = clave_documento
+            TABLES
+              accountgl         = ti_posiciones_cuenta_mayor
+              accountpayable    = ti_cuentas_proveedor
+              accountreceivable = ti_cuentas_cliente
+              currencyamount    = ti_importes
+              return            = ti_msj_retorno.
+
+          APPEND LINES OF ti_msj_retorno TO ti_msj_retorno_all.
+
+          go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+          IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+
+            "+{SLS 16092025 - Marcar contabilización como exitosa
+            g_contabilizacion_exitosa = abap_true.
+            "}+SLS
+
+            estado_contabilizacion = icon_green_light.
+
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+          ELSE.
+            estado_contabilizacion = icon_red_light.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+          ENDIF.
+
+        ELSE.
+          estado_contabilizacion = icon_red_light.
+          go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+        ENDIF.
+
+        MODIFY c_ti_registros_nomina FROM VALUE #( estado = estado_contabilizacion belnr = clave_documento )
+        TRANSPORTING estado belnr
+        WHERE posicion IN r_posiciones_tratadas.
+        "Registrar log de proceso
+        MODIFY ztfic1021_1
+        FROM @( VALUE ztfic1021_1(
+                       sociedad = c_es_cabecera_documento-sociedad
+                       clase_nomina          = ges_clave_nomina-clase_nomina
+                       periodo_nomina        = ges_clave_nomina-periodo_nomina
+                       ejercicio             = c_es_cabecera_documento-ejercicio
+                       "Numero de documentos contabilizados por 1 Archivo
+                       consecutivo_archivo   = consecutivo_archivo
+                       clase_documento       = c_es_cabecera_documento-clase_documento
+                       fecha_documento       = c_es_cabecera_documento-fecha_documentos
+                       fecha_contabilizacion = c_es_cabecera_documento-fecha_contabilizacion
+                       periodo_contable      = c_es_cabecera_documento-periodo_contable
+                       numero_documento      = clave_documento
+                       moneda                = c_es_cabecera_documento-moneda
+                       fecha_ejecucion       = sy-datum
+                       hora_ejecucion        = sy-uzeit
+                       usuario               = sy-uname
+                       estado_ejecucion      = COND #( WHEN estado_contabilizacion = icon_green_light THEN gc_estado_contabilizacion_ok ELSE 'E' )
+                       cantidad_registros    = cantidad_registros_doc )
+               ).
+
+        CLEAR: ti_importes, ti_posiciones_cuenta_mayor, tipo_documento, ti_cuentas_proveedor, ti_msj_retorno,
+               r_posiciones_tratadas, total_credito, total_debito, cantidad_registros_doc.
+        CLEAR ti_cuentas_cliente.
+
+        IF estado_contabilizacion = icon_red_light.
+          EXIT.
+        ENDIF.
+
+      ENDIF.
+
+    ENDLOOP.
+*Fin Modificacion 06Nov2024 Sebastian Restrepo Villa
+
+  ENDMETHOD.
+
+
+  METHOD formatear_fecha.
+
+    IF i_fecha IS INITIAL. "Adicion 18Nov2024 Sebastian Restrepo Villa
+      RETURN.
+    ENDIF.
+
+    REPLACE ALL OCCURRENCES OF '.' IN i_fecha WITH space.
+    r_fecha = |{ i_fecha+4(4) }{ i_fecha+2(2) }{ i_fecha(2) }|.
+
+  ENDMETHOD.
+
+
+  METHOD visualizar_registros_cargados.
+
+    DATA: go_columnas TYPE REF TO cl_salv_columns,
+          go_columna  TYPE REF TO cl_salv_column_table,
+          go_eventos  TYPE REF TO cl_salv_events_table.
+
+    TRY.
+        cl_salv_table=>factory(
+          EXPORTING
+            list_display = abap_false
+          IMPORTING
+            r_salv_table = go_alv_registros_cargados
+          CHANGING
+            t_table      = c_ti_registros_nomina ).
+      CATCH cx_salv_msg.                                "#EC NO_HANDLER
+    ENDTRY.
+
+    DATA(o_functions) = go_alv_registros_cargados->get_functions( ). "Adicion 05Nov2024 Sebastian Restrepo Villa
+    o_functions->set_all( abap_true ).                               "Adicion 05Nov2024 Sebastian Restrepo Villa
+
+    go_alv_registros_cargados->set_screen_status( pfstatus      = 'GS_001'
+                                                  report        = gc_nombre_reporte
+                                                  set_functions = go_alv_registros_cargados->c_functions_all ).
+
+    crear_encabezado_y_pie_alv( i_es_cabecera_documento = c_es_cabecera_documento ).
+
+
+    go_columnas = go_alv_registros_cargados->get_columns( ).
+    go_columnas->set_optimize( abap_true ).                          "Adicion 05Nov2024 Sebastian Restrepo Villa
+
+    TRY.
+        go_columna ?= go_columnas->get_column( 'ESTADO' ).
+        go_columna->set_short_text( CONV #( TEXT-est ) ).
+        go_columna->set_medium_text( CONV #( TEXT-est ) ).
+        go_columna->set_long_text( CONV #( TEXT-est ) ).
+
+        go_columna ?= go_columnas->get_column( 'ORDEN_INTERNA' ).
+        go_columna->set_short_text( CONV #( TEXT-ori ) ).
+        go_columna->set_medium_text( CONV #( TEXT-ori ) ).
+        go_columna->set_long_text( CONV #( TEXT-ori ) ).
+
+        go_columna ?= go_columnas->get_column( 'BELNR' ).
+        go_columna->set_cell_type( if_salv_c_cell_type=>hotspot ).
+
+        go_columnas->set_column_position( columnname = 'BELNR'
+                                          position   = 1 ).
+        go_columnas->set_column_position( columnname = 'ESTADO'
+                                          position   = 1 ).
+
+      CATCH cx_salv_not_found.                          "#EC NO_HANDLER
+    ENDTRY.
+
+    "+{SLS 16092025 - Seleccionar status GUI según estado de contabilización
+    DATA(lv_status_gui) = COND #( WHEN g_contabilizacion_exitosa = abap_true
+                                  THEN 'GS_002'
+                                  ELSE 'GS_001' ).
+    "}+SLS
+
+    go_eventos = go_alv_registros_cargados->get_event( ).
+
+    SET HANDLER: me->evento_on_link_click FOR go_eventos,
+                 me->evento_on_user_command FOR go_eventos.
+
+    go_alv_registros_cargados->display( ).
+
+  ENDMETHOD.
+
+
+  METHOD crear_encabezado_y_pie_alv.
+
+    DATA: go_encabezado TYPE REF TO cl_salv_form_layout_grid,
+          go_grid       TYPE REF TO cl_salv_form_layout_grid.
+
+    go_encabezado = NEW cl_salv_form_layout_grid( columns = 4 ).
+    go_grid = go_encabezado->create_grid( row    = 4
+                                          column = 4 ).
+
+    go_grid->create_text( row    = 1
+                          column = 1
+                          text   = |Sociedad:| ).
+
+    go_grid->create_text( row    = 1
+                          column = 2
+                          text   = | { i_es_cabecera_documento-sociedad }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 1
+                          column = 3
+                          text   = |Ejercicio:| ).
+
+    go_grid->create_text( row    = 1
+                          column = 4
+                          text   = | { i_es_cabecera_documento-ejercicio }| ).
+
+    go_grid->create_text( row    = 2
+                          column = 1
+                          text   = |Clase documento: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 2
+                          column = 2
+                          text   = |{ i_es_cabecera_documento-clase_documento }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 3
+                          column = 1
+                          text   = |Fecha documento: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 3
+                          column = 2
+                          text   = |{ i_es_cabecera_documento-fecha_documentos }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 4
+                          column = 1
+                          text   = |Fecha contabilización: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 4
+                          column = 2
+                          text   = |{ i_es_cabecera_documento-fecha_contabilizacion }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 2
+                          column = 3
+                          text   = |Periodo: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 2
+                          column = 4
+                          text   = |{ i_es_cabecera_documento-periodo_contable }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 3
+                          column = 3
+                          text   = |Moneda: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 3
+                          column = 4
+                          text   = |{ i_es_cabecera_documento-moneda }| ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 4
+                          column = 3
+                          text   = |Texto cabecera: | ).     "#EC NOTEXT
+
+    go_grid->create_text( row    = 4
+                          column = 4
+                          text   = |{ i_es_cabecera_documento-texto_cabecera }| ).
+
+    go_grid->create_text( row    = 5
+                          column = 1
+                          text   = |Cantidad registros: | ).
+
+    go_grid->create_text( row    = 5
+                          column = 2
+                          text   = |{ lines( gti_registros_nomina ) }| ).
+
+    go_alv_registros_cargados->set_top_of_list( go_encabezado ).
+
+  ENDMETHOD.
+
+
+  METHOD evento_on_user_command.
+
+    CASE e_salv_function.
+      WHEN 'CONTAB'.
+
+        contabilizar_registros(
+          CHANGING
+            c_es_cabecera_documento = ges_cabecera
+            c_ti_registros_nomina   = gti_registros_nomina ).
+
+        "+{SLS 16092025 - Cambiar status GUI después de contabilización exitosa
+        IF g_contabilizacion_exitosa = abap_true.
+          go_alv_registros_cargados->set_screen_status( pfstatus      = 'GS_002'
+                                                      report        = gc_nombre_reporte
+                                                      set_functions = go_alv_registros_cargados->c_functions_all ).
+        ENDIF.
+        "}+SLS
+
+        go_alv_registros_cargados->refresh( ).
+
+        go_log->mostrar_log( i_ventana_emergente = abap_true i_limpiar_mensajes = abap_true ).
+
+      WHEN gc_func_agrupar.
+        "+{SLS 16092025 - Agregar funcionalidad de agrupación de posiciones en ALV
+        agrupar_posiciones( CHANGING c_ti_registros_nomina = gti_registros_nomina ).
+        crear_encabezado_y_pie_alv( i_es_cabecera_documento = ges_cabecera ).
+
+        go_alv_registros_cargados->refresh( ).
+        message |Posiciones agrupadas correctamente.| type 'S'.
+        "}+SLS
+
+      WHEN 'DESAGRUPAR'.
+        "+{SLS 16092025 - Implementar desagrupar posiciones en ALV
+        desagrupar_posiciones( ).
+        crear_encabezado_y_pie_alv( i_es_cabecera_documento = ges_cabecera ).
+        go_alv_registros_cargados->refresh( ).
+        message |Posiciones restauradas correctamente.| type 'S'.
+        "}+SLS
+
+      WHEN 'BACK' OR 'EXIT' OR 'CANCEL'.
+
+      WHEN OTHERS.
+        EXIT.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD evento_on_link_click.
+    READ TABLE gti_registros_nomina INTO DATA(es_registro) INDEX row.
+
+    CHECK sy-subrc = 0 AND es_registro-belnr IS NOT INITIAL.
+
+    CASE column.
+
+      WHEN 'BELNR'.
+        SET PARAMETER ID 'BLN'  FIELD es_registro-belnr.
+        SET PARAMETER ID 'BUK'  FIELD ges_cabecera-sociedad.
+        SET PARAMETER ID 'GJR'  FIELD ges_cabecera-ejercicio.
+
+        CALL TRANSACTION 'FB03' AND SKIP FIRST SCREEN.
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD agrupar_posiciones.
+
+    DATA: ti_registros_agrupados TYPE gtp_ti_pos_registros_nomina,
+          lv_pos     TYPE bseg-posnr VALUE 0.
+
+    CHECK c_ti_registros_nomina IS NOT INITIAL.
+    SORT c_ti_registros_nomina BY
+         clave_contabilizacion
+         asignacion
+         ceco
+         orden_interna
+         proveedor
+         cuenta_contable.
+    BREAK seblondo.
+
+    LOOP AT c_ti_registros_nomina REFERENCE INTO DATA(r_registro_nomina_gr)
+         GROUP BY (
+           clave_contabilizacion = r_registro_nomina_gr->clave_contabilizacion
+           asignacion            = r_registro_nomina_gr->asignacion
+           ceco                  = r_registro_nomina_gr->ceco
+           orden_interna         = r_registro_nomina_gr->orden_interna
+           proveedor             = r_registro_nomina_gr->proveedor
+           cuenta_contable       = r_registro_nomina_gr->cuenta_contable ).
+
+      DATA(lv_total) = REDUCE bseg-wrbtr( INIT s = CONV bseg-wrbtr( 0 )
+                                          FOR r IN GROUP r_registro_nomina_gr
+                                          NEXT s = s + r-importe ).
+
+      ADD 1 TO lv_pos.
+
+      APPEND VALUE gtp_es_posiciones(
+        posicion              = lv_pos
+        clave_contabilizacion = r_registro_nomina_gr->clave_contabilizacion
+        importe               = lv_total
+        asignacion            = r_registro_nomina_gr->asignacion
+        texto_posicion        = r_registro_nomina_gr->texto_posicion
+        ceco                  = r_registro_nomina_gr->ceco
+        orden_interna         = r_registro_nomina_gr->orden_interna
+        proveedor             = r_registro_nomina_gr->proveedor
+        cuenta_contable       = r_registro_nomina_gr->cuenta_contable
+        clve_ref1             = r_registro_nomina_gr->clve_ref1
+        clve_ref3             = r_registro_nomina_gr->clve_ref3
+        estado                = r_registro_nomina_gr->estado
+        belnr                 = space )
+      TO ti_registros_agrupados.
+
+    ENDLOOP.
+
+    IF ti_registros_agrupados IS NOT INITIAL.
+      c_ti_registros_nomina = ti_registros_agrupados.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD desagrupar_posiciones.
+
+    CHECK gti_registros_nomina_completo IS NOT INITIAL.
+    gti_registros_nomina = gti_registros_nomina_completo.
+
+  ENDMETHOD.
+
+
+  METHOD constructor.
+
+    go_parametros = NEW zclcxr1000_parametros(
+      i_modulo = gc_modulo
+      i_ricefw = gc_ricefw ).
+
+    gc_cantidad_registros_x_doc = VALUE #( go_parametros->gti_parametros[ idparam = 'CANT_RGCON' ]-low OPTIONAL ).
+    gc_cebe_x_defecto = VALUE #( go_parametros->gti_parametros[ idparam = 'CEBE' ]-low OPTIONAL ).
+    gc_cuenta_diferencias = VALUE #( go_parametros->gti_parametros[ idparam = 'CUENTA_DIF' ]-low OPTIONAL ).
+
+    gc_cebe_x_defecto = |{ gc_cebe_x_defecto ALPHA = IN }|.
+    gc_cuenta_diferencias = |{ gc_cuenta_diferencias ALPHA = IN }|.
+
+    "+{SLS 16092025 - Cargar rango de ex-empleados CDOEXEMP para redirección a cliente
+    TRY.
+        go_parametros->get_parametro(
+          EXPORTING
+            i_idparam               = 'CDOEXEMP'
+          IMPORTING
+            e_ti_valrango           = gti_cdoexemp
+          EXCEPTIONS
+            parametro_no_encontrado = 1 ).
+      CATCH cx_root.
+        CLEAR gti_cdoexemp.
+    ENDTRY.
+    "}+SLS
+
+    "+{SLS 16092025 - Inicializar estado de contabilización
+    g_contabilizacion_exitosa = abap_false.
+    "}+SLS
+
+  ENDMETHOD.
+
+
+  METHOD validar_contabilizacion_previa.
+
+    IF go_log IS BOUND.
+      go_log->liberar( ).
+    ENDIF.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    SELECT * FROM ztfic1021_1
+    WHERE sociedad = @i_bukrs
+          AND ejercicio    = @i_ejercicio "+SLS 10.06.2025 - incluir el ejercicio para validar documentos solo del ejercio en curso
+          AND clase_nomina = @i_clase_nomina
+          AND periodo_nomina = @i_periodo_nomina
+          AND estado_ejecucion = @gc_estado_contabilizacion_ok
+    INTO TABLE @DATA(ti_documento_contabilizado).
+
+    LOOP AT ti_documento_contabilizado INTO DATA(es_documento_contabilizado).
+
+      r_registros_contabilizados = abap_true.
+
+      go_log->set_es_log( i_es = VALUE #( id = 'ZFI01' type = 'E' number = '045'
+                          message_v1 = es_documento_contabilizado-sociedad
+                          message_v2 = es_documento_contabilizado-ejercicio
+                          message_v3 = es_documento_contabilizado-numero_documento
+                          ) ).
+
+    ENDLOOP..
+
+  ENDMETHOD.
+
+
+  METHOD visualizar_log_db.
+
+    SELECT  *
+    FROM ztfic1021_1
+    WHERE sociedad = @i_bukrs
+      AND clase_nomina = @i_clase_nomina
+      AND periodo_nomina = @i_periodo_nomina
+    INTO TABLE @DATA(ti_log_db).
+
+    SORT ti_log_db BY fecha_ejecucion.
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos = REF #( ti_log_db ).
+
+  ENDMETHOD.
+ENDCLASS.

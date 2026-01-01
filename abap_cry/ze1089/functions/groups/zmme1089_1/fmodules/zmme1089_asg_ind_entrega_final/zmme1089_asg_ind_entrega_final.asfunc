@@ -1,0 +1,20 @@
+FUNCTION zmme1089_asg_ind_entrega_final
+  IMPORTING
+    VALUE(i_codigo_transaccion) TYPE sytcode
+    VALUE(i_ti_xmcekpo) TYPE mmda_pur_tty_xmcekpo.
+
+
+
+  " You can use the template 'functionModuleParameter' to add here the signature!
+  .
+
+
+  zclmme1089_indic_entrega_final=>asignar_ind_entrega_final(
+    EXPORTING
+      i_codigo_transaccion = i_codigo_transaccion
+    CHANGING
+      c_ti_xmcekpo         = i_ti_xmcekpo ).
+
+
+
+ENDFUNCTION.

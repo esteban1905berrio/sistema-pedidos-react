@@ -1,0 +1,133 @@
+"! <strong>Descripción:</strong>
+"! <p>
+"! Visualizar tabla interna en ALV Grid<br/>
+"! La fuente de datos puede ser una tabla interna con cualquier estructura
+"! </p>
+"! <strong>Identificador:</strong>
+                                                            "! R1002
+"! <br/>
+"! <strong>Autor:</strong>
+"! Sebastian Londono
+"! <br/>
+"! <strong>Historial de cambios:
+"! <br/><br/>
+"! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+"! </strong><br/>
+"! \ 20.01.2021  \S4DK900021 \ Sebastian Londono \ Creacion Inicial \
+"!
+"! @parameter I_TI_DATOS | Datos a mostrar
+"! @parameter I_TI_CATALOGO | Catalogo de campos
+"! @parameter I_STATUS_GUI  | Status GUI
+"! @parameter i_statusgui_programa  | Programa control de Status GUI
+"! @parameter I_TITULO  | Titulo
+"! @parameter i_o_ctr_alvgrid   | Clase controladora para eventos de dynpro y ALV
+"! @parameter i_id_reporte   | Reporte
+"! @parameter I_ES_LAYOUT   | Layout
+"! @parameter i_es_variante  | Variante
+"! @parameter i_nombreusuario    | Nombre de usuario
+"! @parameter i_conservar_catalogo   | Conservar catalogo enviado como parametro
+"! @parameter i_persistir_dynpro | Utilice este parametro para reutilizar la misma Dynpro 100
+"! @parameter i_ti_sort | Ordenar columnas
+FUNCTION zcxr1002_mostraralv_01
+  IMPORTING
+    i_ti_datos TYPE REF TO data
+    i_ti_catalogo TYPE lvc_t_fcat OPTIONAL
+    i_status_gui TYPE string OPTIONAL
+    i_statusgui_programa TYPE syrepid OPTIONAL
+    i_titulo TYPE string OPTIONAL
+    i_o_ctr_alvgrid TYPE REF TO zifcxr1002_alvgrid OPTIONAL
+    VALUE(i_id_reporte) TYPE syrepid DEFAULT sy-repid
+    VALUE(i_es_layout) TYPE lvc_s_layo OPTIONAL
+    i_es_variante TYPE disvariant OPTIONAL
+    i_nombreusuario TYPE syuname DEFAULT sy-uname
+    i_conservar_catalogo TYPE flag DEFAULT space
+    i_persistir_dynpro TYPE flag DEFAULT space
+    i_ti_sort TYPE lvc_t_sort OPTIONAL
+    i_o_html TYPE REF TO cl_dd_document OPTIONAL.
+
+
+
+
+  DATA: ti_pila_llamados       TYPE sys_callst.
+
+
+  IF i_id_reporte = sy-repid.
+    CALL FUNCTION 'SYSTEM_CALLSTACK'
+      EXPORTING
+        max_level    = 2
+      IMPORTING
+        et_callstack = ti_pila_llamados.
+
+    i_id_reporte = ti_pila_llamados[ lines( ti_pila_llamados ) ].
+  ENDIF.
+
+  CLEAR: g_statusgui_prog, gti_catalogo, g_status_gui, g_titulo, ges_layout_vari, ges_layout.
+
+  "libera variables y objetos
+  IF i_persistir_dynpro IS INITIAL.
+    IF go_container IS BOUND.
+      go_container->free(
+        EXCEPTIONS
+          cntl_error        = 1
+          cntl_system_error = 2
+          OTHERS            = 3
+      ).
+    ENDIF.
+    FREE: go_container.
+  ENDIF.
+
+  IF go_alvgrid IS BOUND.
+    go_alvgrid->free(
+      EXCEPTIONS
+        cntl_error        = 1
+        cntl_system_error = 2
+        OTHERS            = 3
+    ).
+  ENDIF.
+
+  "{ Inicio SGR 21.oct.2024
+  IF go_html IS BOUND.
+    FREE: go_html.
+  ENDIF.
+  "{ Fin SGR 21.oct.2024
+
+  IF go_controlador IS BOUND.
+    FREE go_controlador.
+  ENDIF.
+
+  FREE: go_ctr_alvgrid, go_alvgrid.
+
+  "Controlador
+  go_controlador = NEW lcl_controlador(  ).
+
+  "asigna varibles de dynpro
+  g_statusgui_prog = COND #( WHEN i_statusgui_programa IS NOT INITIAL THEN i_statusgui_programa ELSE i_id_reporte ).
+  gti_catalogo = i_ti_catalogo.
+  g_status_gui = i_status_gui.
+  g_titulo = COND #( WHEN i_titulo IS NOT INITIAL THEN i_titulo ELSE TEXT-001 ).
+  g_repid = i_id_reporte.
+  ges_layout_vari  = COND #( WHEN i_es_variante IS INITIAL THEN
+                                VALUE disvariant( variant = space report = i_id_reporte username = i_nombreusuario )
+                             ELSE
+                                i_es_variante ).
+  ges_layout = i_es_layout.
+  g_username = i_nombreusuario.
+  g_cons_catalogo = i_conservar_catalogo.
+  gti_sort = i_ti_sort.
+  "asigna clase controladora de eventos de dynpro
+  go_ctr_alvgrid ?= COND #( WHEN i_o_ctr_alvgrid IS BOUND THEN i_o_ctr_alvgrid ).
+  "{ Inicio SGR 21.oct.2024
+  go_html ?= COND #( WHEN i_o_html IS BOUND THEN i_o_html ).
+  "{ Fin SGR 21.oct.2024
+
+  "asigna la referencia de la tabla con los datos
+  g_r_ti_datos_alv = i_ti_datos.
+  ASSIGN i_ti_datos->* TO <gfs_ti_alv_log>.
+
+  IF i_persistir_dynpro IS INITIAL.
+    CALL SCREEN 100.
+  ELSE.
+    LEAVE LIST-PROCESSING AND RETURN TO SCREEN 100.
+  ENDIF.
+
+ENDFUNCTION.

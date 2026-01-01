@@ -1,0 +1,173 @@
+{
+  "version": null,
+  "name": null,
+  "description": null,
+  "packages": [],
+  "classes": [],
+  "dependencies": null,
+  "statistics": {
+    "classes": 0,
+    "interfaces": 0,
+    "programs": 0,
+    "includes": 0,
+    "total_components": 20,
+    "function_groups": 1,
+    "function_modules": 20
+  },
+  "$schema": null,
+  "source_system": null,
+  "extracted_date": "2025-12-17",
+  "extracted_by": "MCP Server",
+  "function_groups": [
+    {
+      "name": "ZGFCX_1",
+      "description": "Crystal MCP Server - Core Function Modules",
+      "path": "functions/groups/zgfcx_1",
+      "includes": null,
+      "package": "ZCX",
+      "function_modules": [
+        {
+          "name": "ZCX_CREATE_TRANSPORT_COPY",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_create_transport_copy/zcx_create_transport_copy.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_CREATE_TRANSPORT_REQUEST",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_create_transport_request/zcx_create_transport_request.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_GETDDICSOURCE",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_getddicsource/zcx_getddicsource.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_GET_DUMP_DETAIL",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_get_dump_detail/zcx_get_dump_detail.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_GET_ENHANCEMENT_SOURCE",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_get_enhancement_source/zcx_get_enhancement_source.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_GET_TRANSPORT_LOGS",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_get_transport_logs/zcx_get_transport_logs.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_MODIFY_TRANSPORT_REQUEST",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_modify_transport_request/zcx_modify_transport_request.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_TMS_IMPORT_REQUEST",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_tms_import_request/zcx_tms_import_request.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_TRACE_ACTIVATE",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_trace_activate/zcx_trace_activate.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_TRACE_DEACTIVATE_AND_READ",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_trace_deactivate_and_read/zcx_trace_deactivate_and_read.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_TRACE_TRANSACTION",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_trace_transaction/zcx_trace_transaction.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_UTIL_GET_BADI_IMPL",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_util_get_badi_impl/zcx_util_get_badi_impl.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_UTIL_GET_DMEE_TREE",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_util_get_dmee_tree/zcx_util_get_dmee_tree.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "ZCX_UTIL_GET_USER_OBJECTS",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/zcx_util_get_user_objects/zcx_util_get_user_objects.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "Z_CX_GET_OBJECT_IN_OPEN_OT",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/z_cx_get_object_in_open_ot/z_cx_get_object_in_open_ot.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "Z_CX_GET_PACKAGE_HIERARCHY",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/z_cx_get_package_hierarchy/z_cx_get_package_hierarchy.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "Z_CX_GET_PACKAGE_OBJECTS",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/z_cx_get_package_objects/z_cx_get_package_objects.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "Z_CX_GET_TRANSPORT_INFO",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/z_cx_get_transport_info/z_cx_get_transport_info.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "Z_CX_GET_TRANSPORT_OBJECTS",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/z_cx_get_transport_objects/z_cx_get_transport_objects.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        },
+        {
+          "name": "Z_CX_SEARCH_TRANSPORTS",
+          "description": "Auto-detected FM (needs description)",
+          "path": "functions/groups/zgfcx_1/fmodules/z_cx_search_transports/z_cx_search_transports.asfunc",
+          "rfc_enabled": true,
+          "mcp_tool": "auto-detected"
+        }
+      ]
+    }
+  ],
+  "installation_order": []
+}

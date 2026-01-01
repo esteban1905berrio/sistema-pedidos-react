@@ -1,0 +1,50 @@
+CLASS zclfi_exits_gestion_creditos DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_ex_ukm_credit_check_loc .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_exits_gestion_creditos IMPLEMENTATION.
+  METHOD if_ex_ukm_credit_check_loc~convert_inbound.
+
+  ENDMETHOD.
+
+  METHOD if_ex_ukm_credit_check_loc~convert_outbound.
+    zclfii1008_integracion_afs=>exporta_resultadolimitecredito( CHANGING c_es_resultado_verificacion = cs_query_result   ).
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfi_exits_gestion_creditos DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_ex_ukm_credit_check_loc .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_exits_gestion_creditos IMPLEMENTATION.
+  METHOD if_ex_ukm_credit_check_loc~convert_inbound.
+
+  ENDMETHOD.
+
+  METHOD if_ex_ukm_credit_check_loc~convert_outbound.
+    zclfii1008_integracion_afs=>exporta_resultadolimitecredito( CHANGING c_es_resultado_verificacion = cs_query_result   ).
+  ENDMETHOD.
+
+ENDCLASS.

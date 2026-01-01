@@ -1,0 +1,141 @@
+FUNCTION zfii1008_actua_homologa_bp_afs
+  IMPORTING
+    VALUE(i_kunnr_afs) TYPE kna1-kunnr OPTIONAL
+    VALUE(i_kunnr_s4) TYPE kna1-kunnr OPTIONAL
+    VALUE(i_lifnr_afs) TYPE lfa1-lifnr OPTIONAL
+    VALUE(i_lifnr_s4) TYPE lfa1-lifnr OPTIONAL.
+
+
+
+  TYPES: BEGIN OF tp_es_datos_bp_sociedad,
+           kunnr TYPE kunnr,
+           lifnr TYPE lifnr,
+           bukrs TYPE bukrs,
+           altkn TYPE knb1-altkn,
+         END OF tp_es_datos_bp_sociedad.
+
+
+  CONSTANTS: c_ricefw TYPE ztmmi1009_1-ricefw VALUE 'I1008'.
+
+  DATA: es_homologacion_afs         TYPE ztmmi1009_1,
+        r_destinatario_notificacion TYPE RANGE OF ad_smtpadr,
+        cuerpo_correo               TYPE string,
+        asunto_correo               TYPE so_obj_des,
+        ti_datos_bp_sociedad        TYPE STANDARD TABLE OF tp_es_datos_bp_sociedad,
+        id_objeto                   TYPE cdobjectv.
+
+  DATA(o_parametro) = NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = 'I1008' ).
+
+  IF i_kunnr_afs IS NOT INITIAL.
+
+    es_homologacion_afs = VALUE #( val_vardestino = |{ i_kunnr_afs ALPHA = OUT }|
+                                   val_varorigen  = |{ i_kunnr_s4 ALPHA = OUT }|
+                                   var_origen = 'KUNNR' ).
+
+    SELECT kunnr, bukrs, altkn
+    FROM knb1
+    WHERE kunnr = @i_kunnr_s4
+    INTO CORRESPONDING FIELDS OF TABLE @ti_datos_bp_sociedad.
+
+    "Modificar numero de cliente/proveedor creado en AFS
+    LOOP AT ti_datos_bp_sociedad ASSIGNING FIELD-SYMBOL(<fs_es_datos_bp_sociedad>).
+      UPDATE knb1 SET altkn = i_kunnr_afs WHERE kunnr = <fs_es_datos_bp_sociedad>-kunnr AND
+                                                bukrs = <fs_es_datos_bp_sociedad>-bukrs.
+    ENDLOOP.
+
+    o_parametro->get_parametro(
+      EXPORTING
+        i_idparam               = 'DEST_NT_CL'
+      IMPORTING
+        e_ti_valrango           = r_destinatario_notificacion
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+  ENDIF.
+
+  IF i_lifnr_afs IS NOT INITIAL.
+
+    es_homologacion_afs = VALUE #( val_vardestino = |{ i_lifnr_afs ALPHA = OUT }|
+                                   val_varorigen  = |{ i_lifnr_s4 ALPHA = OUT }|
+                                   var_origen = 'LIFNR' ).
+
+    SELECT lifnr, bukrs, altkn
+    FROM lfb1
+    WHERE lifnr = @i_lifnr_s4
+    INTO CORRESPONDING FIELDS OF TABLE @ti_datos_bp_sociedad.
+
+    "Modificar numero de cliente/proveedor creado en AFS
+    LOOP AT ti_datos_bp_sociedad ASSIGNING <fs_es_datos_bp_sociedad>.
+      UPDATE lfb1 SET altkn = i_lifnr_afs WHERE lifnr = <fs_es_datos_bp_sociedad>-lifnr AND
+                                                bukrs = <fs_es_datos_bp_sociedad>-bukrs.
+    ENDLOOP.
+
+    o_parametro->get_parametro(
+      EXPORTING
+        i_idparam               = 'DEST_NT_PR'
+      IMPORTING
+        e_ti_valrango           = r_destinatario_notificacion
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+  ENDIF.
+
+  "Validar que la homologación NO exista
+  SELECT SINGLE *
+  FROM ztmmi1009_1
+  WHERE ricefw = @c_ricefw
+  AND var_origen = @es_homologacion_afs-var_origen
+  AND val_varorigen = @es_homologacion_afs-val_varorigen
+  AND val_vardestino = @es_homologacion_afs-val_vardestino
+  INTO @es_homologacion_afs.
+
+  IF sy-subrc IS NOT INITIAL.
+
+    "Consultar el ultimo consecutivo
+    SELECT MAX( consecutivo ) AS consecutivo
+    FROM ztmmi1009_1
+    WHERE ricefw = @c_ricefw
+    INTO @es_homologacion_afs-consecutivo.
+
+    ADD 1 TO es_homologacion_afs-consecutivo.
+
+    es_homologacion_afs-ricefw = c_ricefw.
+
+    MODIFY ztmmi1009_1 FROM es_homologacion_afs.
+
+    id_objeto = |{ sy-mandt }{ es_homologacion_afs-ricefw }{ es_homologacion_afs-consecutivo }| &&
+                |{ es_homologacion_afs-bukrs }{ es_homologacion_afs-kokrs }|.
+    "actualizar log de modificacion para tabla de homologaciones
+    CALL FUNCTION 'ZCX_ZTMMI1009_1_WRITE_DOCUMENT'
+      EXPORTING
+        objectid                = id_objeto
+        tcode                   = sy-tcode
+        utime                   = sy-uzeit
+        udate                   = sy-datum
+        username                = sy-uname
+        object_change_indicator = 'I'
+        n_ztmmi1009_1           = es_homologacion_afs
+        o_ztmmi1009_1           = es_homologacion_afs
+        upd_ztmmi1009_1         = 'I'.
+
+  ENDIF.
+
+  COMMIT WORK AND WAIT.
+
+  cuerpo_correo = TEXT-crp.
+  REPLACE ALL OCCURRENCES OF '&1' IN cuerpo_correo WITH es_homologacion_afs-val_vardestino.
+  REPLACE ALL OCCURRENCES OF '&2' IN cuerpo_correo WITH es_homologacion_afs-val_varorigen.
+
+  asunto_correo = TEXT-ast.
+  REPLACE ALL OCCURRENCES OF '&1' IN asunto_correo WITH es_homologacion_afs-val_varorigen.
+
+  zclcxr1002_util=>enviar_correo(
+    EXPORTING
+      i_ti_destinatarios       = VALUE #( FOR es_destinatarios IN r_destinatario_notificacion
+                                            ( smtp_addr = es_destinatarios-low  ) )
+      i_ti_texto_cuerpo_correo = VALUE #( ( line = cuerpo_correo ) )
+      i_asunto                 = asunto_correo  ).
+
+ENDFUNCTION.

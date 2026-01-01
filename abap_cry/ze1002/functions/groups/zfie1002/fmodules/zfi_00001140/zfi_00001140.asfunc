@@ -1,0 +1,63 @@
+"! <strong>Descripción:</strong>
+"! <p>
+"! BTE 1140 - Procesos FI<br/>
+"! Remplazar valores de tablas BKPF y BSEG en procesos FI
+"! </p>
+"! <strong>Identificador:</strong>
+"! E1002
+"! <br/>
+"! <strong>Autor:</strong>
+"! Sebastian Londono
+"! <br/>
+"! <strong>Historial de cambios:
+"! <br/><br/>
+"! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+"! </strong><br/>
+"! \ 20.01.2021  \S4DK900224 \ Sebastian Londono \ E1002 - #doc Solman \
+"! <br/>
+"!
+"! @parameter t_bkpf  | Tabla bkpf
+"! @parameter t_bseg  | Tabla bseg
+"! @parameter t_clearing_asgmt   | Asignar pago compensación: Líneas compensadas con imputación
+FUNCTION zfi_00001140
+  TABLES
+    t_bkpf LIKE bkpf
+    t_bseg LIKE bseg
+    t_clearing_asgmt LIKE ausz_clr_asgmt.
+
+
+
+  "+{SLS 25.02.2021 E1002 - Agregar validaciones Cliente/Proveedor
+  zclfi_exits_gestion_documentos=>sustituir_validar_nit_tercero( EXPORTING
+                                                                    i_bukrs = t_bkpf[ 1 ]-bukrs
+                                                                    i_blart = t_bkpf[ 1 ]-blart
+                                                                    i_tcode = sy-tcode
+                                                                 CHANGING
+                                                                    c_ti_bseg = t_bseg[] ).
+  "}
+
+  zclfi_exits_gestion_documentos=>sustituir_validar_xref1_xref3( EXPORTING
+                                                                    i_bukrs = t_bkpf[ 1 ]-bukrs
+                                                                    i_blart = t_bkpf[ 1 ]-blart
+                                                                    i_tcode = sy-tcode
+                                                                 CHANGING
+                                                                    c_ti_bseg = t_bseg[] ).
+
+  "Inicio Mod CFMG 20.05.2021 Sustuir XREF1 XREF2 Cuentas Bancarias
+  zclfi_exits_gestion_documentos=>sustituir_cuentas_bancarias(
+                                                       EXPORTING
+                                                        i_es_bkpf = t_bkpf
+                                                       CHANGING
+                                                        c_ti_bseg = t_bseg[] ).
+
+  "Fin Mod CFMG 20.05.2021
+
+  "{Inicio SAGIRLD 01.02.2022 Validacion del XBLNR
+  zclfie1045_validar_referencia=>validacion_xblnr_por_proveedor( i_lifnr = VALUE #( t_bseg[ 1 ]-lifnr OPTIONAL )
+                                                                 i_xblnr = VALUE #( t_bkpf[ 1 ]-xblnr OPTIONAL )
+                                                                 i_blart = VALUE #( t_bkpf[ 1 ]-blart OPTIONAL ) ).
+  "{Fin SAGIRLD 01.02.2022 Validacion del XBLNR
+
+  break srestrev.
+
+ENDFUNCTION.

@@ -1,0 +1,190 @@
+class ZPXCL_CANT_REALES_PICKING_RECI definition
+  public
+  create public .
+
+public section.
+
+  interfaces ZPXII_CANT_REALES_PICKING_RECI .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZPXCL_CANT_REALES_PICKING_RECI IMPLEMENTATION.
+
+
+  METHOD zpxii_cant_reales_picking_reci~cant_reales_picking_recibir_as.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador: I1039
+* Clase        : PROXY
+* Método       : PROXY
+* Descripción  : Constructor
+* Autor Prog.  : Sebastian Restrepo Villa
+* Fecha Creac. : 26Oct2021
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 26OCt2021   S4DK903675    Sebastian Restrepo Villa  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*          Definición de Constantes
+*----------------------------------------------------------------------*
+    CONSTANTS:
+               c_rifecw TYPE ztcxr1000_1-ricefw VALUE 'PI1039'.
+
+*----------------------------------------------------------------------*
+*          Definición Estructuras
+*----------------------------------------------------------------------*
+    DATA:
+          es_info_mensaje  TYPE zpxinfo_mensaje.
+
+*----------------------------------------------------------------------*
+*          Definición Objetos de Referencia
+*----------------------------------------------------------------------*
+    DATA:
+          o_datos_proxy TYPE REF TO data.
+
+*----------------------------------------------------------------------*
+*          Definición Variables
+*----------------------------------------------------------------------*
+    DATA:
+          v_ricefw TYPE ztcxr1000_1-ricefw.
+
+*----------------------------------------------------------------------*
+*          Field Symbol
+*----------------------------------------------------------------------*
+    FIELD-SYMBOLS:
+                   <fs_any> TYPE any.
+
+    CREATE DATA o_datos_proxy TYPE zpxcant_reales_picking.
+
+    ASSIGN o_datos_proxy->* TO <fs_any>.
+    <fs_any> = input-cant_reales_picking_recibir.
+    es_info_mensaje = input-cant_reales_picking_recibir-info_mensaje.
+
+    IF es_info_mensaje-ricefw IS INITIAL.
+      v_ricefw = c_rifecw.
+    ELSE.
+      v_ricefw = es_info_mensaje-ricefw.
+    ENDIF.
+
+    IF v_ricefw eq 'I1039'.
+      v_ricefw = c_rifecw.
+    ENDIF.
+
+    TRY.
+        DATA(o_manejo_monitor) = NEW zclcxr1001_monitor_integracion(
+          i_ricefw         = v_ricefw
+          i_datos_proxy    = input-cant_reales_picking_recibir
+        ).
+
+        "Realizamos el re-proceso
+        o_manejo_monitor->main( EXPORTING i_datos_proxy = o_datos_proxy ).
+
+
+      CATCH zcxr1001_excepciones_monitor.
+    ENDTRY.
+
+  ENDMETHOD.
+ENDCLASS.
+class ZPXCL_CANT_REALES_PICKING_RECI definition
+  public
+  create public .
+
+public section.
+
+  interfaces ZPXII_CANT_REALES_PICKING_RECI .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZPXCL_CANT_REALES_PICKING_RECI IMPLEMENTATION.
+
+
+  METHOD zpxii_cant_reales_picking_reci~cant_reales_picking_recibir_as.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador: I1039
+* Clase        : PROXY
+* Método       : PROXY
+* Descripción  : Constructor
+* Autor Prog.  : Sebastian Restrepo Villa
+* Fecha Creac. : 26Oct2021
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 26OCt2021   S4DK903675    Sebastian Restrepo Villa  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*          Definición de Constantes
+*----------------------------------------------------------------------*
+    CONSTANTS:
+               c_rifecw TYPE ztcxr1000_1-ricefw VALUE 'PI1039'.
+
+*----------------------------------------------------------------------*
+*          Definición Estructuras
+*----------------------------------------------------------------------*
+    DATA:
+          es_info_mensaje  TYPE zpxinfo_mensaje.
+
+*----------------------------------------------------------------------*
+*          Definición Objetos de Referencia
+*----------------------------------------------------------------------*
+    DATA:
+          o_datos_proxy TYPE REF TO data.
+
+*----------------------------------------------------------------------*
+*          Definición Variables
+*----------------------------------------------------------------------*
+    DATA:
+          v_ricefw TYPE ztcxr1000_1-ricefw.
+
+*----------------------------------------------------------------------*
+*          Field Symbol
+*----------------------------------------------------------------------*
+    FIELD-SYMBOLS:
+                   <fs_any> TYPE any.
+
+    CREATE DATA o_datos_proxy TYPE zpxcant_reales_picking.
+
+    ASSIGN o_datos_proxy->* TO <fs_any>.
+    <fs_any> = input-cant_reales_picking_recibir.
+    es_info_mensaje = input-cant_reales_picking_recibir-info_mensaje.
+
+    IF es_info_mensaje-ricefw IS INITIAL.
+      v_ricefw = c_rifecw.
+    ELSE.
+      v_ricefw = es_info_mensaje-ricefw.
+    ENDIF.
+
+    IF v_ricefw eq 'I1039'.
+      v_ricefw = c_rifecw.
+    ENDIF.
+
+    TRY.
+        DATA(o_manejo_monitor) = NEW zclcxr1001_monitor_integracion(
+          i_ricefw         = v_ricefw
+          i_datos_proxy    = input-cant_reales_picking_recibir
+        ).
+
+        "Realizamos el re-proceso
+        o_manejo_monitor->main( EXPORTING i_datos_proxy = o_datos_proxy ).
+
+
+      CATCH zcxr1001_excepciones_monitor.
+    ENDTRY.
+
+  ENDMETHOD.
+ENDCLASS.

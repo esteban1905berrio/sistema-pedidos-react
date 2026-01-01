@@ -1,0 +1,3712 @@
+CLASS zclsdapi_monitor_ped_dpc_ext DEFINITION
+  PUBLIC
+  INHERITING FROM zclsdapi_monitor_pedidos_dpc
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    METHODS:
+      /iwbep/if_mgw_appl_srv_runtime~get_entityset REDEFINITION.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclsdapi_monitor_ped_dpc_ext IMPLEMENTATION.
+
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entityset.
+
+*-------------------------------------------------------------------------------*
+* Definicion de Objetos
+*-------------------------------------------------------------------------------*
+    DATA:
+          go_sdr1085_2 TYPE REF TO zclsdr1085_2_monitor_pedidos.
+
+*-------------------------------------------------------------------------------*
+* Definicion de Constantes
+*-------------------------------------------------------------------------------*
+    CONSTANTS:
+      gc_zcx01 TYPE symsgid    VALUE 'ZCX01',  ".Clase de Mensajes
+      gc_000   TYPE msgnr      VALUE '000',    ".Mensaje Generico
+*              gc_coma      TYPE c          VALUE ',',      "Coma (,)
+      gc_punto TYPE c          VALUE '.',      "Punto (.)
+*              gc_01        TYPE char2      VALUE '01',
+*              gc_04        TYPE char2      VALUE '04',
+      gc_1     TYPE c          VALUE '1',      "1
+      gc_2     TYPE c          VALUE '2',      "2
+*              gc_3         TYPE i          VALUE '3',      "3
+*              gc_4         TYPE i          VALUE '4',      "4
+      gc_42    TYPE i          VALUE '42',     "42
+*              gc_5         TYPE i          VALUE '5',      "5
+*              gc_6         TYPE i          VALUE '6',      "6
+*              gc_7         TYPE i          VALUE '7',      "7
+      gc_8     TYPE i          VALUE '8',      "8
+*              gc_10        TYPE i          VALUE '10',     "10
+      gc_a     TYPE c          VALUE 'A',      "A
+*              gc_b         TYPE c          VALUE 'B',      "B
+*              gc_c         TYPE c          VALUE 'C',      "C
+*              gc_d         TYPE c          VALUE 'D',      "D
+      gc_e     TYPE c          VALUE 'E',      "E
+*              gc_f         TYPE c          VALUE 'F',      "F
+      gc_i     TYPE c          VALUE 'I',      "I
+      gc_l     TYPE c          VALUE 'L',      "L
+*              gc_m         TYPE vbtyp_n    VALUE 'M',      "M (Factura)
+*              gc_n         TYPE c          VALUE 'N',      "N
+      gc_s     TYPE c          VALUE 'S',      "S
+*              gc_u         TYPE c          VALUE 'U',      "U
+      gc_w     TYPE c          VALUE 'W',      "W
+      gc_x     TYPE c          VALUE 'X',      "X
+*              gc_z         TYPE vbsk-smart VALUE 'Z',
+*              gc_ag        TYPE parvw      VALUE 'AG',     "Interlocutor AG Solicitante
+*              gc_bt        TYPE char2      VALUE 'BT',     "BT
+*              gc_co        TYPE land1      VALUE 'CO',     "CO
+      gc_eq    TYPE char2      VALUE 'EQ'.     "EQ
+
+*&---------------------------------------------------------------------*
+*& Definición de Tipos
+*&---------------------------------------------------------------------*
+    TYPES:
+      BEGIN OF tp_dyn_1000,
+        pedido          TYPE char10,
+        clase_documento TYPE char4,
+        motivo_pedido   TYPE char4,
+*        EBELN           TYPE ekko-EBELN,
+        vbelp           TYPE vbak-vbeln,
+        auart           TYPE vbak-auart,
+        augru           TYPE vbak-augru,
+        vkorg           TYPE vbak-vkorg,
+        vtweg           TYPE vbak-vtweg,
+        spart           TYPE vbak-spart,
+        werks           TYPE vbap-werks,
+        werkr           TYPE ekpo-werks,
+        erdat           TYPE vbak-erdat,
+        vdatu           TYPE vbak-vdatu,
+        bstkd           TYPE vbkd-bstkd, "Orden de Compra
+        repag           TYPE vbak-kunnr, "Responsable de pago
+        encom           TYPE vbak-kunnr, "Encargado comercial
+        ekgrp           TYPE ekko-ekgrp, "Grupo de compra
+        vbele           TYPE likp-vbeln, "Entrega
+        nguia           TYPE likp-zz1_numeroguia_dlh,
+        vbelf           TYPE vbrk-vbeln, "Factura
+        tknum           TYPE /scmtms/d_torrot-tor_id, "Numero Transporte
+        fftp            TYPE vbak-erdat, "Fecha fin Transporte
+      END OF tp_dyn_1000,
+
+      tp_rn_vkorg TYPE RANGE OF tp_dyn_1000-vkorg,
+      tp_rn_vtweg TYPE RANGE OF tp_dyn_1000-vtweg,
+      tp_rn_spart TYPE RANGE OF tp_dyn_1000-spart,
+      tp_rn_werks TYPE RANGE OF tp_dyn_1000-werks,
+      tp_rn_werkr TYPE RANGE OF tp_dyn_1000-werkr,
+      tp_rn_erdat TYPE RANGE OF tp_dyn_1000-erdat,
+      tp_rn_auart TYPE RANGE OF tp_dyn_1000-auart,
+      tp_rn_moped TYPE RANGE OF tp_dyn_1000-augru,
+      tp_rn_vdatu TYPE RANGE OF tp_dyn_1000-vdatu,
+      tp_rn_vbelp TYPE RANGE OF tp_dyn_1000-vbelp,
+      tp_rn_bstkd TYPE RANGE OF tp_dyn_1000-bstkd,
+      tp_rn_repag TYPE RANGE OF tp_dyn_1000-repag,
+      tp_rn_encom TYPE RANGE OF tp_dyn_1000-encom,
+      tp_rn_ekgrp TYPE RANGE OF tp_dyn_1000-ekgrp,
+      tp_rn_vbele TYPE RANGE OF tp_dyn_1000-vbele,
+      tp_rn_nguia TYPE RANGE OF tp_dyn_1000-nguia,
+      tp_rn_vbelf TYPE RANGE OF tp_dyn_1000-vbelf,
+      tp_rn_tknum TYPE RANGE OF tp_dyn_1000-tknum,
+      tp_rn_fftp  TYPE RANGE OF tp_dyn_1000-fftp.
+
+    DATA:
+*          r_fecha_creacion_pedido TYPE tp_r_fecha,
+      o_contenedor_msg TYPE REF TO /iwbep/if_message_container,
+      rc               TYPE sysubrc.
+*-------------------------------------------------------------------------------*
+* Definición de Estructuras
+*-------------------------------------------------------------------------------*
+    DATA:
+      es_bapiret2    TYPE bapiret2,      "Manjeo Log Errores
+      es_dyn_1000    TYPE tp_dyn_1000,   "Criterios de Seleccion
+      es_pedidos     TYPE zesdr1085_1,
+      es_outdata     TYPE go_sdr1085_2->gtp_outtab,
+      es_outdata_aux TYPE go_sdr1085_2->gtp_outtab,
+      es_outdata_nxt TYPE go_sdr1085_2->gtp_outtab.
+
+*-------------------------------------------------------------------------------*
+* Definición de Tablas
+*-------------------------------------------------------------------------------*
+    DATA:
+      ti_bapiterturn  TYPE bapiret2_tab,
+*      ti_pedidos      TYPE zclsdr1085_monitor_pedidos=>gtp_ti_monito_pedidos,
+      ti_pedidos      TYPE STANDARD TABLE OF zesdr1085_1,
+      ti_outdata      TYPE STANDARD TABLE OF zclsdr1085_2_monitor_pedidos=>gtp_outtab,
+      ti_outdata_aux  TYPE STANDARD TABLE OF go_sdr1085_2->gtp_outtab,
+      ti_outdata_cons TYPE STANDARD TABLE OF go_sdr1085_2->gtp_outtab,
+
+      ti_rn_ihrez     TYPE RANGE OF ekko-ihrez,
+      ti_rn_vbeln     TYPE RANGE OF vbak-vbeln,
+      ti_rn_vbeln_aux TYPE RANGE OF vbak-vbeln,
+*      ti_rn_vbele       TYPE RANGE OF likp-vbeln,
+
+      ti_rn_vkorg     TYPE tp_rn_vkorg,
+      ti_rn_vtweg     TYPE tp_rn_vtweg,
+      ti_rn_spart     TYPE tp_rn_spart,
+      ti_rn_werks     TYPE tp_rn_werks,
+      ti_rn_werkr     TYPE tp_rn_werkr,
+      ti_rn_erdat     TYPE tp_rn_erdat,
+      ti_rn_auart     TYPE tp_rn_auart,
+      ti_rn_moped     TYPE tp_rn_moped,
+      ti_rn_vdatu     TYPE tp_rn_vdatu,
+      ti_rn_vbelp     TYPE tp_rn_vbelp,
+      ti_rn_bstkd     TYPE tp_rn_bstkd,
+      ti_rn_repag     TYPE tp_rn_repag,
+      ti_rn_encom     TYPE tp_rn_encom,
+      ti_rn_ekgrp     TYPE tp_rn_ekgrp,
+      ti_rn_vbele     TYPE tp_rn_vbele,
+      ti_rn_nguia     TYPE tp_rn_nguia,
+      ti_rn_vbelf     TYPE tp_rn_vbelf,
+      ti_rn_tknum     TYPE tp_rn_tknum,
+      ti_rn_fftp      TYPE tp_rn_fftp.
+
+*-------------------------------------------------------------------------------*
+* Definicion de variables locales
+*-------------------------------------------------------------------------------*
+    DATA:
+      message     TYPE msgli,  ".Manejo mesaje
+      v_char255   TYPE char255,
+      v_index     TYPE int4,
+      v_index_nxt TYPE int4,
+      v_vdatu     TYPE vbak-vdatu.
+
+*-------------------------------------------------------------------------------*
+* Definicion de Apuntadores de Memoria
+*-------------------------------------------------------------------------------*
+    FIELD-SYMBOLS:
+          <fs_outdata> TYPE go_sdr1085_2->gtp_outtab.
+
+    DATA(o_filtros) = io_tech_request_context->get_filter( ).
+    DATA(ti_filtro_en_rango) = o_filtros->get_filter_select_options( ).
+    DATA(str_filtro) = o_filtros->get_filter_string( ).
+    DATA(o_monitor) = NEW zclsdr1085_monitor_pedidos(  ).
+
+*    IF sy-uname EQ 'SRESTREV'.
+*      CLEAR v_index.
+*      WHILE v_index EQ 0.
+*        v_index = v_index.
+*      ENDWHILE.
+*    ENDIF.
+
+*    ti_rn_erdat           = CORRESPONDING tp_r_fecha( VALUE #( ti_filtro_en_rango[ property = 'FECHA_CREACION_PEDIDO' ]-select_options OPTIONAL ) ).
+    ti_rn_vbelp  = CORRESPONDING tp_rn_vbelp( VALUE #( ti_filtro_en_rango[ property = 'PEDIDO' ]-select_options OPTIONAL ) ).
+    ti_rn_vkorg  = CORRESPONDING tp_rn_vkorg( VALUE #( ti_filtro_en_rango[ property = 'VKORG' ]-select_options OPTIONAL ) ).
+    ti_rn_vtweg  = CORRESPONDING tp_rn_vtweg( VALUE #( ti_filtro_en_rango[ property = 'VTWEG' ]-select_options OPTIONAL ) ).
+    ti_rn_werks  = CORRESPONDING tp_rn_werks( VALUE #( ti_filtro_en_rango[ property = 'WERKS' ]-select_options OPTIONAL ) ).
+    ti_rn_erdat  = CORRESPONDING tp_rn_erdat( VALUE #( ti_filtro_en_rango[ property = 'FECHA_CREACION_PEDIDO' ]-select_options OPTIONAL ) ).
+    ti_rn_auart  = CORRESPONDING tp_rn_auart( VALUE #( ti_filtro_en_rango[ property = 'CLASE_DOCUMENTO' ]-select_options OPTIONAL ) ).
+    ti_rn_bstkd  = CORRESPONDING tp_rn_bstkd( VALUE #( ti_filtro_en_rango[ property = 'PEDIDO_CLIENTE' ]-select_options OPTIONAL ) ).
+    ti_rn_vbele  = CORRESPONDING tp_rn_vbele( VALUE #( ti_filtro_en_rango[ property = 'ENTREGA' ]-select_options OPTIONAL ) ).
+    ti_rn_werkr  = CORRESPONDING tp_rn_werkr( VALUE #( ti_filtro_en_rango[ property = 'CENTRO_RECEPTOR' ]-select_options OPTIONAL ) ).          ".Centro Receptor
+    ti_rn_vdatu  = CORRESPONDING tp_rn_vdatu( VALUE #( ti_filtro_en_rango[ property = 'FECHA_PREFERENTE_ENTREGA' ]-select_options OPTIONAL ) ). ".Fecha Preferencte de entrega
+    ti_rn_repag  = CORRESPONDING tp_rn_repag( VALUE #( ti_filtro_en_rango[ property = 'RESPONSABLE_PAGO' ]-select_options OPTIONAL ) ).         ".Responsable de Pago
+    ti_rn_ekgrp  = CORRESPONDING tp_rn_ekgrp( VALUE #( ti_filtro_en_rango[ property = 'GRUPO_COMPRA' ]-select_options OPTIONAL ) ).             ".Grupo Compra
+
+    LOOP AT ti_rn_vbelp ASSIGNING FIELD-SYMBOL(<fs_rn_vbelp>).
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = <fs_rn_vbelp>-low
+        IMPORTING
+          output = <fs_rn_vbelp>-low.
+
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = <fs_rn_vbelp>-high
+        IMPORTING
+          output = <fs_rn_vbelp>-high.
+    ENDLOOP.
+
+    LOOP AT ti_rn_vbele ASSIGNING FIELD-SYMBOL(<fs_rn_vbele>).
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = <fs_rn_vbele>-low
+        IMPORTING
+          output = <fs_rn_vbele>-low.
+
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = <fs_rn_vbele>-high
+        IMPORTING
+          output = <fs_rn_vbele>-high.
+    ENDLOOP.
+
+    IF 'ant' NE 'ant'.
+      IF ti_filtro_en_rango IS NOT INITIAL.
+        "Trabajar con Fechas/Hora en ODATA
+        "Filtrar Odata con fecha Fecha:/ZSDAPI_MONITOR_PEDIDOS_SRV/PedidosSet?$filter=FechaCreacionPedido eq datetime'2017-04-15T00:00:00'&$format=json
+        "Error: Property 'FechaLiberacion' has invalid value '00000000' : Seleccior la opcion NULLABLE para los campos tipo datetime en el servicio Odata
+        ti_rn_erdat = CORRESPONDING tp_rn_erdat( VALUE #( ti_filtro_en_rango[ property = 'FECHA_CREACION_PEDIDO' ]-select_options OPTIONAL ) ).
+        ti_rn_vdatu = CORRESPONDING tp_rn_vdatu( VALUE #( ti_filtro_en_rango[ property = 'FECHA_PREFERENTE_ENTREGA' ]-select_options OPTIONAL ) ). ".Fecha Preferencte de entrega
+
+        ti_pedidos =
+        o_monitor->generar_monitor_pedidos_venta( EXPORTING
+                                                    i_r_vbelp           = VALUE #( ti_filtro_en_rango[ property = 'PEDIDO' ]-select_options OPTIONAL )
+                                                    i_r_vkorg           = VALUE #( ti_filtro_en_rango[ property = 'VKORG' ]-select_options OPTIONAL )
+                                                    i_r_vtweg           = VALUE #( ti_filtro_en_rango[ property = 'VTWEG' ]-select_options OPTIONAL )
+                                                    i_r_werks           = VALUE #( ti_filtro_en_rango[ property = 'WERKS' ]-select_options OPTIONAL )
+                                                    i_r_erdat           = ti_rn_erdat
+                                                    i_r_auart           = VALUE #( ti_filtro_en_rango[ property = 'CLASE_DOCUMENTO' ]-select_options OPTIONAL )
+                                                    i_r_vdatu           = ti_rn_vdatu                                                                                 ".adicion Jose Miguel Valencia 28.08.2024
+                                                    i_r_bstnk           = VALUE #( ti_filtro_en_rango[ property = 'PEDIDO_CLIENTE' ]-select_options OPTIONAL )
+                                                    i_r_ekgrp           = VALUE #( ti_filtro_en_rango[ property = 'GRUPO_COMPRA' ]-select_options OPTIONAL )          ".adicion Jose Miguel Valencia 28.08.2024
+                                                    i_r_responsable_de_pago = VALUE #( ti_filtro_en_rango[ property = 'RESPONSABLE_PAGO' ]-select_options OPTIONAL )  ".adicion Jose Miguel Valencia 28.08.2024
+                                                    i_r_vbele           = VALUE #( ti_filtro_en_rango[ property = 'ENTREGA' ]-select_options OPTIONAL )
+                                                    i_detalllado        = abap_true
+                                                    i_retornar_mensajes = abap_true
+                                                  IMPORTING
+                                                    e_rc                = rc
+                                                ).
+
+        APPEND LINES OF
+        o_monitor->generar_monitor_pedidotraslado( EXPORTING
+                                                        i_r_vbelp           = VALUE #( ti_filtro_en_rango[ property = 'PEDIDO' ]-select_options OPTIONAL )
+                                                        i_r_vkorg           = VALUE #( ti_filtro_en_rango[ property = 'VKORG' ]-select_options OPTIONAL )
+                                                        i_r_vtweg           = VALUE #( ti_filtro_en_rango[ property = 'VTWEG' ]-select_options OPTIONAL )
+                                                        i_r_werks           = VALUE #( ti_filtro_en_rango[ property = 'WERKS' ]-select_options OPTIONAL )
+                                                        i_r_centro_receptor = VALUE #( ti_filtro_en_rango[ property = 'CENTRO_RECEPTOR' ]-select_options OPTIONAL ) ".adicion Jose Miguel Valencia 28.08.2024
+                                                        i_r_erdat           = ti_rn_erdat
+                                                        i_r_auart           = VALUE #( ti_filtro_en_rango[ property = 'CLASE_DOCUMENTO' ]-select_options OPTIONAL )
+                                                        i_r_vdatu           = ti_rn_vdatu                                                                               ".adicion Jose Miguel Valencia 28.08.2024
+                                                        i_r_bstnk           = VALUE #( ti_filtro_en_rango[ property = 'PEDIDO_CLIENTE' ]-select_options OPTIONAL )
+                                                        i_r_responsable_de_pago = VALUE #( ti_filtro_en_rango[ property = 'RESPONSABLE_PAGO' ]-select_options OPTIONAL ) ".adicion Jose Miguel Valencia 28.08.2024
+                                                        i_r_ekgrp           = VALUE #( ti_filtro_en_rango[ property = 'GRUPO_COMPRA' ]-select_options OPTIONAL )         ".adicion Jose Miguel Valencia 28.08.2024
+                                                        i_r_vbele           = VALUE #( ti_filtro_en_rango[ property = 'ENTREGA' ]-select_options OPTIONAL )
+                                                        i_detalllado        = abap_true
+                                                        i_retornar_mensajes = abap_true
+                                                    IMPORTING
+                                                        e_rc                = rc
+                                           )
+          TO ti_pedidos.
+
+      ENDIF.
+
+      LOOP AT ti_pedidos ASSIGNING FIELD-SYMBOL(<fs_es_pedido>).
+        IF <fs_es_pedido>-fecha_entrega_cliente IS NOT INITIAL AND
+           <fs_es_pedido>-fecha_entrega_cliente(2) NE '20'.
+          CLEAR: <fs_es_pedido>-fecha_entrega_cliente.
+        ENDIF.
+      ENDLOOP.
+
+      CREATE DATA er_entityset TYPE zclsdapi_monitor_pedidos_mpc=>tt_pedidos.
+      ASSIGN er_entityset->* TO FIELD-SYMBOL(<fs_ti_pedidos>).
+
+      <fs_ti_pedidos> =  CORRESPONDING zclsdapi_monitor_pedidos_mpc=>tt_pedidos( ti_pedidos ).
+
+      DATA(o_log) = zclcxr1002_log_aplicacion=>get_instancia( ).
+      DATA(ti_log) = o_log->get_log( ).
+
+      IF ti_log IS NOT INITIAL.
+        "Retorna Status 400 con mensaje en body
+        me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                            iv_entity_type = iv_entity_name
+                                                            it_return = ti_log
+                                                            it_key_tab = it_key_tab ).
+        "Retorna Status 200 con mensaje en header del response
+        o_contenedor_msg = me->mo_context->get_message_container( ).
+        LOOP AT ti_log ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+
+          o_contenedor_msg->add_message( iv_msg_type    = <fs_es_mensaje>-type
+                                         iv_msg_id      = <fs_es_mensaje>-id
+                                         iv_msg_number  = <fs_es_mensaje>-number
+                                         iv_msg_text    = <fs_es_mensaje>-message
+                                         iv_msg_v1      = <fs_es_mensaje>-message_v1
+                                         iv_msg_v2      = <fs_es_mensaje>-message_v2
+                                         iv_msg_v3      = <fs_es_mensaje>-message_v3
+                                         iv_msg_v4      = <fs_es_mensaje>-message_v4
+                                         iv_add_to_response_header = abap_true
+                                       ).
+
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+**********************************************************************
+**********************************************************************
+***NOTA: SI llegan a cambiar esta logica en el programa ZSDR1085_2
+*        debera tomarse y reeemplazarce en este servicio tal cual
+*        con la logica del metodo  me->get_data( de dicho programa
+**********************************************************************
+    ti_rn_ihrez = CORRESPONDING #( ti_rn_bstkd[] MAPPING sign = sign option = option low = low high = high ).
+
+    "Consultar datos a nivel de Transporte (COMUN PARA SD y MM)
+    IF ti_rn_tknum IS NOT INITIAL.
+      SELECT DISTINCT 'I' AS sign, 'EQ' AS option, substring( tr~btd_id, 26, 10 ) AS low
+        FROM /scmtms/d_torrot AS tk
+       INNER JOIN /scmtms/d_tordrf AS tr ON tr~parent_key = tk~db_key
+       WHERE tk~tor_cat  EQ 'TO'
+         AND tk~tor_id   IN @ti_rn_tknum
+        INTO TABLE @ti_rn_vbele.
+    ENDIF.
+
+**********************************************************************
+************************        VENTAS       *************************
+**********************************************************************
+    "Consultar datos a nivel de pedido
+    IF ti_rn_vbelp IS INITIAL.
+      IF ti_rn_erdat IS NOT INITIAL OR
+         ti_rn_vkorg IS NOT INITIAL OR
+         ti_rn_werks IS NOT INITIAL.
+        "Selección en VBAK Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbak
+         INNER JOIN vbap ON vbak~vbeln EQ vbap~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         WHERE vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbap~werks IN @ti_rn_werks
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ELSE.
+      "Selección en VBAK Cabecera de Pedidos
+      SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+        FROM vbak
+       INNER JOIN vbap ON vbak~vbeln EQ vbap~vbeln
+       INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+       WHERE vbak~vbeln IN @ti_rn_vbelp
+         AND vbak~erdat IN @ti_rn_erdat
+         AND vbak~auart IN @ti_rn_auart
+         AND vbak~vkorg IN @ti_rn_vkorg
+         AND vbak~spart IN @ti_rn_spart
+         AND vbak~vdatu IN @ti_rn_vdatu
+         AND vbak~augru IN @ti_rn_moped
+         AND vbpa~parvw EQ 'RG'
+         AND vbpa~kunnr IN @ti_rn_repag
+         AND vbap~werks IN @ti_rn_werks
+        INTO TABLE @ti_rn_vbeln.
+    ENDIF.
+
+    "Consultar datos a nivel de OC
+    IF ti_rn_bstkd IS NOT INITIAL.
+      SORT ti_rn_vbeln BY low.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING low.
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        "Selección en VBAK Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbkd
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ vbkd~vbeln
+         INNER JOIN vbak ON vbak~vbeln EQ vb~low
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         WHERE vbkd~bstkd IN @ti_rn_bstkd
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        "Selección en VBAK Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbkd
+         INNER JOIN vbak ON vbak~vbeln EQ vbkd~vbeln
+         INNER JOIN vbap ON vbap~vbeln EQ vbkd~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         WHERE vbkd~bstkd IN @ti_rn_bstkd
+           AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    "Consultar datos a nivel de Entrega
+    IF ti_rn_vbele IS NOT INITIAL    OR
+       ti_rn_vbele IS NOT INITIAL OR
+       ti_rn_nguia IS NOT INITIAL.
+      SORT ti_rn_vbeln BY low.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING low.
+
+      APPEND LINES OF ti_rn_vbele TO ti_rn_vbele.
+      SORT ti_rn_vbele.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbele COMPARING ALL FIELDS.
+
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM likp
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+*         INNER JOIN likp ON lips~vbeln EQ likp~vbeln
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ lips~vgbel
+         INNER JOIN vbak ON vbak~vbeln EQ vb~low
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         INNER JOIN vbkd ON vbkd~vbeln EQ vbak~vbeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+           AND vbkd~bstkd IN @ti_rn_bstkd
+*           AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM likp
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN vbak ON vbak~vbeln EQ lips~vgbel
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         INNER JOIN vbkd ON vbkd~vbeln EQ vbak~vbeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+           AND vbkd~bstkd IN @ti_rn_bstkd
+           AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    "Consultar datos a nivel de Factura
+    IF ti_rn_vbelf IS NOT INITIAL.
+      SORT ti_rn_vbeln BY low.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING low.
+
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbrk
+         INNER JOIN vbrp ON vbrp~vbeln EQ vbrk~vbeln
+         INNER JOIN likp ON likp~vbeln EQ vbrp~vgbel
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ vbrp~aubel
+         INNER JOIN vbak ON vbak~vbeln EQ vb~low
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         INNER JOIN vbkd ON vbkd~vbeln EQ vbak~vbeln
+         WHERE vbrk~vbeln IN @ti_rn_vbelf
+           AND likp~vbeln IN @ti_rn_vbele
+           AND vbkd~bstkd IN @ti_rn_bstkd
+*         AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbrk
+         INNER JOIN vbrp ON vbrp~vbeln EQ vbrk~vbeln
+         INNER JOIN likp ON likp~vbeln EQ vbrp~vgbel
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN vbak ON vbak~vbeln EQ vbrp~aubel
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         INNER JOIN vbkd ON vbkd~vbeln EQ vbak~vbeln
+         WHERE vbrk~vbeln IN @ti_rn_vbelf
+           AND likp~vbeln IN @ti_rn_vbele
+           AND vbkd~bstkd IN @ti_rn_bstkd
+           AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+**********************************************************************
+************************      TRASLADOS      *************************
+**********************************************************************
+    ti_rn_vbeln_aux = ti_rn_vbeln.
+    "Consultar datos a nivel de pedido traslado
+    IF ti_rn_vbelp IS INITIAL.
+      IF ti_rn_vkorg IS NOT INITIAL OR
+         ti_rn_vtweg IS NOT INITIAL OR
+         ti_rn_spart IS NOT INITIAL .
+        "Selección en EKKO Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM ekko
+         INNER JOIN ekpv ON ekko~ebeln EQ ekpv~ebeln
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_ihrez
+           AND ekpv~vkorg IN @ti_rn_vkorg
+           AND ekpv~vtweg IN @ti_rn_vtweg
+           AND ekpv~spart IN @ti_rn_spart
+           AND ekpo~werks IN @ti_rn_werkr
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        "Selección en EKKO Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM ekko
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_ihrez
+           AND ekpo~werks IN @ti_rn_werkr
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ELSE.
+      IF ti_rn_vkorg IS NOT INITIAL OR
+         ti_rn_vtweg IS NOT INITIAL OR
+         ti_rn_spart IS NOT INITIAL .
+        "Selección en EKKO Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM ekko
+         INNER JOIN ekpv ON ekko~ebeln EQ ekpv~ebeln
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE ekko~ebeln IN @ti_rn_vbelp
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_ihrez
+           AND ekpv~vkorg IN @ti_rn_vkorg
+           AND ekpv~vtweg IN @ti_rn_vtweg
+           AND ekpv~spart IN @ti_rn_spart
+           AND ekpo~werks IN @ti_rn_werkr
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        "Selección en EKKO Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM ekko
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE ekko~ebeln IN @ti_rn_vbelp
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_ihrez
+           AND ekpo~werks IN @ti_rn_werkr
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    "Consultar datos a nivel de Entrega
+    IF ti_rn_vbele IS NOT INITIAL    OR
+       ti_rn_vbele IS NOT INITIAL OR
+       ti_rn_nguia    IS NOT INITIAL.
+      APPEND LINES OF ti_rn_vbele TO ti_rn_vbele.
+      SORT ti_rn_vbele.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbele COMPARING ALL FIELDS.
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM lips
+         INNER JOIN likp ON likp~vbeln EQ lips~vbeln
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ lips~vgbel
+         INNER JOIN ekko ON ekko~ebeln EQ vb~low
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+*         AND ekko~ebeln IN @ti_rn_vbeln
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_bstkd
+           AND ekpo~werks IN @ti_rn_werkr
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM lips
+         INNER JOIN likp ON likp~vbeln EQ lips~vbeln
+         INNER JOIN ekko ON ekko~ebeln EQ lips~vgbel
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+           AND ekko~ebeln IN @ti_rn_vbeln
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_bstkd
+           AND ekpo~werks IN @ti_rn_werkr
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    "Consultar datos a nivel de Factura
+    IF ti_rn_vbelf IS NOT INITIAL.
+      SORT ti_rn_vbeln BY low.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING low.
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM vbrk
+         INNER JOIN vbrp ON vbrp~vbeln EQ vbrk~vbeln
+         INNER JOIN likp ON likp~vbeln EQ vbrp~vgbel
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ lips~vgbel
+         INNER JOIN ekko ON ekko~ebeln EQ vb~low
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+*         AND ekko~ebeln IN @ti_rn_vbeln
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_bstkd
+           AND ekpo~werks IN @ti_rn_werkr
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM vbrk
+         INNER JOIN vbrp ON vbrp~vbeln EQ vbrk~vbeln
+         INNER JOIN likp ON likp~vbeln EQ vbrp~vgbel
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN ekko ON ekko~ebeln EQ lips~vgbel
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+           AND ekko~ebeln IN @ti_rn_vbeln
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_bstkd
+           AND ekpo~werks IN @ti_rn_werkr
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    IF ti_rn_vbeln_aux IS NOT INITIAL.
+      APPEND LINES OF ti_rn_vbeln_aux TO ti_rn_vbeln.
+    ENDIF.
+    SORT ti_rn_vbeln.
+    DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING ALL FIELDS.
+
+    IF ti_rn_vbeln IS INITIAL.
+      CLEAR es_bapiret2.
+      "No se encontraron datos con los criterios de búsqueda
+      MESSAGE e008(zcx01) INTO message.
+      es_bapiret2-type        = gc_e.          ".Tipo mensaje: S Success, E Error, W Warning, I Info A Abort
+      es_bapiret2-id          = gc_zcx01.      ".Clase de mensajes
+      es_bapiret2-number      = gc_8.         ".Número de mensaje
+      es_bapiret2-message     = message.      ".Texto de mensaje.
+*    es_bapiret2-message_v1  = es_likp-vbeln.  ".Variable de mensaje
+      ".Adicionar Registro al Log
+      APPEND es_bapiret2 TO ti_bapiterturn.
+      "Retorna Status 400 con mensaje en body
+      me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                          iv_entity_type  = iv_entity_name
+                                                          it_return       = ti_bapiterturn
+                                                          it_key_tab      = it_key_tab ).
+      "Retorna Status 200 con mensaje en header del response
+      o_contenedor_msg = me->mo_context->get_message_container( ).
+*        LOOP AT ti_bapiterturn ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+      LOOP AT ti_bapiterturn INTO es_bapiret2.
+
+        o_contenedor_msg->add_message( iv_msg_type    = es_bapiret2-type
+                                       iv_msg_id      = es_bapiret2-id
+                                       iv_msg_number  = es_bapiret2-number
+                                       iv_msg_text    = es_bapiret2-message
+                                       iv_msg_v1      = es_bapiret2-message_v1
+                                       iv_msg_v2      = es_bapiret2-message_v2
+                                       iv_msg_v3      = es_bapiret2-message_v3
+                                       iv_msg_v4      = es_bapiret2-message_v4
+                                       iv_add_to_response_header = abap_true
+                                     ).
+
+      ENDLOOP.
+      RETURN.
+    ENDIF.
+
+    CREATE OBJECT go_sdr1085_2.
+    CALL METHOD go_sdr1085_2->get_data
+      EXPORTING
+        i_ti_vbeln = ti_rn_vbeln.
+
+    IF go_sdr1085_2->gti_vbap IS INITIAL AND
+       go_sdr1085_2->gti_ekpo IS INITIAL.
+      CLEAR es_bapiret2.
+      "No se encontraron datos con los criterios de búsqueda
+      MESSAGE e008(zcx01) INTO message.
+      es_bapiret2-type        = gc_e.          ".Tipo mensaje: S Success, E Error, W Warning, I Info A Abort
+      es_bapiret2-id          = gc_zcx01.      ".Clase de mensajes
+      es_bapiret2-number      = gc_8.         ".Número de mensaje
+      es_bapiret2-message     = message.      ".Texto de mensaje.
+*    es_bapiret2-message_v1  = es_likp-vbeln.  ".Variable de mensaje
+      ".Adicionar Registro al Log
+      APPEND es_bapiret2 TO ti_bapiterturn.
+    ENDIF.
+
+
+    CALL METHOD go_sdr1085_2->set_data
+      CHANGING
+        c_ti_outtab = ti_outdata.
+
+*    CLEAR go_sdr1085_2. "Limpiar datos para liberar memoria
+
+    LOOP AT ti_outdata INTO es_outdata.
+
+***      IF pa_mtftl IS NOT INITIAL. "Excluir Material Flete
+      IF go_sdr1085_2->ges_param_app-ti_rn_ped_matflt IS NOT INITIAL AND
+         es_outdata-pstyv IN go_sdr1085_2->ges_param_app-ti_rn_ped_matflt.
+        CONTINUE.
+      ENDIF.
+***      ENDIF.
+
+***      IF pa_ppent IS NOT INITIAL."Pedidos pendientes
+***        IF es_outdata-gbstk EQ go_sdr1085_2->gc_c.
+***          CONTINUE.
+***        ENDIF.
+***      ENDIF.
+
+***      IF pa_unest IS NOT INITIAL."Unidad de Medida Estadística
+***        CALL METHOD set_um_estatica
+***          CHANGING
+***            c_es_outtab = es_outdata.
+***      ENDIF.
+
+      "Clase Pedido
+      IF ti_rn_auart[] IS NOT INITIAL AND
+         es_outdata-auart NOT IN ti_rn_auart.
+        CONTINUE.
+      ENDIF.
+
+      "Referencia cliente
+      IF ti_rn_bstkd[] IS NOT INITIAL AND
+         es_outdata-bstkd NOT IN ti_rn_bstkd.
+        CONTINUE.
+      ENDIF.
+      "Grupo de compras
+      IF ti_rn_ekgrp[] IS NOT INITIAL AND
+         es_outdata-ekgrp NOT IN ti_rn_ekgrp.
+        CONTINUE.
+      ENDIF.
+      "Encargado Comercial
+      IF ti_rn_encom[] IS NOT INITIAL AND
+         es_outdata-kunzv NOT IN ti_rn_encom.
+        CONTINUE.
+      ENDIF.
+      "Creado el
+      IF ti_rn_erdat[] IS NOT INITIAL AND
+         es_outdata-erdat NOT IN ti_rn_erdat.
+        CONTINUE.
+      ENDIF.
+      "Fecha fin Transporte
+      IF ti_rn_fftp[] IS NOT INITIAL AND
+         es_outdata-actual_date NOT IN ti_rn_fftp.
+        CONTINUE.
+      ENDIF.
+      "Motivo Pedido
+      IF ti_rn_moped[] IS NOT INITIAL AND
+         es_outdata-augru NOT IN ti_rn_moped.
+        CONTINUE.
+      ENDIF.
+      "Número Guía#
+      IF ti_rn_nguia[] IS NOT INITIAL AND
+         es_outdata-zz1_numeroguia_dlh NOT IN ti_rn_nguia.
+        CONTINUE.
+      ENDIF.
+      "Responsable de Pago
+      IF ti_rn_repag[] IS NOT INITIAL AND
+         es_outdata-kunrg NOT IN ti_rn_repag.
+        CONTINUE.
+      ENDIF.
+      "Sector
+      IF ti_rn_spart[] IS NOT INITIAL AND
+         es_outdata-spart NOT IN ti_rn_spart.
+        CONTINUE.
+      ENDIF.
+      "Documento Transporte
+      IF ti_rn_tknum[] IS NOT INITIAL AND
+         es_outdata-tor_id NOT IN ti_rn_tknum.
+        CONTINUE.
+      ENDIF.
+      "Entrega
+      IF ti_rn_vbele[] IS NOT INITIAL AND
+         es_outdata-vbelne NOT IN ti_rn_vbele.
+        CONTINUE.
+      ENDIF.
+      "Doc.facturación
+      IF ti_rn_vbelf[] IS NOT INITIAL AND
+         es_outdata-vbelnf NOT IN ti_rn_vbelf.
+        CONTINUE.
+      ENDIF.
+      "Pedido
+      IF ti_rn_vbelp[] IS NOT INITIAL AND
+         es_outdata-vbelnp NOT IN ti_rn_vbelp.
+        CONTINUE.
+      ENDIF.
+      "Fe.prefer.entrega
+      IF ti_rn_vdatu[] IS NOT INITIAL AND
+         es_outdata-vdatu NOT IN ti_rn_vdatu.
+        CONTINUE.
+      ENDIF.
+      "Organización ventas
+      IF ti_rn_vkorg[] IS NOT INITIAL AND
+         es_outdata-vkorg NOT IN ti_rn_vkorg.
+        CONTINUE.
+      ENDIF.
+      "Canal distribución
+      IF ti_rn_vtweg[] IS NOT INITIAL AND
+         es_outdata-vtweg NOT IN ti_rn_vtweg.
+        CONTINUE.
+      ENDIF.
+      "Centro Receptor
+      IF ti_rn_werkr[] IS NOT INITIAL AND
+         es_outdata-werkr NOT IN ti_rn_werkr.
+        CONTINUE.
+      ENDIF.
+      "Centro
+      IF ti_rn_werks[] IS NOT INITIAL AND
+         es_outdata-werks NOT IN ti_rn_werks.
+        CONTINUE.
+      ENDIF.
+      APPEND es_outdata TO ti_outdata_aux.
+
+    ENDLOOP.
+    ti_outdata = ti_outdata_aux.
+    CLEAR ti_outdata_aux.
+
+***    "Si es consolidado
+***    IF pa_cons IS INITIAL.
+***    ELSE.
+****      SORT gti_outdata BY vbelnp posnrp.
+****      SORT gti_outdata BY vbelnp posnrp vbelne DESCENDING vbelnf DESCENDING.
+***    SORT ti_outdata BY vbelnp vbelne DESCENDING vbelnf DESCENDING tor_id DESCENDING .
+****      LOOP AT ti_outdata_aux ASSIGNING <fs_outdata>.
+***    LOOP AT ti_outdata INTO es_outdata.
+***      v_index = sy-tabix + 1.
+****        CLEAR es_outdata_nxt.
+***      IF sy-tabix EQ 1.
+***        es_outdata_aux  = es_outdata.
+***        es_outdata_aux-vdatu = '99991231'.
+***        v_vdatu = '99991231'.
+***
+***        READ TABLE ti_outdata
+***          WITH KEY vbelnp = es_outdata-vbelnp
+***          BINARY SEARCH TRANSPORTING NO FIELDS.
+***        IF sy-subrc EQ 0.
+***          v_index_nxt = sy-tabix.
+***          LOOP AT ti_outdata INTO es_outdata_nxt FROM v_index_nxt.
+***            IF es_outdata_nxt-vbelnp NE es_outdata-vbelnp.
+***              "Si todas las posiciones tenian marca de borrado, colocar la menor fecha
+***              IF es_outdata_aux-vdatu = '99991231'.
+***                es_outdata_aux-vdatu = v_vdatu.
+***              ENDIF.
+***              EXIT.
+***            ENDIF.
+***            IF es_outdata_nxt-loekz IS INITIAL.
+***              CLEAR es_outdata_aux-loekz.
+***            ENDIF.
+***            IF es_outdata_nxt-kztlf IS INITIAL.
+***              CLEAR es_outdata_aux-kztlf.
+***            ENDIF.
+***            IF es_outdata_nxt-eglkz IS INITIAL.
+***              CLEAR es_outdata_aux-eglkz.
+***            ENDIF.
+***            IF es_outdata_nxt-elikz IS INITIAL.
+***              CLEAR es_outdata_aux-elikz.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-budat_1 GE es_outdata_aux-budat_1.
+***              es_outdata_aux-budat_1 = es_outdata_nxt-budat_1.
+***            ENDIF.
+***            IF es_outdata_nxt-budat_6 GE es_outdata_aux-budat_6.
+***              es_outdata_aux-budat_6 = es_outdata_nxt-budat_6.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-erdat_i LT es_outdata_aux-erdat_i.
+***              es_outdata_aux-erdat_i = es_outdata_nxt-erdat_i.
+***              es_outdata_aux-ernam_i = es_outdata_nxt-ernam_i.
+***              es_outdata_aux-erzet   = es_outdata_nxt-erzet.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-vdatu LT es_outdata_aux-vdatu.
+***              IF es_outdata_nxt-loekz IS INITIAL.
+***                es_outdata_aux-vdatu = es_outdata_nxt-vdatu.
+***              ENDIF.
+***            ENDIF.
+***            IF es_outdata_nxt-vdatu LT v_vdatu.
+***              v_vdatu = es_outdata_nxt-vdatu.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-reslo IS NOT INITIAL.
+***              es_outdata_aux-reslo = es_outdata_nxt-reslo.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-berid IS NOT INITIAL.
+***              es_outdata_aux-berid = es_outdata_nxt-berid.
+***            ENDIF.
+***
+****              IF es_outdata_nxt-werks ne es_outdata_aux-werks.
+****                CLEAR es_outdata_aux-werks.
+****              ENDIF.
+***          ENDLOOP.
+***          "Si todas las posiciones tenian marca de borrado, colocar la menor fecha
+***          IF es_outdata_aux-vdatu = '99991231'.
+***            es_outdata_aux-vdatu = v_vdatu.
+***          ENDIF.
+***        ENDIF.
+***
+***      ELSE.
+****          IF v_index LE lines( gti_outdata ).
+****            READ TABLE gti_outdata
+****                  INTO es_outdata_nxt
+****                 INDEX v_index.
+****          ENDIF.
+***        IF es_outdata-vbelnp NE es_outdata_aux-vbelnp.
+***          es_outdata_aux  = es_outdata.
+***          es_outdata_aux-vdatu = '99991231'.
+***          v_vdatu = '99991231'.
+***
+****          CLEAR:
+****                <fs_outdata>-vbelne                     ,
+****                <fs_outdata>-vbelnf                     .
+***
+***          READ TABLE ti_outdata
+***            WITH KEY vbelnp = es_outdata-vbelnp
+***            BINARY SEARCH TRANSPORTING NO FIELDS.
+***          IF sy-subrc EQ 0.
+***            v_index_nxt = sy-tabix.
+***            LOOP AT ti_outdata INTO es_outdata_nxt FROM v_index_nxt.
+***              IF es_outdata_nxt-vbelnp NE es_outdata-vbelnp.
+***                "Si todas las posiciones tenian marca de borrado, colocar la menor fecha
+***                IF es_outdata_aux-vdatu = '99991231'.
+***                  es_outdata_aux-vdatu = v_vdatu.
+***                ENDIF.
+***                EXIT.
+***              ENDIF.
+***              IF es_outdata_nxt-loekz IS INITIAL.
+***                CLEAR es_outdata_aux-loekz.
+***              ENDIF.
+***              IF es_outdata_nxt-kztlf IS INITIAL.
+***                CLEAR es_outdata_aux-kztlf.
+***              ENDIF.
+***              IF es_outdata_nxt-eglkz IS INITIAL.
+***                CLEAR es_outdata_aux-eglkz.
+***              ENDIF.
+***              IF es_outdata_nxt-elikz IS INITIAL.
+***                CLEAR es_outdata_aux-elikz.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-budat_1 GE es_outdata_aux-budat_1.
+***                es_outdata_aux-budat_1 = es_outdata_nxt-budat_1.
+***              ENDIF.
+***              IF es_outdata_nxt-budat_6 GE es_outdata_aux-budat_6.
+***                es_outdata_aux-budat_6 = es_outdata_nxt-budat_6.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-erdat_i LT es_outdata_aux-erdat_i.
+***                es_outdata_aux-erdat_i  = es_outdata_nxt-erdat_i.
+***                es_outdata_aux-erzet    = es_outdata_nxt-erzet.
+***                es_outdata_aux-ernam_i  = es_outdata_nxt-ernam_i.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-vdatu LT es_outdata_aux-vdatu.
+***                IF es_outdata_nxt-loekz IS INITIAL.
+***                  es_outdata_aux-vdatu = es_outdata_nxt-vdatu.
+***                ENDIF.
+***              ENDIF.
+***              IF es_outdata_nxt-vdatu LT v_vdatu.
+***                v_vdatu = es_outdata_nxt-vdatu.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-reslo IS NOT INITIAL.
+***                es_outdata_aux-reslo = es_outdata_nxt-reslo.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-berid IS NOT INITIAL.
+***                es_outdata_aux-berid = es_outdata_nxt-berid.
+***              ENDIF.
+***
+***            ENDLOOP.
+***            "Si todas las posiciones tenian marca de borrado, colocar la menor fecha
+***            IF es_outdata_aux-vdatu = '99991231'.
+***              es_outdata_aux-vdatu = v_vdatu.
+***            ENDIF.
+***          ENDIF.
+***
+***        ENDIF.
+***      ENDIF.
+***
+***      CLEAR:
+***            es_outdata-stat_pedido             ,
+***            es_outdata-stat_logistico          ,
+***            es_outdata-vl_pedido_vs_vl_factura ,
+***            es_outdata-stat_plano_ola          ,
+***            es_outdata-stat_envio_asn          ,
+***            es_outdata-stat_imp_factura        ,
+***
+***            es_outdata-ecommerce_empaque_regalo,
+***            es_outdata-ecommerce_remitente     ,
+***            es_outdata-ecommerce_destinatario  ,
+***            es_outdata-ecommerce_texto         ,
+***
+***            es_outdata-zz1_marca_sdh              ,
+***            es_outdata-augru                      ,
+***            es_outdata-desc_motivo_de_pedido_cab  ,
+***            es_outdata-kurrf                      , "Adicion18Mar2024 Sebastian Restrepo Villa
+***
+***            es_outdata-posnrp               ,
+***            es_outdata-loekz                ,
+***            es_outdata-satnr                ,
+***            es_outdata-sattx                ,
+***            es_outdata-ean11                ,
+***            es_outdata-matnr                ,
+***            es_outdata-charg                ,
+***            es_outdata-matkl                ,
+***            es_outdata-arktx                ,
+***            es_outdata-berid                ,
+***
+***            es_outdata-color_atinn          ,
+***            es_outdata-color                ,
+***            es_outdata-descr_color          ,
+***            es_outdata-talla_atinn          ,
+***            es_outdata-talla                ,
+***            es_outdata-descr_talla          ,
+***
+***            es_outdata-color_cli_nom_car    ,
+***            es_outdata-color_cli_vlr_car    ,
+***            es_outdata-color_cli_car        ,
+***            es_outdata-color_cli_descr_car  ,
+***            es_outdata-talla_cli_nom_car    ,
+***            es_outdata-talla_cli_vlr_car    ,
+***            es_outdata-talla_cli_car        ,
+***            es_outdata-talla_cli_descr_car  ,
+***
+***            es_outdata-kdmat                ,
+***            es_outdata-pstyv                ,
+***            es_outdata-lfrel                ,
+***            es_outdata-fkrel                .
+***
+***      IF es_outdata-uepos IS NOT INITIAL.
+***        CLEAR: es_outdata-kwmeng,
+***               es_outdata-kbmeng.
+***
+***        CLEAR: es_outdata-cantidad_pendiente,
+***               es_outdata-cantidad_pendiente_nueva.
+***      ENDIF.
+***
+***      CLEAR:
+***            es_outdata-uepos                ,
+****                    es_outdata-grpos                ,
+***            es_outdata-abgru                ,
+***            es_outdata-motivo_rechazo_desc  ,
+****      *                c_es_outtab-prodh                ,
+***            es_outdata-meins                ,
+****      *                c_es_outtab-faksp                ,
+****                      c_es_outtab-netwr_ip             ,
+****                      c_es_outtab-waerk_ip             ,
+***            es_outdata-antlf                ,
+***            es_outdata-kztlf                ,
+****                      c_es_outtab-kwmeng               ,
+****                      c_es_outtab-kbmeng               ,
+***            es_outdata-vrkme                ,
+***
+****                    es_outdata-inventario_disponible  ,
+****                      c_es_outtab-porcentaje_cumplimiento,
+****                      c_es_outtab-cantidad_asignada      ,
+****                      c_es_outtab-porcentaje_asignacion  ,
+***
+***            es_outdata-brgew                ,
+***            es_outdata-ntgew                ,
+***            es_outdata-gewei                ,
+***            es_outdata-volum                ,
+***            es_outdata-voleh                ,
+****                      c_es_outtab-vbelv                ,
+****                      c_es_outtab-posnv                ,
+****                      c_es_outtab-vgbel                ,
+****                      c_es_outtab-vgpos                ,
+***            es_outdata-lprio                ,
+****                    es_outdata-werks                ,
+****                    es_outdata-werkr                ,
+***            es_outdata-reslo                ,
+***            es_outdata-lgort                ,
+***            es_outdata-vstel                ,
+***            es_outdata-route                ,
+***            es_outdata-erdat_i              ,
+***            es_outdata-ernam_i              ,
+***            es_outdata-erzet                ,
+****                      c_es_outtab-netpr                ,
+****      *                c_es_outtab-wavwr                ,
+****                      c_es_outtab-kzwi1                ,
+***            es_outdata-upmat                ,
+***            es_outdata-berid                ,
+****                      c_es_outtab-mwsbp_ip             ,
+***
+***            es_outdata-precio_sugerido         ,
+***            es_outdata-precio_sugerido_mx      ,
+***            es_outdata-precio_cliente          ,
+***            es_outdata-precio_sugerido_cliente ,
+***            es_outdata-margen_cliente          ,
+****                    c_es_outtab-precio_exportacion      ,
+***
+****                    es_outdata-zz1_infoadicional_sdi,
+***            es_outdata-zz1_diasiniva_sdi    ,
+****                      c_es_outtab-zz1_symphony_v_sdi   ,
+***            es_outdata-zz1_augru_sdi        ,
+****                    es_outdata-zz1_fesalfabric_sdi  ,
+***            es_outdata-zz1_symphony_c_sdi   ,
+****                      c_es_outtab-vkorg_ana            ,
+****                      c_es_outtab-vtweg_ana            ,
+****                      c_es_outtab-kunnr_ana            ,
+***
+***            es_outdata-sgt_rcat             ,
+***            es_outdata-eglkz                ,
+***            es_outdata-elikz                ,
+***
+****                      c_es_outtab-cantidad_asignada    ,
+***
+****                      c_es_outtab-wamng                .
+***
+****            WHEN 'EC'.
+****              CLEAR:
+****                      es_outdata-vbelne                     ,
+***            es_outdata-lfart                      ,
+****                    es_outdata-anzpk                      ,
+****                      c_es_outtab-vtwiv                      ,
+***            es_outdata-vlstk                      ,
+***            es_outdata-kostk                      ,
+***            es_outdata-zz1_fechprivisit_dlh       ,
+***            es_outdata-zz1_numeroguianueva_dlh    ,
+***            es_outdata-zz1_numeroguia_dlh         ,
+***            es_outdata-zz1_statustransportist_dlh ,
+***            es_outdata-zz1_fechaentregaclient_dlh ,
+***            es_outdata-zz1_horaprivisit_dlh       ,
+***            es_outdata-zz1_novedadtransportis_dlh ,
+***            es_outdata-zz1_tipovinculo_dlh        ,
+***            es_outdata-zz1_horaentregacliente_dlh ,
+***
+****                    es_outdata-orden_flete                ,
+****                    es_outdata-unidad_flete               ,
+***
+***            es_outdata-desc_sta_novedad_transportista,
+***
+****            WHEN 'EP'.
+****              CLEAR:
+***            es_outdata-posnre  ,
+***            es_outdata-erdate  ,
+***            es_outdata-matwa   ,
+****                    es_outdata-lichn   ,
+****                      c_es_outtab-lfimg   ,
+****                      c_es_outtab-ormng   ,
+****                      c_es_outtab-cantidad_despachada   ,
+***            es_outdata-uecha   ,
+***            es_outdata-kosta   ,
+***            es_outdata-wbsta   ,
+***
+***            es_outdata-budat_1 ,
+***            es_outdata-budat_6 ,
+****                    es_outdata-menge   ,
+***
+***
+****            WHEN 'TM'.
+****              CLEAR:
+***            es_outdata-tor_id_fu   ,
+***            es_outdata-tor_id      ,
+***            es_outdata-tor_type    ,
+***            es_outdata-tspid       ,
+***            es_outdata-name1       ,
+****                    es_outdata-event_code  ,
+***            es_outdata-actual_date ,
+***            es_outdata-trans_datum ,
+***            es_outdata-trans_uzeit ,
+***
+****
+****            WHEN 'FC'.
+****              CLEAR:
+****                      es_outdata-vbelnf      ,
+****                    es_outdata-fkart       ,
+****                    es_outdata-fktyp       ,
+****                    es_outdata-vbtypf      ,
+****                    es_outdata-waerk       ,
+****                    es_outdata-kalsm       ,
+****                    es_outdata-vsbed       ,
+****                    es_outdata-fkdat       ,
+****                    es_outdata-belnr       ,
+****                    es_outdata-gjahr       ,
+****                      c_es_outtab-netwr_hf    ,
+****                      c_es_outtab-mwsbk       ,
+****                    es_outdata-fksto       ,
+***
+****            WHEN 'FP'.
+****              CLEAR:
+***            es_outdata-posnrf      ,
+****                      c_es_outtab-fkimg       ,
+****                      c_es_outtab-netwr_if    ,
+****                      es_outdata-wavwr       ,
+***            es_outdata-pmatn       ,
+***            es_outdata-posar       ,
+***            es_outdata-vkbur       ,
+***            es_outdata-erdatf      ,
+***            es_outdata-erzetf      ,
+***            es_outdata-shkzg       .
+****                      c_es_outtab-mwsbp_if    .
+***
+***
+***
+***      es_outdata-augru                      = es_outdata_aux-augru                    .
+***      es_outdata-desc_motivo_de_pedido_cab  = es_outdata_aux-desc_motivo_de_pedido_cab.
+***      es_outdata-zz1_marca_sdh              = es_outdata_aux-zz1_marca_sdh.
+***
+***      es_outdata-vdatu    = es_outdata_aux-vdatu.
+****        es_outdata-berid    = es_outdata_aux-berid.
+***
+***      es_outdata-loekz    = es_outdata_aux-loekz.
+***      es_outdata-kztlf    = es_outdata_aux-kztlf.
+***      es_outdata-eglkz    = es_outdata_aux-eglkz.
+***      es_outdata-elikz    = es_outdata_aux-elikz.
+***
+***      es_outdata-lgort    = es_outdata_aux-lgort.
+***      es_outdata-reslo    = es_outdata_aux-reslo.
+***      es_outdata-erdat_i  = es_outdata_aux-erdat_i.
+***      es_outdata-ernam_i  = es_outdata_aux-ernam_i.
+***      es_outdata-erzet    = es_outdata_aux-erzet  .
+***
+***      es_outdata-vbelne                         = es_outdata_aux-vbelne.
+***
+***      es_outdata-vbelne                         = es_outdata_aux-vbelne.
+***      es_outdata-lfart                          = es_outdata_aux-lfart                         .
+***      es_outdata-vlstk                          = es_outdata_aux-vlstk                         .
+***      es_outdata-kostk                          = es_outdata_aux-kostk                         .
+***      es_outdata-budat_1                        = es_outdata_aux-budat_1                       .
+***      es_outdata-budat_6                        = es_outdata_aux-budat_6                       .
+***      es_outdata-zz1_fechprivisit_dlh           = es_outdata_aux-zz1_fechprivisit_dlh          .
+***      es_outdata-zz1_numeroguianueva_dlh        = es_outdata_aux-zz1_numeroguianueva_dlh       .
+***      es_outdata-zz1_numeroguia_dlh             = es_outdata_aux-zz1_numeroguia_dlh            .
+***      es_outdata-zz1_statustransportist_dlh     = es_outdata_aux-zz1_statustransportist_dlh    .
+***      es_outdata-zz1_fechaentregaclient_dlh     = es_outdata_aux-zz1_fechaentregaclient_dlh    .
+***      es_outdata-zz1_horaprivisit_dlh           = es_outdata_aux-zz1_horaprivisit_dlh          .
+***      es_outdata-zz1_novedadtransportis_dlh     = es_outdata_aux-zz1_novedadtransportis_dlh    .
+***      es_outdata-zz1_tipovinculo_dlh            = es_outdata_aux-zz1_tipovinculo_dlh           .
+***      es_outdata-zz1_horaentregacliente_dlh     = es_outdata_aux-zz1_horaentregacliente_dlh    .
+***      es_outdata-desc_sta_novedad_transportista = es_outdata_aux-desc_sta_novedad_transportista.
+***
+***      es_outdata-ecommerce_empaque_regalo = es_outdata_aux-ecommerce_empaque_regalo.
+***      es_outdata-ecommerce_remitente      = es_outdata_aux-ecommerce_remitente     .
+***      es_outdata-ecommerce_destinatario   = es_outdata_aux-ecommerce_destinatario  .
+***      es_outdata-ecommerce_texto          = es_outdata_aux-ecommerce_texto         .
+***
+***      es_outdata-tor_id_fu   = es_outdata_aux-tor_id_fu  .
+***      es_outdata-tor_id      = es_outdata_aux-tor_id     .
+***      es_outdata-tor_type    = es_outdata_aux-tor_type   .
+***      es_outdata-tspid       = es_outdata_aux-tspid      .
+***      es_outdata-name1       = es_outdata_aux-name1      .
+****        es_outdata-actual_date = es_outdata_aux-actual_date.
+***      es_outdata-trans_datum = es_outdata_aux-trans_datum.
+***      es_outdata-trans_uzeit = es_outdata_aux-trans_uzeit.
+***
+***      es_outdata-vbelnf = es_outdata_aux-vbelnf.
+***      es_outdata-fkart  = es_outdata_aux-fkart .
+***      es_outdata-fktyp  = es_outdata_aux-fktyp .
+***      es_outdata-vbtypf = es_outdata_aux-vbtypf.
+***      es_outdata-waerk  = es_outdata_aux-waerk .
+***      es_outdata-kalsm  = es_outdata_aux-kalsm .
+***      es_outdata-fkdat  = es_outdata_aux-fkdat .
+***
+***      COLLECT es_outdata INTO ti_outdata_aux.
+***    ENDLOOP.
+***    LOOP AT ti_outdata_aux ASSIGNING <fs_outdata>.
+***      IF <fs_outdata>-kwmeng IS NOT INITIAL.
+***        <fs_outdata>-porcentaje_cumplimiento = ( <fs_outdata>-lfimg / <fs_outdata>-kwmeng ) * 100.
+***        <fs_outdata>-porcentaje_asignacion   = ( <fs_outdata>-cantidad_asignada / <fs_outdata>-kwmeng ) * 100.
+***      ENDIF.
+***
+***      READ TABLE ti_outdata
+***        WITH KEY vbelnp = <fs_outdata>-vbelnp
+***      BINARY SEARCH TRANSPORTING NO FIELDS.
+***      IF sy-subrc EQ 0.
+***        v_index = sy-tabix.
+***        CLEAR es_outdata_nxt.
+***        LOOP AT ti_outdata INTO es_outdata FROM v_index.
+***          IF es_outdata-vbelnp NE <fs_outdata>-vbelnp.
+***            EXIT.
+***          ENDIF.
+***
+****Inicio Adicion18Mar2024 Sebastian Restrepo Villa
+***          IF es_outdata-kurrf GT es_outdata_nxt-kurrf.
+***            es_outdata_nxt-kurrf = es_outdata-kurrf.
+***          ENDIF.
+****Fin Adicion18Mar2024 Sebastian Restrepo Villa
+***
+***          CASE es_outdata-stat_pedido.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-stat_pedido NE icon_green_light.
+***                es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-stat_pedido EQ icon_green_light OR
+***                 es_outdata_nxt-stat_pedido EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-stat_pedido EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_pedido EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_pedido EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-stat_pedido EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_pedido EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_pedido EQ icon_red_light    OR
+***                 es_outdata_nxt-stat_pedido EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***              ENDIF.
+***          ENDCASE.
+***
+***
+***          IF es_outdata-stat_logistico GT es_outdata_nxt-stat_logistico.
+***            es_outdata_nxt-stat_logistico = es_outdata-stat_logistico.
+***          ENDIF.
+***
+***
+***          CASE es_outdata-vl_pedido_vs_vl_factura.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-vl_pedido_vs_vl_factura NE icon_green_light.
+***                es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_green_light OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_green_light  OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_yellow_light OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_green_light  OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_yellow_light OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_red_light    OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***              ENDIF.
+***          ENDCASE.
+***
+***
+***          CASE es_outdata-stat_plano_ola.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-stat_plano_ola NE icon_green_light.
+***                es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-stat_plano_ola EQ icon_green_light OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-stat_plano_ola EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-stat_plano_ola EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_red_light    OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***              ENDIF.
+***          ENDCASE.
+***
+***
+***          CASE es_outdata-stat_envio_asn.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-stat_envio_asn NE icon_green_light.
+***                es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-stat_envio_asn EQ icon_green_light OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-stat_envio_asn EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-stat_envio_asn EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_red_light    OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***              ENDIF.
+***          ENDCASE.
+***
+***          CASE es_outdata-stat_imp_factura.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-stat_imp_factura NE icon_green_light.
+***                es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-stat_imp_factura EQ icon_green_light OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-stat_imp_factura EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-stat_imp_factura EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_red_light    OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***              ENDIF.
+***          ENDCASE.
+***        ENDLOOP.
+***      ENDIF.
+***      <fs_outdata>-stat_pedido               = es_outdata_nxt-stat_pedido            .
+***      <fs_outdata>-stat_logistico            = es_outdata_nxt-stat_logistico         .
+***      <fs_outdata>-vl_pedido_vs_vl_factura   = es_outdata_nxt-vl_pedido_vs_vl_factura.
+***      <fs_outdata>-stat_plano_ola            = es_outdata_nxt-stat_plano_ola         .
+***      <fs_outdata>-stat_envio_asn            = es_outdata_nxt-stat_envio_asn         .
+***      <fs_outdata>-stat_imp_factura          = es_outdata_nxt-stat_imp_factura       .
+***      <fs_outdata>-kurrf                     = es_outdata_nxt-kurrf. "Adicion18Mar2024 Sebastian Restrepo Villa
+***    ENDLOOP.
+***    ti_outdata = ti_outdata_aux.
+******    ENDIF.
+***
+***    CLEAR ti_outdata_aux.
+
+    LOOP AT ti_outdata INTO es_outdata.
+      es_pedidos-status_pedido                      = es_outdata-stat_pedido                   .
+      es_pedidos-status_logistico                   = es_outdata-stat_logistico                .
+      es_pedidos-pedido                             = es_outdata-vbelnp                        .
+      es_pedidos-posicion_pedido                    = es_outdata-posnrp                        .
+      es_pedidos-pedido_cliente                     = es_outdata-bstkd                         .
+      es_pedidos-clase_documento                    = es_outdata-auart                         .
+      es_pedidos-clasificacion                      = es_outdata-zz1_clasificacion_sdh         .
+      es_pedidos-clasificacion_desc                 = es_outdata-desc_clasificacion            .
+      es_pedidos-marca_sd                           = es_outdata-zz1_marca_sdh                 .
+      es_pedidos-tipo_medio_pago                    = es_outdata-zz1_tipomediopago_sdh         .
+      es_pedidos-tipomediopago_desc                 = es_outdata-cmdtx_tipomediopago           .
+      es_pedidos-medio_pago                         = es_outdata-zz1_mediopago_sdh             .
+      es_pedidos-mediopago_desc                     = es_outdata-cmdtx                         .
+      es_pedidos-motivo_bloqueo_entrega             = es_outdata-lifsk                         .
+      es_pedidos-motivo_bloqueo_entrega_desc        = es_outdata-motivo_bloqueo_entrega_desc   .
+      es_pedidos-motivo_bloqueo_factura             = es_outdata-faksk                         .
+      es_pedidos-motivo_bloqueo_factura_desc        = es_outdata-motivo_bloqueo_factura_desc   .
+      es_pedidos-motivo_rechazo                     = es_outdata-abgru                         .
+      es_pedidos-motivo_rechazo_desc                = es_outdata-motivo_rechazo_desc           .
+      es_pedidos-motivo_pedido                      = es_outdata-augru                         .
+      es_pedidos-descripcion_motivo_de_pedido       = es_outdata-desc_motivo_de_pedido_cab     .
+      es_pedidos-motivo_pedido_posicion             = es_outdata-zz1_augru_sdi                 .
+      es_pedidos-descripcion_motivo_pedido_pos      = es_outdata-desc_motivo_de_pedido_pos     .
+      es_pedidos-grupo_compra                       = es_outdata-ekgrp                         .
+*      es_pedidos-descripcion_grupo_compra           = es_outdata-                              .
+      es_pedidos-estado_global_de_procesamiento     = es_outdata-gbstk                         .
+      es_pedidos-cantidad_entregada_parcial         = es_outdata-antlf                         .
+      es_pedidos-indicador_borrado                  = es_outdata-loekz                         .
+*      es_pedidos-posicion_es_estadistica            = es_outdata-                              .
+      es_pedidos-entrega_parcial_posicion           = es_outdata-kztlf                         .
+      es_pedidos-vkorg                              = es_outdata-vkorg                         .
+      es_pedidos-segmento                           = es_outdata-sgt_rcat                      .
+      es_pedidos-vtweg                              = es_outdata-vtweg                         .
+      es_pedidos-werks                              = es_outdata-werks                         .
+      es_pedidos-lgort                              = es_outdata-lgort                         .
+      es_pedidos-centro_receptor                    = es_outdata-werkr                         .
+      es_pedidos-almacen_receptor                   = es_outdata-reslo                         .
+      es_pedidos-lote                               = es_outdata-charg                         .
+      es_pedidos-segmento_necesidad                 = es_outdata-sgt_rcat                      .
+*      es_pedidos-objek                              = es_outdata-                              .
+      es_pedidos-plu                                = es_outdata-kdmat                         .
+      es_pedidos-precio_neto_unitario               = es_outdata-netpr                         .
+      es_pedidos-precio_sugerido                    = es_outdata-precio_sugerido               .
+      es_pedidos-precio_sugerido_mx                 = es_outdata-precio_sugerido_mx            .
+      es_pedidos-precio_cliente                     = es_outdata-precio_cliente                .
+      es_pedidos-precio_sugerido_cliente            = es_outdata-precio_sugerido_cliente       .
+      es_pedidos-costo_interno                      = es_outdata-wavwr                         .
+      es_pedidos-margen_cliente                     = es_outdata-margen_cliente                .
+      es_pedidos-precio_exportacion                 = es_outdata-precio_exportacion            .
+      es_pedidos-valor_neto_pedido                  = es_outdata-netwr_hp                      .
+      es_pedidos-pago_clinete_impuestos             = es_outdata-pago_cliente_impuestos        .
+*      es_pedidos-impuestos                          = es_outdata-sumar(mwsbp_ip)               .
+      es_pedidos-pedido_impuesto_posicion           = es_outdata-mwsbp_ip                      .
+*      es_pedidos-guia_devolucion                    = es_outdata-                              .
+      es_pedidos-moneda                             = es_outdata-waerk_hp                      .
+      es_pedidos-fecha_preferente_entrega           = es_outdata-vdatu                         .
+*      es_pedidos-fecha_confirmada                   = es_outdata-                              .
+      es_pedidos-fecha_creacion_pedido              = es_outdata-erdat                         .
+      es_pedidos-hora_creacion_pedido               = es_outdata-erzet                         .
+      es_pedidos-fecha_liberacion                   = es_outdata-cmfre                         .
+      es_pedidos-fecha_anulacion                    = es_outdata-fsh_candate                   .
+      es_pedidos-knumv                              = es_outdata-knumv                         .
+      es_pedidos-tienda                             = es_outdata-kunmf                         .
+      es_pedidos-nombre_tienda                      = es_outdata-nammf                         .
+      es_pedidos-id_fiscal_tienda                   = es_outdata-nitmf                         .
+      es_pedidos-pais_tienda                        = es_outdata-conmf                         .
+      es_pedidos-telefono_tienda                    = es_outdata-telmf                         .
+      es_pedidos-direccion_tienda                   = es_outdata-strmf                         .
+      es_pedidos-zonatransporte_tienda              = es_outdata-ztrmf                         .
+      es_pedidos-solicitante                        = es_outdata-kunag                         .
+      es_pedidos-nombre_solicitante                 = es_outdata-namag                         .
+      es_pedidos-id_fiscal_solicitante              = es_outdata-nitag                         .
+      es_pedidos-pais_solicitante                   = es_outdata-conag                         .
+      es_pedidos-ciudad_solicitante                 = es_outdata-citag                         .
+      es_pedidos-telefono_solicitante               = es_outdata-telag                         .
+      es_pedidos-direccion_solicitante              = es_outdata-strag                         .
+      es_pedidos-zonatransporte_solicitante         = es_outdata-ztrag                         .
+      es_pedidos-responsable_pago                   = es_outdata-kunrg                         .
+      es_pedidos-nombre_responsable_pago            = es_outdata-namrg                         .
+      es_pedidos-id_fiscal_responsable_pago         = es_outdata-nitrg                         .
+      es_pedidos-pais_responsable_pago              = es_outdata-conrg                         .
+      es_pedidos-ciudad_responsable_pago            = es_outdata-citrg                         .
+      es_pedidos-telefono_responsable_pago          = es_outdata-telrg                         .
+      es_pedidos-direccion_responsable_pago         = es_outdata-strrg                         .
+      es_pedidos-zonatransporte_resp_pago           = es_outdata-ztrrg                         .
+      es_pedidos-destinatario                       = es_outdata-kunwe                         .
+      es_pedidos-nombre_destinatario                = es_outdata-namwe                         .
+      es_pedidos-id_fiscal_destinatario             = es_outdata-nitwe                         .
+      es_pedidos-pais_destinatario                  = es_outdata-conwe                         .
+      es_pedidos-telefono_destinatario              = es_outdata-telwe                         .
+      es_pedidos-direccion_destinatario             = es_outdata-strwe                         .
+      es_pedidos-zonatransporte_destinatario        = es_outdata-ztrwe                         .
+      es_pedidos-correo_electronico                 = es_outdata-emailag                       .
+      es_pedidos-encargado_comercial                = es_outdata-namzv                         .
+      es_pedidos-tipo_posicion                      = es_outdata-pstyv                         .
+      es_pedidos-material_generico                  = es_outdata-satnr                         .
+      es_pedidos-desc_material_generico             = es_outdata-sattx                         .
+      es_pedidos-matnr                              = es_outdata-matnr                         .
+      es_pedidos-maktx                              = es_outdata-arktx                         .
+      es_pedidos-talla                              = es_outdata-talla                         .
+      es_pedidos-descripcion_talla                  = es_outdata-descr_talla                   .
+      es_pedidos-color                              = es_outdata-color                         .
+      es_pedidos-descripcion_color                  = es_outdata-descr_color                   .
+      es_pedidos-ean11                              = es_outdata-ean11                         .
+      es_pedidos-marca                              = es_outdata-zz1_marca_sdh                 .
+      es_pedidos-grupo_de_articulo                  = es_outdata-matkl                         .
+      es_pedidos-unidad_venta                       = es_outdata-vrkme                         .
+      es_pedidos-cantidad_pedida                    = es_outdata-kwmeng                        .
+      es_pedidos-unidad_medida                      = es_outdata-meins                         .
+      es_pedidos-cantidad_confirmada                = es_outdata-kbmeng                        .
+      es_pedidos-valor_neto                         = es_outdata-netwr_ip                      .
+      es_pedidos-porcentaje_cumplimiento            = es_outdata-porcentaje_cumplimiento       .
+      es_pedidos-porcentaje_asignacion              = es_outdata-porcentaje_asignacion         .
+      es_pedidos-inventario_disponible              = es_outdata-inventario_disponible         .
+      es_pedidos-cantidad_asignada                  = es_outdata-cantidad_asignada             .
+      es_pedidos-cantidad_pendiente                 = es_outdata-cantidad_pendiente            .
+      es_pedidos-cantidad_pendiente_nueva           = es_outdata-cantidad_pendiente_nueva      .
+      es_pedidos-material_cliente                   = es_outdata-kdmat                         .
+      es_pedidos-descripcion_mat_cliente            = es_outdata-postx                         .
+      es_pedidos-talla_cliente                      = es_outdata-talla_cli_nom_car             .
+      es_pedidos-descripcion_talla_cliente          = es_outdata-talla_cli_vlr_car             .
+      es_pedidos-color_cliente                      = es_outdata-color_cli_nom_car             .
+      es_pedidos-descripcion_color_cliente          = es_outdata-color_cli_vlr_car             .
+*      es_pedidos-status_cancelado                   = es_outdata-                              .
+      es_pedidos-ecommerce_remitente                = es_outdata-ecommerce_remitente           .
+      es_pedidos-ecommerce_destinatario             = es_outdata-ecommerce_destinatario        .
+      es_pedidos-ecommerce_texto_del_mensaje        = es_outdata-ecommerce_texto               .
+      es_pedidos-ecommerce_empaque_regalo           = es_outdata-ecommerce_empaque_regalo      .
+      es_pedidos-entregas_parciales                 = es_outdata-antlf                         .
+      es_pedidos-entrega                            = es_outdata-vbelne                        .
+      es_pedidos-posicion_entrega                   = es_outdata-posnre                        .
+      es_pedidos-fecha_creacion_entrega             = es_outdata-erdate                        .
+      es_pedidos-clase_entrega                      = es_outdata-lfart                         .
+*      es_pedidos-tipo_documento_entrega             = es_outdata-                              .
+      es_pedidos-cantidad_entrega                   = es_outdata-lfimg                         .
+      es_pedidos-estado_picking                     = es_outdata-kosta                         .
+      es_pedidos-estado_picking_ewm                 = es_outdata-vlstk                         .
+      es_pedidos-estado_movimiento_mercancia        = es_outdata-wbsta                         .
+      es_pedidos-kostk                              = es_outdata-kostk                         .
+      es_pedidos-cantidad_cajas_erp                 = es_outdata-anzpk                         .
+      es_pedidos-uecha                              = es_outdata-uecha                         .
+      es_pedidos-orden_flete                        = es_outdata-tor_id                        .
+      es_pedidos-unidad_flete                       = es_outdata-tor_id_fu                     .
+      es_pedidos-indic_entrega_salida_completa      = es_outdata-eglkz                         .
+*      es_pedidos-status_entrega_final               = es_outdata-                              .
+*      es_pedidos-indicador_entrega_completa         = es_outdata-                              .
+      es_pedidos-status_entrega_completa            = es_outdata-elikz                         .
+      es_pedidos-fu_tm                              = es_outdata-tor_id_fu                     .
+      es_pedidos-zz1_numeroguianueva_dlh            = es_outdata-zz1_numeroguianueva_dlh       .
+      es_pedidos-zz1_tipovinculo_dlh                = es_outdata-zz1_tipovinculo_dlh           .
+      es_pedidos-idoc_fi                            = es_outdata-idoc_fi                       .
+      es_pedidos-documento_fi                       = es_outdata-documento_fi                  .
+      es_pedidos-sociedad_fi                        = es_outdata-sociedad_fi                   .
+      es_pedidos-ejercicio_fi                       = es_outdata-ejercicio_fi                  .
+      es_pedidos-guia_transporte                    = es_outdata-zz1_numeroguia_dlh            .
+*      es_pedidos-caja_ewm                           = es_outdata-                              .
+*      es_pedidos-matnr_embalaje                     = es_outdata-                              .
+      es_pedidos-cantidad_despachada                = es_outdata-cantidad_despachada           .
+      es_pedidos-factura                            = es_outdata-vbelnf                        .
+      es_pedidos-fecha_factura                      = es_outdata-fkdat                         .
+      es_pedidos-valor_factura                      = es_outdata-netwr_hf                      .
+      es_pedidos-cantidad_facturada                 = es_outdata-fkimg                         .
+      es_pedidos-valor_neto_factura                 = es_outdata-netwr_if                      .
+      es_pedidos-total_impuesto_factura             = es_outdata-val_fact_con_impuestos        .
+      es_pedidos-status_vl_pedido_vs_vl_factura     = es_outdata-vl_pedido_vs_vl_factura       .
+      es_pedidos-status_plano_ola                   = es_outdata-stat_plano_ola                .
+      es_pedidos-status_impresion_factura           = es_outdata-stat_imp_factura              .
+      es_pedidos-status_envio_asn                   = es_outdata-stat_envio_asn                .
+      es_pedidos-numero_transporte                  = es_outdata-tor_id                        .
+      es_pedidos-agente_servicio                    = es_outdata-tspid                         .
+      es_pedidos-desc_agente_servicio               = es_outdata-name1                         .
+      es_pedidos-fecha_actual_transporte            = es_outdata-actual_date                   .
+      v_char255 = es_outdata-actual_date.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-fecha_actual_transporte_d.
+      ELSE.
+        IF es_outdata-actual_date IS NOT INITIAL.
+          message = es_outdata-actual_date.
+          CONDENSE message NO-GAPS.
+          es_pedidos-fecha_actual_transporte_d        = message(8)                               .
+        ENDIF.
+      ENDIF.
+      es_pedidos-fecha_fin_transporte               = es_outdata-trans_datum                   .
+      es_pedidos-hora_fin_transporte                = es_outdata-trans_uzeit                   .
+      es_pedidos-status_novedad_transportista       = es_outdata-zz1_statustransportist_dlh    .
+      es_pedidos-desc_sta_novedad_transportista     = es_outdata-desc_sta_novedad_transportista.
+
+      v_char255 = es_outdata-zz1_fechaentregaclient_dlh.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-fecha_entrega_cliente.
+      ELSE.
+        TRY.
+            IF es_outdata-zz1_fechaentregaclient_dlh IS NOT INITIAL.
+              es_pedidos-fecha_entrega_cliente              = es_outdata-zz1_fechaentregaclient_dlh  .
+            ENDIF.
+          CATCH cx_root.
+            CLEAR es_pedidos-fecha_entrega_cliente.
+        ENDTRY.
+      ENDIF.
+      v_char255 = es_outdata-zz1_horaentregacliente_dlh.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-hora_entrega_cliente.
+      ELSE.
+        TRY.
+            IF es_outdata-zz1_horaentregacliente_dlh IS NOT INITIAL.
+              es_pedidos-hora_entrega_cliente               = es_outdata-zz1_horaentregacliente_dlh    .
+            ENDIF.
+          CATCH cx_root.
+            CLEAR es_pedidos-hora_entrega_cliente.
+        ENDTRY.
+      ENDIF.
+      es_pedidos-fecha_contabiliza_recepcion        = es_outdata-budat_1                       .
+      es_pedidos-cantidad_recibida                  = es_outdata-menge                         .
+      es_pedidos-novedad_transportista              = es_outdata-zz1_novedadtransportis_dlh    .
+*      es_pedidos-zzest_carga                        = es_outdata-                              .
+*      es_pedidos-pedido_traslado                    = es_outdata-                              .
+*      es_pedidos-posicion_consolidada               = es_outdata-                              .
+      v_char255 = es_outdata-zz1_fechprivisit_dlh.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-zz1_fechprivisit_dlh.
+      ELSE.
+*        es_pedidos-zz1_fechprivisit_dlh               = es_outdata-zz1_fechprivisit_dlh          .
+        TRY.
+            IF es_outdata-zz1_fechprivisit_dlh IS NOT INITIAL.
+              es_pedidos-zz1_fechprivisit_dlh               = es_outdata-zz1_fechprivisit_dlh    .
+            ENDIF.
+          CATCH cx_root.
+            CLEAR es_pedidos-zz1_fechprivisit_dlh.
+        ENDTRY.
+      ENDIF.
+
+      v_char255 = es_outdata-zz1_horaprivisit_dlh.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-zz1_horaprivisit_dlh.
+      ELSE.
+*        es_pedidos-zz1_horaprivisit_dlh               = es_outdata-zz1_horaprivisit_dlh          .
+        TRY.
+            IF es_outdata-zz1_horaprivisit_dlh IS NOT INITIAL.
+              es_pedidos-zz1_horaprivisit_dlh               = es_outdata-zz1_horaprivisit_dlh    .
+            ENDIF.
+          CATCH cx_root.
+            CLEAR es_pedidos-zz1_horaprivisit_dlh.
+        ENDTRY.
+      ENDIF.
+
+      APPEND es_pedidos TO ti_pedidos.
+
+    ENDLOOP.
+
+    CREATE DATA er_entityset TYPE zclsdapi_monitor_pedidos_mpc=>tt_pedidos.
+*      ASSIGN er_entityset->* TO FIELD-SYMBOL(<fs_ti_pedidos>).
+    ASSIGN er_entityset->* TO <fs_ti_pedidos>.
+
+    <fs_ti_pedidos> =  CORRESPONDING zclsdapi_monitor_pedidos_mpc=>tt_pedidos( ti_pedidos ).
+
+*      DATA(o_log) = zclcxr1002_log_aplicacion=>get_instancia( ).
+*      DATA(ti_log) = o_log->get_log( ).
+
+    IF ti_bapiterturn IS NOT INITIAL.
+      "Retorna Status 400 con mensaje en body
+      me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                          iv_entity_type  = iv_entity_name
+                                                          it_return       = ti_bapiterturn
+                                                          it_key_tab      = it_key_tab ).
+      "Retorna Status 200 con mensaje en header del response
+      o_contenedor_msg = me->mo_context->get_message_container( ).
+*        LOOP AT ti_bapiterturn ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+      LOOP AT ti_bapiterturn INTO es_bapiret2.
+
+        o_contenedor_msg->add_message( iv_msg_type    = es_bapiret2-type
+                                       iv_msg_id      = es_bapiret2-id
+                                       iv_msg_number  = es_bapiret2-number
+                                       iv_msg_text    = es_bapiret2-message
+                                       iv_msg_v1      = es_bapiret2-message_v1
+                                       iv_msg_v2      = es_bapiret2-message_v2
+                                       iv_msg_v3      = es_bapiret2-message_v3
+                                       iv_msg_v4      = es_bapiret2-message_v4
+                                       iv_add_to_response_header = abap_true
+                                     ).
+
+      ENDLOOP.
+    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclsdapi_monitor_ped_dpc_ext DEFINITION
+  PUBLIC
+  INHERITING FROM zclsdapi_monitor_pedidos_dpc
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    METHODS:
+      /iwbep/if_mgw_appl_srv_runtime~get_entityset REDEFINITION.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclsdapi_monitor_ped_dpc_ext IMPLEMENTATION.
+
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~get_entityset.
+
+*-------------------------------------------------------------------------------*
+* Definicion de Objetos
+*-------------------------------------------------------------------------------*
+    DATA:
+          go_sdr1085_2 TYPE REF TO zclsdr1085_2_monitor_pedidos.
+
+*-------------------------------------------------------------------------------*
+* Definicion de Constantes
+*-------------------------------------------------------------------------------*
+    CONSTANTS:
+      gc_zcx01 TYPE symsgid    VALUE 'ZCX01',  ".Clase de Mensajes
+      gc_000   TYPE msgnr      VALUE '000',    ".Mensaje Generico
+*              gc_coma      TYPE c          VALUE ',',      "Coma (,)
+      gc_punto TYPE c          VALUE '.',      "Punto (.)
+*              gc_01        TYPE char2      VALUE '01',
+*              gc_04        TYPE char2      VALUE '04',
+      gc_1     TYPE c          VALUE '1',      "1
+      gc_2     TYPE c          VALUE '2',      "2
+*              gc_3         TYPE i          VALUE '3',      "3
+*              gc_4         TYPE i          VALUE '4',      "4
+      gc_42    TYPE i          VALUE '42',     "42
+*              gc_5         TYPE i          VALUE '5',      "5
+*              gc_6         TYPE i          VALUE '6',      "6
+*              gc_7         TYPE i          VALUE '7',      "7
+      gc_8     TYPE i          VALUE '8',      "8
+*              gc_10        TYPE i          VALUE '10',     "10
+      gc_a     TYPE c          VALUE 'A',      "A
+*              gc_b         TYPE c          VALUE 'B',      "B
+*              gc_c         TYPE c          VALUE 'C',      "C
+*              gc_d         TYPE c          VALUE 'D',      "D
+      gc_e     TYPE c          VALUE 'E',      "E
+*              gc_f         TYPE c          VALUE 'F',      "F
+      gc_i     TYPE c          VALUE 'I',      "I
+      gc_l     TYPE c          VALUE 'L',      "L
+*              gc_m         TYPE vbtyp_n    VALUE 'M',      "M (Factura)
+*              gc_n         TYPE c          VALUE 'N',      "N
+      gc_s     TYPE c          VALUE 'S',      "S
+*              gc_u         TYPE c          VALUE 'U',      "U
+      gc_w     TYPE c          VALUE 'W',      "W
+      gc_x     TYPE c          VALUE 'X',      "X
+*              gc_z         TYPE vbsk-smart VALUE 'Z',
+*              gc_ag        TYPE parvw      VALUE 'AG',     "Interlocutor AG Solicitante
+*              gc_bt        TYPE char2      VALUE 'BT',     "BT
+*              gc_co        TYPE land1      VALUE 'CO',     "CO
+      gc_eq    TYPE char2      VALUE 'EQ'.     "EQ
+
+*&---------------------------------------------------------------------*
+*& Definición de Tipos
+*&---------------------------------------------------------------------*
+    TYPES:
+      BEGIN OF tp_dyn_1000,
+        pedido          TYPE char10,
+        clase_documento TYPE char4,
+        motivo_pedido   TYPE char4,
+*        EBELN           TYPE ekko-EBELN,
+        vbelp           TYPE vbak-vbeln,
+        auart           TYPE vbak-auart,
+        augru           TYPE vbak-augru,
+        vkorg           TYPE vbak-vkorg,
+        vtweg           TYPE vbak-vtweg,
+        spart           TYPE vbak-spart,
+        werks           TYPE vbap-werks,
+        werkr           TYPE ekpo-werks,
+        erdat           TYPE vbak-erdat,
+        vdatu           TYPE vbak-vdatu,
+        bstkd           TYPE vbkd-bstkd, "Orden de Compra
+        repag           TYPE vbak-kunnr, "Responsable de pago
+        encom           TYPE vbak-kunnr, "Encargado comercial
+        ekgrp           TYPE ekko-ekgrp, "Grupo de compra
+        vbele           TYPE likp-vbeln, "Entrega
+        nguia           TYPE likp-zz1_numeroguia_dlh,
+        vbelf           TYPE vbrk-vbeln, "Factura
+        tknum           TYPE /scmtms/d_torrot-tor_id, "Numero Transporte
+        fftp            TYPE vbak-erdat, "Fecha fin Transporte
+      END OF tp_dyn_1000,
+
+      tp_rn_vkorg TYPE RANGE OF tp_dyn_1000-vkorg,
+      tp_rn_vtweg TYPE RANGE OF tp_dyn_1000-vtweg,
+      tp_rn_spart TYPE RANGE OF tp_dyn_1000-spart,
+      tp_rn_werks TYPE RANGE OF tp_dyn_1000-werks,
+      tp_rn_werkr TYPE RANGE OF tp_dyn_1000-werkr,
+      tp_rn_erdat TYPE RANGE OF tp_dyn_1000-erdat,
+      tp_rn_auart TYPE RANGE OF tp_dyn_1000-auart,
+      tp_rn_moped TYPE RANGE OF tp_dyn_1000-augru,
+      tp_rn_vdatu TYPE RANGE OF tp_dyn_1000-vdatu,
+      tp_rn_vbelp TYPE RANGE OF tp_dyn_1000-vbelp,
+      tp_rn_bstkd TYPE RANGE OF tp_dyn_1000-bstkd,
+      tp_rn_repag TYPE RANGE OF tp_dyn_1000-repag,
+      tp_rn_encom TYPE RANGE OF tp_dyn_1000-encom,
+      tp_rn_ekgrp TYPE RANGE OF tp_dyn_1000-ekgrp,
+      tp_rn_vbele TYPE RANGE OF tp_dyn_1000-vbele,
+      tp_rn_nguia TYPE RANGE OF tp_dyn_1000-nguia,
+      tp_rn_vbelf TYPE RANGE OF tp_dyn_1000-vbelf,
+      tp_rn_tknum TYPE RANGE OF tp_dyn_1000-tknum,
+      tp_rn_fftp  TYPE RANGE OF tp_dyn_1000-fftp.
+
+    DATA:
+*          r_fecha_creacion_pedido TYPE tp_r_fecha,
+      o_contenedor_msg TYPE REF TO /iwbep/if_message_container,
+      rc               TYPE sysubrc.
+*-------------------------------------------------------------------------------*
+* Definición de Estructuras
+*-------------------------------------------------------------------------------*
+    DATA:
+      es_bapiret2    TYPE bapiret2,      "Manjeo Log Errores
+      es_dyn_1000    TYPE tp_dyn_1000,   "Criterios de Seleccion
+      es_pedidos     TYPE zesdr1085_1,
+      es_outdata     TYPE go_sdr1085_2->gtp_outtab,
+      es_outdata_aux TYPE go_sdr1085_2->gtp_outtab,
+      es_outdata_nxt TYPE go_sdr1085_2->gtp_outtab.
+
+*-------------------------------------------------------------------------------*
+* Definición de Tablas
+*-------------------------------------------------------------------------------*
+    DATA:
+      ti_bapiterturn  TYPE bapiret2_tab,
+*      ti_pedidos      TYPE zclsdr1085_monitor_pedidos=>gtp_ti_monito_pedidos,
+      ti_pedidos      TYPE STANDARD TABLE OF zesdr1085_1,
+      ti_outdata      TYPE STANDARD TABLE OF zclsdr1085_2_monitor_pedidos=>gtp_outtab,
+      ti_outdata_aux  TYPE STANDARD TABLE OF go_sdr1085_2->gtp_outtab,
+      ti_outdata_cons TYPE STANDARD TABLE OF go_sdr1085_2->gtp_outtab,
+
+      ti_rn_ihrez     TYPE RANGE OF ekko-ihrez,
+      ti_rn_vbeln     TYPE RANGE OF vbak-vbeln,
+      ti_rn_vbeln_aux TYPE RANGE OF vbak-vbeln,
+*      ti_rn_vbele       TYPE RANGE OF likp-vbeln,
+
+      ti_rn_vkorg     TYPE tp_rn_vkorg,
+      ti_rn_vtweg     TYPE tp_rn_vtweg,
+      ti_rn_spart     TYPE tp_rn_spart,
+      ti_rn_werks     TYPE tp_rn_werks,
+      ti_rn_werkr     TYPE tp_rn_werkr,
+      ti_rn_erdat     TYPE tp_rn_erdat,
+      ti_rn_auart     TYPE tp_rn_auart,
+      ti_rn_moped     TYPE tp_rn_moped,
+      ti_rn_vdatu     TYPE tp_rn_vdatu,
+      ti_rn_vbelp     TYPE tp_rn_vbelp,
+      ti_rn_bstkd     TYPE tp_rn_bstkd,
+      ti_rn_repag     TYPE tp_rn_repag,
+      ti_rn_encom     TYPE tp_rn_encom,
+      ti_rn_ekgrp     TYPE tp_rn_ekgrp,
+      ti_rn_vbele     TYPE tp_rn_vbele,
+      ti_rn_nguia     TYPE tp_rn_nguia,
+      ti_rn_vbelf     TYPE tp_rn_vbelf,
+      ti_rn_tknum     TYPE tp_rn_tknum,
+      ti_rn_fftp      TYPE tp_rn_fftp.
+
+*-------------------------------------------------------------------------------*
+* Definicion de variables locales
+*-------------------------------------------------------------------------------*
+    DATA:
+      message     TYPE msgli,  ".Manejo mesaje
+      v_char255   TYPE char255,
+      v_index     TYPE int4,
+      v_index_nxt TYPE int4,
+      v_vdatu     TYPE vbak-vdatu.
+
+*-------------------------------------------------------------------------------*
+* Definicion de Apuntadores de Memoria
+*-------------------------------------------------------------------------------*
+    FIELD-SYMBOLS:
+          <fs_outdata> TYPE go_sdr1085_2->gtp_outtab.
+
+    DATA(o_filtros) = io_tech_request_context->get_filter( ).
+    DATA(ti_filtro_en_rango) = o_filtros->get_filter_select_options( ).
+    DATA(str_filtro) = o_filtros->get_filter_string( ).
+    DATA(o_monitor) = NEW zclsdr1085_monitor_pedidos(  ).
+
+*    IF sy-uname EQ 'SRESTREV'.
+*      CLEAR v_index.
+*      WHILE v_index EQ 0.
+*        v_index = v_index.
+*      ENDWHILE.
+*    ENDIF.
+
+*    ti_rn_erdat           = CORRESPONDING tp_r_fecha( VALUE #( ti_filtro_en_rango[ property = 'FECHA_CREACION_PEDIDO' ]-select_options OPTIONAL ) ).
+    ti_rn_vbelp  = CORRESPONDING tp_rn_vbelp( VALUE #( ti_filtro_en_rango[ property = 'PEDIDO' ]-select_options OPTIONAL ) ).
+    ti_rn_vkorg  = CORRESPONDING tp_rn_vkorg( VALUE #( ti_filtro_en_rango[ property = 'VKORG' ]-select_options OPTIONAL ) ).
+    ti_rn_vtweg  = CORRESPONDING tp_rn_vtweg( VALUE #( ti_filtro_en_rango[ property = 'VTWEG' ]-select_options OPTIONAL ) ).
+    ti_rn_werks  = CORRESPONDING tp_rn_werks( VALUE #( ti_filtro_en_rango[ property = 'WERKS' ]-select_options OPTIONAL ) ).
+    ti_rn_erdat  = CORRESPONDING tp_rn_erdat( VALUE #( ti_filtro_en_rango[ property = 'FECHA_CREACION_PEDIDO' ]-select_options OPTIONAL ) ).
+    ti_rn_auart  = CORRESPONDING tp_rn_auart( VALUE #( ti_filtro_en_rango[ property = 'CLASE_DOCUMENTO' ]-select_options OPTIONAL ) ).
+    ti_rn_bstkd  = CORRESPONDING tp_rn_bstkd( VALUE #( ti_filtro_en_rango[ property = 'PEDIDO_CLIENTE' ]-select_options OPTIONAL ) ).
+    ti_rn_vbele  = CORRESPONDING tp_rn_vbele( VALUE #( ti_filtro_en_rango[ property = 'ENTREGA' ]-select_options OPTIONAL ) ).
+    ti_rn_werkr  = CORRESPONDING tp_rn_werkr( VALUE #( ti_filtro_en_rango[ property = 'CENTRO_RECEPTOR' ]-select_options OPTIONAL ) ).          ".Centro Receptor
+    ti_rn_vdatu  = CORRESPONDING tp_rn_vdatu( VALUE #( ti_filtro_en_rango[ property = 'FECHA_PREFERENTE_ENTREGA' ]-select_options OPTIONAL ) ). ".Fecha Preferencte de entrega
+    ti_rn_repag  = CORRESPONDING tp_rn_repag( VALUE #( ti_filtro_en_rango[ property = 'RESPONSABLE_PAGO' ]-select_options OPTIONAL ) ).         ".Responsable de Pago
+    ti_rn_ekgrp  = CORRESPONDING tp_rn_ekgrp( VALUE #( ti_filtro_en_rango[ property = 'GRUPO_COMPRA' ]-select_options OPTIONAL ) ).             ".Grupo Compra
+
+    LOOP AT ti_rn_vbelp ASSIGNING FIELD-SYMBOL(<fs_rn_vbelp>).
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = <fs_rn_vbelp>-low
+        IMPORTING
+          output = <fs_rn_vbelp>-low.
+
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = <fs_rn_vbelp>-high
+        IMPORTING
+          output = <fs_rn_vbelp>-high.
+    ENDLOOP.
+
+    LOOP AT ti_rn_vbele ASSIGNING FIELD-SYMBOL(<fs_rn_vbele>).
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = <fs_rn_vbele>-low
+        IMPORTING
+          output = <fs_rn_vbele>-low.
+
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = <fs_rn_vbele>-high
+        IMPORTING
+          output = <fs_rn_vbele>-high.
+    ENDLOOP.
+
+    IF 'ant' NE 'ant'.
+      IF ti_filtro_en_rango IS NOT INITIAL.
+        "Trabajar con Fechas/Hora en ODATA
+        "Filtrar Odata con fecha Fecha:/ZSDAPI_MONITOR_PEDIDOS_SRV/PedidosSet?$filter=FechaCreacionPedido eq datetime'2017-04-15T00:00:00'&$format=json
+        "Error: Property 'FechaLiberacion' has invalid value '00000000' : Seleccior la opcion NULLABLE para los campos tipo datetime en el servicio Odata
+        ti_rn_erdat = CORRESPONDING tp_rn_erdat( VALUE #( ti_filtro_en_rango[ property = 'FECHA_CREACION_PEDIDO' ]-select_options OPTIONAL ) ).
+        ti_rn_vdatu = CORRESPONDING tp_rn_vdatu( VALUE #( ti_filtro_en_rango[ property = 'FECHA_PREFERENTE_ENTREGA' ]-select_options OPTIONAL ) ). ".Fecha Preferencte de entrega
+
+        ti_pedidos =
+        o_monitor->generar_monitor_pedidos_venta( EXPORTING
+                                                    i_r_vbelp           = VALUE #( ti_filtro_en_rango[ property = 'PEDIDO' ]-select_options OPTIONAL )
+                                                    i_r_vkorg           = VALUE #( ti_filtro_en_rango[ property = 'VKORG' ]-select_options OPTIONAL )
+                                                    i_r_vtweg           = VALUE #( ti_filtro_en_rango[ property = 'VTWEG' ]-select_options OPTIONAL )
+                                                    i_r_werks           = VALUE #( ti_filtro_en_rango[ property = 'WERKS' ]-select_options OPTIONAL )
+                                                    i_r_erdat           = ti_rn_erdat
+                                                    i_r_auart           = VALUE #( ti_filtro_en_rango[ property = 'CLASE_DOCUMENTO' ]-select_options OPTIONAL )
+                                                    i_r_vdatu           = ti_rn_vdatu                                                                                 ".adicion Jose Miguel Valencia 28.08.2024
+                                                    i_r_bstnk           = VALUE #( ti_filtro_en_rango[ property = 'PEDIDO_CLIENTE' ]-select_options OPTIONAL )
+                                                    i_r_ekgrp           = VALUE #( ti_filtro_en_rango[ property = 'GRUPO_COMPRA' ]-select_options OPTIONAL )          ".adicion Jose Miguel Valencia 28.08.2024
+                                                    i_r_responsable_de_pago = VALUE #( ti_filtro_en_rango[ property = 'RESPONSABLE_PAGO' ]-select_options OPTIONAL )  ".adicion Jose Miguel Valencia 28.08.2024
+                                                    i_r_vbele           = VALUE #( ti_filtro_en_rango[ property = 'ENTREGA' ]-select_options OPTIONAL )
+                                                    i_detalllado        = abap_true
+                                                    i_retornar_mensajes = abap_true
+                                                  IMPORTING
+                                                    e_rc                = rc
+                                                ).
+
+        APPEND LINES OF
+        o_monitor->generar_monitor_pedidotraslado( EXPORTING
+                                                        i_r_vbelp           = VALUE #( ti_filtro_en_rango[ property = 'PEDIDO' ]-select_options OPTIONAL )
+                                                        i_r_vkorg           = VALUE #( ti_filtro_en_rango[ property = 'VKORG' ]-select_options OPTIONAL )
+                                                        i_r_vtweg           = VALUE #( ti_filtro_en_rango[ property = 'VTWEG' ]-select_options OPTIONAL )
+                                                        i_r_werks           = VALUE #( ti_filtro_en_rango[ property = 'WERKS' ]-select_options OPTIONAL )
+                                                        i_r_centro_receptor = VALUE #( ti_filtro_en_rango[ property = 'CENTRO_RECEPTOR' ]-select_options OPTIONAL ) ".adicion Jose Miguel Valencia 28.08.2024
+                                                        i_r_erdat           = ti_rn_erdat
+                                                        i_r_auart           = VALUE #( ti_filtro_en_rango[ property = 'CLASE_DOCUMENTO' ]-select_options OPTIONAL )
+                                                        i_r_vdatu           = ti_rn_vdatu                                                                               ".adicion Jose Miguel Valencia 28.08.2024
+                                                        i_r_bstnk           = VALUE #( ti_filtro_en_rango[ property = 'PEDIDO_CLIENTE' ]-select_options OPTIONAL )
+                                                        i_r_responsable_de_pago = VALUE #( ti_filtro_en_rango[ property = 'RESPONSABLE_PAGO' ]-select_options OPTIONAL ) ".adicion Jose Miguel Valencia 28.08.2024
+                                                        i_r_ekgrp           = VALUE #( ti_filtro_en_rango[ property = 'GRUPO_COMPRA' ]-select_options OPTIONAL )         ".adicion Jose Miguel Valencia 28.08.2024
+                                                        i_r_vbele           = VALUE #( ti_filtro_en_rango[ property = 'ENTREGA' ]-select_options OPTIONAL )
+                                                        i_detalllado        = abap_true
+                                                        i_retornar_mensajes = abap_true
+                                                    IMPORTING
+                                                        e_rc                = rc
+                                           )
+          TO ti_pedidos.
+
+      ENDIF.
+
+      LOOP AT ti_pedidos ASSIGNING FIELD-SYMBOL(<fs_es_pedido>).
+        IF <fs_es_pedido>-fecha_entrega_cliente IS NOT INITIAL AND
+           <fs_es_pedido>-fecha_entrega_cliente(2) NE '20'.
+          CLEAR: <fs_es_pedido>-fecha_entrega_cliente.
+        ENDIF.
+      ENDLOOP.
+
+      CREATE DATA er_entityset TYPE zclsdapi_monitor_pedidos_mpc=>tt_pedidos.
+      ASSIGN er_entityset->* TO FIELD-SYMBOL(<fs_ti_pedidos>).
+
+      <fs_ti_pedidos> =  CORRESPONDING zclsdapi_monitor_pedidos_mpc=>tt_pedidos( ti_pedidos ).
+
+      DATA(o_log) = zclcxr1002_log_aplicacion=>get_instancia( ).
+      DATA(ti_log) = o_log->get_log( ).
+
+      IF ti_log IS NOT INITIAL.
+        "Retorna Status 400 con mensaje en body
+        me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                            iv_entity_type = iv_entity_name
+                                                            it_return = ti_log
+                                                            it_key_tab = it_key_tab ).
+        "Retorna Status 200 con mensaje en header del response
+        o_contenedor_msg = me->mo_context->get_message_container( ).
+        LOOP AT ti_log ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+
+          o_contenedor_msg->add_message( iv_msg_type    = <fs_es_mensaje>-type
+                                         iv_msg_id      = <fs_es_mensaje>-id
+                                         iv_msg_number  = <fs_es_mensaje>-number
+                                         iv_msg_text    = <fs_es_mensaje>-message
+                                         iv_msg_v1      = <fs_es_mensaje>-message_v1
+                                         iv_msg_v2      = <fs_es_mensaje>-message_v2
+                                         iv_msg_v3      = <fs_es_mensaje>-message_v3
+                                         iv_msg_v4      = <fs_es_mensaje>-message_v4
+                                         iv_add_to_response_header = abap_true
+                                       ).
+
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+**********************************************************************
+**********************************************************************
+***NOTA: SI llegan a cambiar esta logica en el programa ZSDR1085_2
+*        debera tomarse y reeemplazarce en este servicio tal cual
+*        con la logica del metodo  me->get_data( de dicho programa
+**********************************************************************
+    ti_rn_ihrez = CORRESPONDING #( ti_rn_bstkd[] MAPPING sign = sign option = option low = low high = high ).
+
+    "Consultar datos a nivel de Transporte (COMUN PARA SD y MM)
+    IF ti_rn_tknum IS NOT INITIAL.
+      SELECT DISTINCT 'I' AS sign, 'EQ' AS option, substring( tr~btd_id, 26, 10 ) AS low
+        FROM /scmtms/d_torrot AS tk
+       INNER JOIN /scmtms/d_tordrf AS tr ON tr~parent_key = tk~db_key
+       WHERE tk~tor_cat  EQ 'TO'
+         AND tk~tor_id   IN @ti_rn_tknum
+        INTO TABLE @ti_rn_vbele.
+    ENDIF.
+
+**********************************************************************
+************************        VENTAS       *************************
+**********************************************************************
+    "Consultar datos a nivel de pedido
+    IF ti_rn_vbelp IS INITIAL.
+      IF ti_rn_erdat IS NOT INITIAL OR
+         ti_rn_vkorg IS NOT INITIAL OR
+         ti_rn_werks IS NOT INITIAL.
+        "Selección en VBAK Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbak
+         INNER JOIN vbap ON vbak~vbeln EQ vbap~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         WHERE vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbap~werks IN @ti_rn_werks
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ELSE.
+      "Selección en VBAK Cabecera de Pedidos
+      SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+        FROM vbak
+       INNER JOIN vbap ON vbak~vbeln EQ vbap~vbeln
+       INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+       WHERE vbak~vbeln IN @ti_rn_vbelp
+         AND vbak~erdat IN @ti_rn_erdat
+         AND vbak~auart IN @ti_rn_auart
+         AND vbak~vkorg IN @ti_rn_vkorg
+         AND vbak~spart IN @ti_rn_spart
+         AND vbak~vdatu IN @ti_rn_vdatu
+         AND vbak~augru IN @ti_rn_moped
+         AND vbpa~parvw EQ 'RG'
+         AND vbpa~kunnr IN @ti_rn_repag
+         AND vbap~werks IN @ti_rn_werks
+        INTO TABLE @ti_rn_vbeln.
+    ENDIF.
+
+    "Consultar datos a nivel de OC
+    IF ti_rn_bstkd IS NOT INITIAL.
+      SORT ti_rn_vbeln BY low.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING low.
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        "Selección en VBAK Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbkd
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ vbkd~vbeln
+         INNER JOIN vbak ON vbak~vbeln EQ vb~low
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         WHERE vbkd~bstkd IN @ti_rn_bstkd
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        "Selección en VBAK Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbkd
+         INNER JOIN vbak ON vbak~vbeln EQ vbkd~vbeln
+         INNER JOIN vbap ON vbap~vbeln EQ vbkd~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         WHERE vbkd~bstkd IN @ti_rn_bstkd
+           AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    "Consultar datos a nivel de Entrega
+    IF ti_rn_vbele IS NOT INITIAL    OR
+       ti_rn_vbele IS NOT INITIAL OR
+       ti_rn_nguia IS NOT INITIAL.
+      SORT ti_rn_vbeln BY low.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING low.
+
+      APPEND LINES OF ti_rn_vbele TO ti_rn_vbele.
+      SORT ti_rn_vbele.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbele COMPARING ALL FIELDS.
+
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM likp
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+*         INNER JOIN likp ON lips~vbeln EQ likp~vbeln
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ lips~vgbel
+         INNER JOIN vbak ON vbak~vbeln EQ vb~low
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         INNER JOIN vbkd ON vbkd~vbeln EQ vbak~vbeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+           AND vbkd~bstkd IN @ti_rn_bstkd
+*           AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM likp
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN vbak ON vbak~vbeln EQ lips~vgbel
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         INNER JOIN vbkd ON vbkd~vbeln EQ vbak~vbeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+           AND vbkd~bstkd IN @ti_rn_bstkd
+           AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    "Consultar datos a nivel de Factura
+    IF ti_rn_vbelf IS NOT INITIAL.
+      SORT ti_rn_vbeln BY low.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING low.
+
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbrk
+         INNER JOIN vbrp ON vbrp~vbeln EQ vbrk~vbeln
+         INNER JOIN likp ON likp~vbeln EQ vbrp~vgbel
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ vbrp~aubel
+         INNER JOIN vbak ON vbak~vbeln EQ vb~low
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         INNER JOIN vbkd ON vbkd~vbeln EQ vbak~vbeln
+         WHERE vbrk~vbeln IN @ti_rn_vbelf
+           AND likp~vbeln IN @ti_rn_vbele
+           AND vbkd~bstkd IN @ti_rn_bstkd
+*         AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, vbak~vbeln AS low
+          FROM vbrk
+         INNER JOIN vbrp ON vbrp~vbeln EQ vbrk~vbeln
+         INNER JOIN likp ON likp~vbeln EQ vbrp~vgbel
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN vbak ON vbak~vbeln EQ vbrp~aubel
+         INNER JOIN vbap ON vbap~vbeln EQ vbak~vbeln
+         INNER JOIN vbpa ON vbak~vbeln EQ vbpa~vbeln
+         INNER JOIN vbkd ON vbkd~vbeln EQ vbak~vbeln
+         WHERE vbrk~vbeln IN @ti_rn_vbelf
+           AND likp~vbeln IN @ti_rn_vbele
+           AND vbkd~bstkd IN @ti_rn_bstkd
+           AND vbak~vbeln IN @ti_rn_vbeln
+           AND vbak~erdat IN @ti_rn_erdat
+           AND vbak~auart IN @ti_rn_auart
+           AND vbak~vkorg IN @ti_rn_vkorg
+           AND vbak~spart IN @ti_rn_spart
+           AND vbak~vdatu IN @ti_rn_vdatu
+*           AND vbak~kunnr IN @ti_rn_repag
+           AND vbak~augru IN @ti_rn_moped
+           AND vbpa~parvw EQ 'RG'
+           AND vbpa~kunnr IN @ti_rn_repag
+           AND vbap~werks IN @ti_rn_werks
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+**********************************************************************
+************************      TRASLADOS      *************************
+**********************************************************************
+    ti_rn_vbeln_aux = ti_rn_vbeln.
+    "Consultar datos a nivel de pedido traslado
+    IF ti_rn_vbelp IS INITIAL.
+      IF ti_rn_vkorg IS NOT INITIAL OR
+         ti_rn_vtweg IS NOT INITIAL OR
+         ti_rn_spart IS NOT INITIAL .
+        "Selección en EKKO Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM ekko
+         INNER JOIN ekpv ON ekko~ebeln EQ ekpv~ebeln
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_ihrez
+           AND ekpv~vkorg IN @ti_rn_vkorg
+           AND ekpv~vtweg IN @ti_rn_vtweg
+           AND ekpv~spart IN @ti_rn_spart
+           AND ekpo~werks IN @ti_rn_werkr
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        "Selección en EKKO Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM ekko
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_ihrez
+           AND ekpo~werks IN @ti_rn_werkr
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ELSE.
+      IF ti_rn_vkorg IS NOT INITIAL OR
+         ti_rn_vtweg IS NOT INITIAL OR
+         ti_rn_spart IS NOT INITIAL .
+        "Selección en EKKO Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM ekko
+         INNER JOIN ekpv ON ekko~ebeln EQ ekpv~ebeln
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE ekko~ebeln IN @ti_rn_vbelp
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_ihrez
+           AND ekpv~vkorg IN @ti_rn_vkorg
+           AND ekpv~vtweg IN @ti_rn_vtweg
+           AND ekpv~spart IN @ti_rn_spart
+           AND ekpo~werks IN @ti_rn_werkr
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        "Selección en EKKO Cabecera de Pedidos
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM ekko
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE ekko~ebeln IN @ti_rn_vbelp
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_ihrez
+           AND ekpo~werks IN @ti_rn_werkr
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    "Consultar datos a nivel de Entrega
+    IF ti_rn_vbele IS NOT INITIAL    OR
+       ti_rn_vbele IS NOT INITIAL OR
+       ti_rn_nguia    IS NOT INITIAL.
+      APPEND LINES OF ti_rn_vbele TO ti_rn_vbele.
+      SORT ti_rn_vbele.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbele COMPARING ALL FIELDS.
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM lips
+         INNER JOIN likp ON likp~vbeln EQ lips~vbeln
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ lips~vgbel
+         INNER JOIN ekko ON ekko~ebeln EQ vb~low
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+*         AND ekko~ebeln IN @ti_rn_vbeln
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_bstkd
+           AND ekpo~werks IN @ti_rn_werkr
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM lips
+         INNER JOIN likp ON likp~vbeln EQ lips~vbeln
+         INNER JOIN ekko ON ekko~ebeln EQ lips~vgbel
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+           AND ekko~ebeln IN @ti_rn_vbeln
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_bstkd
+           AND ekpo~werks IN @ti_rn_werkr
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    "Consultar datos a nivel de Factura
+    IF ti_rn_vbelf IS NOT INITIAL.
+      SORT ti_rn_vbeln BY low.
+      DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING low.
+      "NOTA: Se debe condicionar de esta forma porque sino saca DUMP DBSQL_STMNT_TOO_LARGE  CX_SY_OPEN_SQL_DB
+      IF lines( ti_rn_vbeln ) GT 6000.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM vbrk
+         INNER JOIN vbrp ON vbrp~vbeln EQ vbrk~vbeln
+         INNER JOIN likp ON likp~vbeln EQ vbrp~vgbel
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN @ti_rn_vbeln AS vb ON vb~low EQ lips~vgbel
+         INNER JOIN ekko ON ekko~ebeln EQ vb~low
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+*         AND ekko~ebeln IN @ti_rn_vbeln
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_bstkd
+           AND ekpo~werks IN @ti_rn_werkr
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ELSE.
+        SELECT DISTINCT 'I' AS sign, 'EQ' AS option, ekko~ebeln AS low
+          FROM vbrk
+         INNER JOIN vbrp ON vbrp~vbeln EQ vbrk~vbeln
+         INNER JOIN likp ON likp~vbeln EQ vbrp~vgbel
+         INNER JOIN lips ON lips~vbeln EQ likp~vbeln
+         INNER JOIN ekko ON ekko~ebeln EQ lips~vgbel
+         INNER JOIN ekpo ON ekko~ebeln EQ ekpo~ebeln
+         WHERE likp~vbeln IN @ti_rn_vbele
+           AND ekko~ebeln IN @ti_rn_vbeln
+           AND ekko~aedat IN @ti_rn_erdat
+           AND ekko~reswk IN @ti_rn_werks
+           AND ekko~bsart IN @ti_rn_auart
+           AND ekko~ekgrp IN @ti_rn_ekgrp
+           AND ekko~ihrez IN @ti_rn_bstkd
+           AND ekpo~werks IN @ti_rn_werkr
+           AND likp~zz1_numeroguia_dlh IN @ti_rn_nguia
+          INTO TABLE @ti_rn_vbeln.
+      ENDIF.
+    ENDIF.
+
+    IF ti_rn_vbeln_aux IS NOT INITIAL.
+      APPEND LINES OF ti_rn_vbeln_aux TO ti_rn_vbeln.
+    ENDIF.
+    SORT ti_rn_vbeln.
+    DELETE ADJACENT DUPLICATES FROM ti_rn_vbeln COMPARING ALL FIELDS.
+
+    IF ti_rn_vbeln IS INITIAL.
+      CLEAR es_bapiret2.
+      "No se encontraron datos con los criterios de búsqueda
+      MESSAGE e008(zcx01) INTO message.
+      es_bapiret2-type        = gc_e.          ".Tipo mensaje: S Success, E Error, W Warning, I Info A Abort
+      es_bapiret2-id          = gc_zcx01.      ".Clase de mensajes
+      es_bapiret2-number      = gc_8.         ".Número de mensaje
+      es_bapiret2-message     = message.      ".Texto de mensaje.
+*    es_bapiret2-message_v1  = es_likp-vbeln.  ".Variable de mensaje
+      ".Adicionar Registro al Log
+      APPEND es_bapiret2 TO ti_bapiterturn.
+      "Retorna Status 400 con mensaje en body
+      me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                          iv_entity_type  = iv_entity_name
+                                                          it_return       = ti_bapiterturn
+                                                          it_key_tab      = it_key_tab ).
+      "Retorna Status 200 con mensaje en header del response
+      o_contenedor_msg = me->mo_context->get_message_container( ).
+*        LOOP AT ti_bapiterturn ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+      LOOP AT ti_bapiterturn INTO es_bapiret2.
+
+        o_contenedor_msg->add_message( iv_msg_type    = es_bapiret2-type
+                                       iv_msg_id      = es_bapiret2-id
+                                       iv_msg_number  = es_bapiret2-number
+                                       iv_msg_text    = es_bapiret2-message
+                                       iv_msg_v1      = es_bapiret2-message_v1
+                                       iv_msg_v2      = es_bapiret2-message_v2
+                                       iv_msg_v3      = es_bapiret2-message_v3
+                                       iv_msg_v4      = es_bapiret2-message_v4
+                                       iv_add_to_response_header = abap_true
+                                     ).
+
+      ENDLOOP.
+      RETURN.
+    ENDIF.
+
+    CREATE OBJECT go_sdr1085_2.
+    CALL METHOD go_sdr1085_2->get_data
+      EXPORTING
+        i_ti_vbeln = ti_rn_vbeln.
+
+    IF go_sdr1085_2->gti_vbap IS INITIAL AND
+       go_sdr1085_2->gti_ekpo IS INITIAL.
+      CLEAR es_bapiret2.
+      "No se encontraron datos con los criterios de búsqueda
+      MESSAGE e008(zcx01) INTO message.
+      es_bapiret2-type        = gc_e.          ".Tipo mensaje: S Success, E Error, W Warning, I Info A Abort
+      es_bapiret2-id          = gc_zcx01.      ".Clase de mensajes
+      es_bapiret2-number      = gc_8.         ".Número de mensaje
+      es_bapiret2-message     = message.      ".Texto de mensaje.
+*    es_bapiret2-message_v1  = es_likp-vbeln.  ".Variable de mensaje
+      ".Adicionar Registro al Log
+      APPEND es_bapiret2 TO ti_bapiterturn.
+    ENDIF.
+
+
+    CALL METHOD go_sdr1085_2->set_data
+      CHANGING
+        c_ti_outtab = ti_outdata.
+
+*    CLEAR go_sdr1085_2. "Limpiar datos para liberar memoria
+
+    LOOP AT ti_outdata INTO es_outdata.
+
+***      IF pa_mtftl IS NOT INITIAL. "Excluir Material Flete
+      IF go_sdr1085_2->ges_param_app-ti_rn_ped_matflt IS NOT INITIAL AND
+         es_outdata-pstyv IN go_sdr1085_2->ges_param_app-ti_rn_ped_matflt.
+        CONTINUE.
+      ENDIF.
+***      ENDIF.
+
+***      IF pa_ppent IS NOT INITIAL."Pedidos pendientes
+***        IF es_outdata-gbstk EQ go_sdr1085_2->gc_c.
+***          CONTINUE.
+***        ENDIF.
+***      ENDIF.
+
+***      IF pa_unest IS NOT INITIAL."Unidad de Medida Estadística
+***        CALL METHOD set_um_estatica
+***          CHANGING
+***            c_es_outtab = es_outdata.
+***      ENDIF.
+
+      "Clase Pedido
+      IF ti_rn_auart[] IS NOT INITIAL AND
+         es_outdata-auart NOT IN ti_rn_auart.
+        CONTINUE.
+      ENDIF.
+
+      "Referencia cliente
+      IF ti_rn_bstkd[] IS NOT INITIAL AND
+         es_outdata-bstkd NOT IN ti_rn_bstkd.
+        CONTINUE.
+      ENDIF.
+      "Grupo de compras
+      IF ti_rn_ekgrp[] IS NOT INITIAL AND
+         es_outdata-ekgrp NOT IN ti_rn_ekgrp.
+        CONTINUE.
+      ENDIF.
+      "Encargado Comercial
+      IF ti_rn_encom[] IS NOT INITIAL AND
+         es_outdata-kunzv NOT IN ti_rn_encom.
+        CONTINUE.
+      ENDIF.
+      "Creado el
+      IF ti_rn_erdat[] IS NOT INITIAL AND
+         es_outdata-erdat NOT IN ti_rn_erdat.
+        CONTINUE.
+      ENDIF.
+      "Fecha fin Transporte
+      IF ti_rn_fftp[] IS NOT INITIAL AND
+         es_outdata-actual_date NOT IN ti_rn_fftp.
+        CONTINUE.
+      ENDIF.
+      "Motivo Pedido
+      IF ti_rn_moped[] IS NOT INITIAL AND
+         es_outdata-augru NOT IN ti_rn_moped.
+        CONTINUE.
+      ENDIF.
+      "Número Guía#
+      IF ti_rn_nguia[] IS NOT INITIAL AND
+         es_outdata-zz1_numeroguia_dlh NOT IN ti_rn_nguia.
+        CONTINUE.
+      ENDIF.
+      "Responsable de Pago
+      IF ti_rn_repag[] IS NOT INITIAL AND
+         es_outdata-kunrg NOT IN ti_rn_repag.
+        CONTINUE.
+      ENDIF.
+      "Sector
+      IF ti_rn_spart[] IS NOT INITIAL AND
+         es_outdata-spart NOT IN ti_rn_spart.
+        CONTINUE.
+      ENDIF.
+      "Documento Transporte
+      IF ti_rn_tknum[] IS NOT INITIAL AND
+         es_outdata-tor_id NOT IN ti_rn_tknum.
+        CONTINUE.
+      ENDIF.
+      "Entrega
+      IF ti_rn_vbele[] IS NOT INITIAL AND
+         es_outdata-vbelne NOT IN ti_rn_vbele.
+        CONTINUE.
+      ENDIF.
+      "Doc.facturación
+      IF ti_rn_vbelf[] IS NOT INITIAL AND
+         es_outdata-vbelnf NOT IN ti_rn_vbelf.
+        CONTINUE.
+      ENDIF.
+      "Pedido
+      IF ti_rn_vbelp[] IS NOT INITIAL AND
+         es_outdata-vbelnp NOT IN ti_rn_vbelp.
+        CONTINUE.
+      ENDIF.
+      "Fe.prefer.entrega
+      IF ti_rn_vdatu[] IS NOT INITIAL AND
+         es_outdata-vdatu NOT IN ti_rn_vdatu.
+        CONTINUE.
+      ENDIF.
+      "Organización ventas
+      IF ti_rn_vkorg[] IS NOT INITIAL AND
+         es_outdata-vkorg NOT IN ti_rn_vkorg.
+        CONTINUE.
+      ENDIF.
+      "Canal distribución
+      IF ti_rn_vtweg[] IS NOT INITIAL AND
+         es_outdata-vtweg NOT IN ti_rn_vtweg.
+        CONTINUE.
+      ENDIF.
+      "Centro Receptor
+      IF ti_rn_werkr[] IS NOT INITIAL AND
+         es_outdata-werkr NOT IN ti_rn_werkr.
+        CONTINUE.
+      ENDIF.
+      "Centro
+      IF ti_rn_werks[] IS NOT INITIAL AND
+         es_outdata-werks NOT IN ti_rn_werks.
+        CONTINUE.
+      ENDIF.
+      APPEND es_outdata TO ti_outdata_aux.
+
+    ENDLOOP.
+    ti_outdata = ti_outdata_aux.
+    CLEAR ti_outdata_aux.
+
+***    "Si es consolidado
+***    IF pa_cons IS INITIAL.
+***    ELSE.
+****      SORT gti_outdata BY vbelnp posnrp.
+****      SORT gti_outdata BY vbelnp posnrp vbelne DESCENDING vbelnf DESCENDING.
+***    SORT ti_outdata BY vbelnp vbelne DESCENDING vbelnf DESCENDING tor_id DESCENDING .
+****      LOOP AT ti_outdata_aux ASSIGNING <fs_outdata>.
+***    LOOP AT ti_outdata INTO es_outdata.
+***      v_index = sy-tabix + 1.
+****        CLEAR es_outdata_nxt.
+***      IF sy-tabix EQ 1.
+***        es_outdata_aux  = es_outdata.
+***        es_outdata_aux-vdatu = '99991231'.
+***        v_vdatu = '99991231'.
+***
+***        READ TABLE ti_outdata
+***          WITH KEY vbelnp = es_outdata-vbelnp
+***          BINARY SEARCH TRANSPORTING NO FIELDS.
+***        IF sy-subrc EQ 0.
+***          v_index_nxt = sy-tabix.
+***          LOOP AT ti_outdata INTO es_outdata_nxt FROM v_index_nxt.
+***            IF es_outdata_nxt-vbelnp NE es_outdata-vbelnp.
+***              "Si todas las posiciones tenian marca de borrado, colocar la menor fecha
+***              IF es_outdata_aux-vdatu = '99991231'.
+***                es_outdata_aux-vdatu = v_vdatu.
+***              ENDIF.
+***              EXIT.
+***            ENDIF.
+***            IF es_outdata_nxt-loekz IS INITIAL.
+***              CLEAR es_outdata_aux-loekz.
+***            ENDIF.
+***            IF es_outdata_nxt-kztlf IS INITIAL.
+***              CLEAR es_outdata_aux-kztlf.
+***            ENDIF.
+***            IF es_outdata_nxt-eglkz IS INITIAL.
+***              CLEAR es_outdata_aux-eglkz.
+***            ENDIF.
+***            IF es_outdata_nxt-elikz IS INITIAL.
+***              CLEAR es_outdata_aux-elikz.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-budat_1 GE es_outdata_aux-budat_1.
+***              es_outdata_aux-budat_1 = es_outdata_nxt-budat_1.
+***            ENDIF.
+***            IF es_outdata_nxt-budat_6 GE es_outdata_aux-budat_6.
+***              es_outdata_aux-budat_6 = es_outdata_nxt-budat_6.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-erdat_i LT es_outdata_aux-erdat_i.
+***              es_outdata_aux-erdat_i = es_outdata_nxt-erdat_i.
+***              es_outdata_aux-ernam_i = es_outdata_nxt-ernam_i.
+***              es_outdata_aux-erzet   = es_outdata_nxt-erzet.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-vdatu LT es_outdata_aux-vdatu.
+***              IF es_outdata_nxt-loekz IS INITIAL.
+***                es_outdata_aux-vdatu = es_outdata_nxt-vdatu.
+***              ENDIF.
+***            ENDIF.
+***            IF es_outdata_nxt-vdatu LT v_vdatu.
+***              v_vdatu = es_outdata_nxt-vdatu.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-reslo IS NOT INITIAL.
+***              es_outdata_aux-reslo = es_outdata_nxt-reslo.
+***            ENDIF.
+***
+***            IF es_outdata_nxt-berid IS NOT INITIAL.
+***              es_outdata_aux-berid = es_outdata_nxt-berid.
+***            ENDIF.
+***
+****              IF es_outdata_nxt-werks ne es_outdata_aux-werks.
+****                CLEAR es_outdata_aux-werks.
+****              ENDIF.
+***          ENDLOOP.
+***          "Si todas las posiciones tenian marca de borrado, colocar la menor fecha
+***          IF es_outdata_aux-vdatu = '99991231'.
+***            es_outdata_aux-vdatu = v_vdatu.
+***          ENDIF.
+***        ENDIF.
+***
+***      ELSE.
+****          IF v_index LE lines( gti_outdata ).
+****            READ TABLE gti_outdata
+****                  INTO es_outdata_nxt
+****                 INDEX v_index.
+****          ENDIF.
+***        IF es_outdata-vbelnp NE es_outdata_aux-vbelnp.
+***          es_outdata_aux  = es_outdata.
+***          es_outdata_aux-vdatu = '99991231'.
+***          v_vdatu = '99991231'.
+***
+****          CLEAR:
+****                <fs_outdata>-vbelne                     ,
+****                <fs_outdata>-vbelnf                     .
+***
+***          READ TABLE ti_outdata
+***            WITH KEY vbelnp = es_outdata-vbelnp
+***            BINARY SEARCH TRANSPORTING NO FIELDS.
+***          IF sy-subrc EQ 0.
+***            v_index_nxt = sy-tabix.
+***            LOOP AT ti_outdata INTO es_outdata_nxt FROM v_index_nxt.
+***              IF es_outdata_nxt-vbelnp NE es_outdata-vbelnp.
+***                "Si todas las posiciones tenian marca de borrado, colocar la menor fecha
+***                IF es_outdata_aux-vdatu = '99991231'.
+***                  es_outdata_aux-vdatu = v_vdatu.
+***                ENDIF.
+***                EXIT.
+***              ENDIF.
+***              IF es_outdata_nxt-loekz IS INITIAL.
+***                CLEAR es_outdata_aux-loekz.
+***              ENDIF.
+***              IF es_outdata_nxt-kztlf IS INITIAL.
+***                CLEAR es_outdata_aux-kztlf.
+***              ENDIF.
+***              IF es_outdata_nxt-eglkz IS INITIAL.
+***                CLEAR es_outdata_aux-eglkz.
+***              ENDIF.
+***              IF es_outdata_nxt-elikz IS INITIAL.
+***                CLEAR es_outdata_aux-elikz.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-budat_1 GE es_outdata_aux-budat_1.
+***                es_outdata_aux-budat_1 = es_outdata_nxt-budat_1.
+***              ENDIF.
+***              IF es_outdata_nxt-budat_6 GE es_outdata_aux-budat_6.
+***                es_outdata_aux-budat_6 = es_outdata_nxt-budat_6.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-erdat_i LT es_outdata_aux-erdat_i.
+***                es_outdata_aux-erdat_i  = es_outdata_nxt-erdat_i.
+***                es_outdata_aux-erzet    = es_outdata_nxt-erzet.
+***                es_outdata_aux-ernam_i  = es_outdata_nxt-ernam_i.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-vdatu LT es_outdata_aux-vdatu.
+***                IF es_outdata_nxt-loekz IS INITIAL.
+***                  es_outdata_aux-vdatu = es_outdata_nxt-vdatu.
+***                ENDIF.
+***              ENDIF.
+***              IF es_outdata_nxt-vdatu LT v_vdatu.
+***                v_vdatu = es_outdata_nxt-vdatu.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-reslo IS NOT INITIAL.
+***                es_outdata_aux-reslo = es_outdata_nxt-reslo.
+***              ENDIF.
+***
+***              IF es_outdata_nxt-berid IS NOT INITIAL.
+***                es_outdata_aux-berid = es_outdata_nxt-berid.
+***              ENDIF.
+***
+***            ENDLOOP.
+***            "Si todas las posiciones tenian marca de borrado, colocar la menor fecha
+***            IF es_outdata_aux-vdatu = '99991231'.
+***              es_outdata_aux-vdatu = v_vdatu.
+***            ENDIF.
+***          ENDIF.
+***
+***        ENDIF.
+***      ENDIF.
+***
+***      CLEAR:
+***            es_outdata-stat_pedido             ,
+***            es_outdata-stat_logistico          ,
+***            es_outdata-vl_pedido_vs_vl_factura ,
+***            es_outdata-stat_plano_ola          ,
+***            es_outdata-stat_envio_asn          ,
+***            es_outdata-stat_imp_factura        ,
+***
+***            es_outdata-ecommerce_empaque_regalo,
+***            es_outdata-ecommerce_remitente     ,
+***            es_outdata-ecommerce_destinatario  ,
+***            es_outdata-ecommerce_texto         ,
+***
+***            es_outdata-zz1_marca_sdh              ,
+***            es_outdata-augru                      ,
+***            es_outdata-desc_motivo_de_pedido_cab  ,
+***            es_outdata-kurrf                      , "Adicion18Mar2024 Sebastian Restrepo Villa
+***
+***            es_outdata-posnrp               ,
+***            es_outdata-loekz                ,
+***            es_outdata-satnr                ,
+***            es_outdata-sattx                ,
+***            es_outdata-ean11                ,
+***            es_outdata-matnr                ,
+***            es_outdata-charg                ,
+***            es_outdata-matkl                ,
+***            es_outdata-arktx                ,
+***            es_outdata-berid                ,
+***
+***            es_outdata-color_atinn          ,
+***            es_outdata-color                ,
+***            es_outdata-descr_color          ,
+***            es_outdata-talla_atinn          ,
+***            es_outdata-talla                ,
+***            es_outdata-descr_talla          ,
+***
+***            es_outdata-color_cli_nom_car    ,
+***            es_outdata-color_cli_vlr_car    ,
+***            es_outdata-color_cli_car        ,
+***            es_outdata-color_cli_descr_car  ,
+***            es_outdata-talla_cli_nom_car    ,
+***            es_outdata-talla_cli_vlr_car    ,
+***            es_outdata-talla_cli_car        ,
+***            es_outdata-talla_cli_descr_car  ,
+***
+***            es_outdata-kdmat                ,
+***            es_outdata-pstyv                ,
+***            es_outdata-lfrel                ,
+***            es_outdata-fkrel                .
+***
+***      IF es_outdata-uepos IS NOT INITIAL.
+***        CLEAR: es_outdata-kwmeng,
+***               es_outdata-kbmeng.
+***
+***        CLEAR: es_outdata-cantidad_pendiente,
+***               es_outdata-cantidad_pendiente_nueva.
+***      ENDIF.
+***
+***      CLEAR:
+***            es_outdata-uepos                ,
+****                    es_outdata-grpos                ,
+***            es_outdata-abgru                ,
+***            es_outdata-motivo_rechazo_desc  ,
+****      *                c_es_outtab-prodh                ,
+***            es_outdata-meins                ,
+****      *                c_es_outtab-faksp                ,
+****                      c_es_outtab-netwr_ip             ,
+****                      c_es_outtab-waerk_ip             ,
+***            es_outdata-antlf                ,
+***            es_outdata-kztlf                ,
+****                      c_es_outtab-kwmeng               ,
+****                      c_es_outtab-kbmeng               ,
+***            es_outdata-vrkme                ,
+***
+****                    es_outdata-inventario_disponible  ,
+****                      c_es_outtab-porcentaje_cumplimiento,
+****                      c_es_outtab-cantidad_asignada      ,
+****                      c_es_outtab-porcentaje_asignacion  ,
+***
+***            es_outdata-brgew                ,
+***            es_outdata-ntgew                ,
+***            es_outdata-gewei                ,
+***            es_outdata-volum                ,
+***            es_outdata-voleh                ,
+****                      c_es_outtab-vbelv                ,
+****                      c_es_outtab-posnv                ,
+****                      c_es_outtab-vgbel                ,
+****                      c_es_outtab-vgpos                ,
+***            es_outdata-lprio                ,
+****                    es_outdata-werks                ,
+****                    es_outdata-werkr                ,
+***            es_outdata-reslo                ,
+***            es_outdata-lgort                ,
+***            es_outdata-vstel                ,
+***            es_outdata-route                ,
+***            es_outdata-erdat_i              ,
+***            es_outdata-ernam_i              ,
+***            es_outdata-erzet                ,
+****                      c_es_outtab-netpr                ,
+****      *                c_es_outtab-wavwr                ,
+****                      c_es_outtab-kzwi1                ,
+***            es_outdata-upmat                ,
+***            es_outdata-berid                ,
+****                      c_es_outtab-mwsbp_ip             ,
+***
+***            es_outdata-precio_sugerido         ,
+***            es_outdata-precio_sugerido_mx      ,
+***            es_outdata-precio_cliente          ,
+***            es_outdata-precio_sugerido_cliente ,
+***            es_outdata-margen_cliente          ,
+****                    c_es_outtab-precio_exportacion      ,
+***
+****                    es_outdata-zz1_infoadicional_sdi,
+***            es_outdata-zz1_diasiniva_sdi    ,
+****                      c_es_outtab-zz1_symphony_v_sdi   ,
+***            es_outdata-zz1_augru_sdi        ,
+****                    es_outdata-zz1_fesalfabric_sdi  ,
+***            es_outdata-zz1_symphony_c_sdi   ,
+****                      c_es_outtab-vkorg_ana            ,
+****                      c_es_outtab-vtweg_ana            ,
+****                      c_es_outtab-kunnr_ana            ,
+***
+***            es_outdata-sgt_rcat             ,
+***            es_outdata-eglkz                ,
+***            es_outdata-elikz                ,
+***
+****                      c_es_outtab-cantidad_asignada    ,
+***
+****                      c_es_outtab-wamng                .
+***
+****            WHEN 'EC'.
+****              CLEAR:
+****                      es_outdata-vbelne                     ,
+***            es_outdata-lfart                      ,
+****                    es_outdata-anzpk                      ,
+****                      c_es_outtab-vtwiv                      ,
+***            es_outdata-vlstk                      ,
+***            es_outdata-kostk                      ,
+***            es_outdata-zz1_fechprivisit_dlh       ,
+***            es_outdata-zz1_numeroguianueva_dlh    ,
+***            es_outdata-zz1_numeroguia_dlh         ,
+***            es_outdata-zz1_statustransportist_dlh ,
+***            es_outdata-zz1_fechaentregaclient_dlh ,
+***            es_outdata-zz1_horaprivisit_dlh       ,
+***            es_outdata-zz1_novedadtransportis_dlh ,
+***            es_outdata-zz1_tipovinculo_dlh        ,
+***            es_outdata-zz1_horaentregacliente_dlh ,
+***
+****                    es_outdata-orden_flete                ,
+****                    es_outdata-unidad_flete               ,
+***
+***            es_outdata-desc_sta_novedad_transportista,
+***
+****            WHEN 'EP'.
+****              CLEAR:
+***            es_outdata-posnre  ,
+***            es_outdata-erdate  ,
+***            es_outdata-matwa   ,
+****                    es_outdata-lichn   ,
+****                      c_es_outtab-lfimg   ,
+****                      c_es_outtab-ormng   ,
+****                      c_es_outtab-cantidad_despachada   ,
+***            es_outdata-uecha   ,
+***            es_outdata-kosta   ,
+***            es_outdata-wbsta   ,
+***
+***            es_outdata-budat_1 ,
+***            es_outdata-budat_6 ,
+****                    es_outdata-menge   ,
+***
+***
+****            WHEN 'TM'.
+****              CLEAR:
+***            es_outdata-tor_id_fu   ,
+***            es_outdata-tor_id      ,
+***            es_outdata-tor_type    ,
+***            es_outdata-tspid       ,
+***            es_outdata-name1       ,
+****                    es_outdata-event_code  ,
+***            es_outdata-actual_date ,
+***            es_outdata-trans_datum ,
+***            es_outdata-trans_uzeit ,
+***
+****
+****            WHEN 'FC'.
+****              CLEAR:
+****                      es_outdata-vbelnf      ,
+****                    es_outdata-fkart       ,
+****                    es_outdata-fktyp       ,
+****                    es_outdata-vbtypf      ,
+****                    es_outdata-waerk       ,
+****                    es_outdata-kalsm       ,
+****                    es_outdata-vsbed       ,
+****                    es_outdata-fkdat       ,
+****                    es_outdata-belnr       ,
+****                    es_outdata-gjahr       ,
+****                      c_es_outtab-netwr_hf    ,
+****                      c_es_outtab-mwsbk       ,
+****                    es_outdata-fksto       ,
+***
+****            WHEN 'FP'.
+****              CLEAR:
+***            es_outdata-posnrf      ,
+****                      c_es_outtab-fkimg       ,
+****                      c_es_outtab-netwr_if    ,
+****                      es_outdata-wavwr       ,
+***            es_outdata-pmatn       ,
+***            es_outdata-posar       ,
+***            es_outdata-vkbur       ,
+***            es_outdata-erdatf      ,
+***            es_outdata-erzetf      ,
+***            es_outdata-shkzg       .
+****                      c_es_outtab-mwsbp_if    .
+***
+***
+***
+***      es_outdata-augru                      = es_outdata_aux-augru                    .
+***      es_outdata-desc_motivo_de_pedido_cab  = es_outdata_aux-desc_motivo_de_pedido_cab.
+***      es_outdata-zz1_marca_sdh              = es_outdata_aux-zz1_marca_sdh.
+***
+***      es_outdata-vdatu    = es_outdata_aux-vdatu.
+****        es_outdata-berid    = es_outdata_aux-berid.
+***
+***      es_outdata-loekz    = es_outdata_aux-loekz.
+***      es_outdata-kztlf    = es_outdata_aux-kztlf.
+***      es_outdata-eglkz    = es_outdata_aux-eglkz.
+***      es_outdata-elikz    = es_outdata_aux-elikz.
+***
+***      es_outdata-lgort    = es_outdata_aux-lgort.
+***      es_outdata-reslo    = es_outdata_aux-reslo.
+***      es_outdata-erdat_i  = es_outdata_aux-erdat_i.
+***      es_outdata-ernam_i  = es_outdata_aux-ernam_i.
+***      es_outdata-erzet    = es_outdata_aux-erzet  .
+***
+***      es_outdata-vbelne                         = es_outdata_aux-vbelne.
+***
+***      es_outdata-vbelne                         = es_outdata_aux-vbelne.
+***      es_outdata-lfart                          = es_outdata_aux-lfart                         .
+***      es_outdata-vlstk                          = es_outdata_aux-vlstk                         .
+***      es_outdata-kostk                          = es_outdata_aux-kostk                         .
+***      es_outdata-budat_1                        = es_outdata_aux-budat_1                       .
+***      es_outdata-budat_6                        = es_outdata_aux-budat_6                       .
+***      es_outdata-zz1_fechprivisit_dlh           = es_outdata_aux-zz1_fechprivisit_dlh          .
+***      es_outdata-zz1_numeroguianueva_dlh        = es_outdata_aux-zz1_numeroguianueva_dlh       .
+***      es_outdata-zz1_numeroguia_dlh             = es_outdata_aux-zz1_numeroguia_dlh            .
+***      es_outdata-zz1_statustransportist_dlh     = es_outdata_aux-zz1_statustransportist_dlh    .
+***      es_outdata-zz1_fechaentregaclient_dlh     = es_outdata_aux-zz1_fechaentregaclient_dlh    .
+***      es_outdata-zz1_horaprivisit_dlh           = es_outdata_aux-zz1_horaprivisit_dlh          .
+***      es_outdata-zz1_novedadtransportis_dlh     = es_outdata_aux-zz1_novedadtransportis_dlh    .
+***      es_outdata-zz1_tipovinculo_dlh            = es_outdata_aux-zz1_tipovinculo_dlh           .
+***      es_outdata-zz1_horaentregacliente_dlh     = es_outdata_aux-zz1_horaentregacliente_dlh    .
+***      es_outdata-desc_sta_novedad_transportista = es_outdata_aux-desc_sta_novedad_transportista.
+***
+***      es_outdata-ecommerce_empaque_regalo = es_outdata_aux-ecommerce_empaque_regalo.
+***      es_outdata-ecommerce_remitente      = es_outdata_aux-ecommerce_remitente     .
+***      es_outdata-ecommerce_destinatario   = es_outdata_aux-ecommerce_destinatario  .
+***      es_outdata-ecommerce_texto          = es_outdata_aux-ecommerce_texto         .
+***
+***      es_outdata-tor_id_fu   = es_outdata_aux-tor_id_fu  .
+***      es_outdata-tor_id      = es_outdata_aux-tor_id     .
+***      es_outdata-tor_type    = es_outdata_aux-tor_type   .
+***      es_outdata-tspid       = es_outdata_aux-tspid      .
+***      es_outdata-name1       = es_outdata_aux-name1      .
+****        es_outdata-actual_date = es_outdata_aux-actual_date.
+***      es_outdata-trans_datum = es_outdata_aux-trans_datum.
+***      es_outdata-trans_uzeit = es_outdata_aux-trans_uzeit.
+***
+***      es_outdata-vbelnf = es_outdata_aux-vbelnf.
+***      es_outdata-fkart  = es_outdata_aux-fkart .
+***      es_outdata-fktyp  = es_outdata_aux-fktyp .
+***      es_outdata-vbtypf = es_outdata_aux-vbtypf.
+***      es_outdata-waerk  = es_outdata_aux-waerk .
+***      es_outdata-kalsm  = es_outdata_aux-kalsm .
+***      es_outdata-fkdat  = es_outdata_aux-fkdat .
+***
+***      COLLECT es_outdata INTO ti_outdata_aux.
+***    ENDLOOP.
+***    LOOP AT ti_outdata_aux ASSIGNING <fs_outdata>.
+***      IF <fs_outdata>-kwmeng IS NOT INITIAL.
+***        <fs_outdata>-porcentaje_cumplimiento = ( <fs_outdata>-lfimg / <fs_outdata>-kwmeng ) * 100.
+***        <fs_outdata>-porcentaje_asignacion   = ( <fs_outdata>-cantidad_asignada / <fs_outdata>-kwmeng ) * 100.
+***      ENDIF.
+***
+***      READ TABLE ti_outdata
+***        WITH KEY vbelnp = <fs_outdata>-vbelnp
+***      BINARY SEARCH TRANSPORTING NO FIELDS.
+***      IF sy-subrc EQ 0.
+***        v_index = sy-tabix.
+***        CLEAR es_outdata_nxt.
+***        LOOP AT ti_outdata INTO es_outdata FROM v_index.
+***          IF es_outdata-vbelnp NE <fs_outdata>-vbelnp.
+***            EXIT.
+***          ENDIF.
+***
+****Inicio Adicion18Mar2024 Sebastian Restrepo Villa
+***          IF es_outdata-kurrf GT es_outdata_nxt-kurrf.
+***            es_outdata_nxt-kurrf = es_outdata-kurrf.
+***          ENDIF.
+****Fin Adicion18Mar2024 Sebastian Restrepo Villa
+***
+***          CASE es_outdata-stat_pedido.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-stat_pedido NE icon_green_light.
+***                es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-stat_pedido EQ icon_green_light OR
+***                 es_outdata_nxt-stat_pedido EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-stat_pedido EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_pedido EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_pedido EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-stat_pedido EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_pedido EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_pedido EQ icon_red_light    OR
+***                 es_outdata_nxt-stat_pedido EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_pedido = es_outdata-stat_pedido.
+***              ENDIF.
+***          ENDCASE.
+***
+***
+***          IF es_outdata-stat_logistico GT es_outdata_nxt-stat_logistico.
+***            es_outdata_nxt-stat_logistico = es_outdata-stat_logistico.
+***          ENDIF.
+***
+***
+***          CASE es_outdata-vl_pedido_vs_vl_factura.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-vl_pedido_vs_vl_factura NE icon_green_light.
+***                es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_green_light OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_green_light  OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_yellow_light OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_green_light  OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_yellow_light OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_red_light    OR
+***                 es_outdata_nxt-vl_pedido_vs_vl_factura EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-vl_pedido_vs_vl_factura = es_outdata-vl_pedido_vs_vl_factura.
+***              ENDIF.
+***          ENDCASE.
+***
+***
+***          CASE es_outdata-stat_plano_ola.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-stat_plano_ola NE icon_green_light.
+***                es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-stat_plano_ola EQ icon_green_light OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-stat_plano_ola EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-stat_plano_ola EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_red_light    OR
+***                 es_outdata_nxt-stat_plano_ola EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_plano_ola = es_outdata-stat_plano_ola.
+***              ENDIF.
+***          ENDCASE.
+***
+***
+***          CASE es_outdata-stat_envio_asn.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-stat_envio_asn NE icon_green_light.
+***                es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-stat_envio_asn EQ icon_green_light OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-stat_envio_asn EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-stat_envio_asn EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_red_light    OR
+***                 es_outdata_nxt-stat_envio_asn EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_envio_asn = es_outdata-stat_envio_asn.
+***              ENDIF.
+***          ENDCASE.
+***
+***          CASE es_outdata-stat_imp_factura.
+***            WHEN icon_green_light.
+***              es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***            WHEN icon_yellow_light.
+***              IF es_outdata_nxt-stat_imp_factura NE icon_green_light.
+***                es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***              ENDIF.
+***            WHEN icon_red_light.
+***              IF es_outdata_nxt-stat_imp_factura EQ icon_green_light OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_yellow_light .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***              ENDIF.
+***            WHEN icon_light_out.
+***              IF es_outdata_nxt-stat_imp_factura EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_red_light    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***              ENDIF.
+***            WHEN OTHERS.
+***              IF es_outdata_nxt-stat_imp_factura EQ icon_green_light  OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_yellow_light OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_red_light    OR
+***                 es_outdata_nxt-stat_imp_factura EQ icon_light_out    .
+***                "Dejas los anteriores
+***              ELSE.
+***                es_outdata_nxt-stat_imp_factura = es_outdata-stat_imp_factura.
+***              ENDIF.
+***          ENDCASE.
+***        ENDLOOP.
+***      ENDIF.
+***      <fs_outdata>-stat_pedido               = es_outdata_nxt-stat_pedido            .
+***      <fs_outdata>-stat_logistico            = es_outdata_nxt-stat_logistico         .
+***      <fs_outdata>-vl_pedido_vs_vl_factura   = es_outdata_nxt-vl_pedido_vs_vl_factura.
+***      <fs_outdata>-stat_plano_ola            = es_outdata_nxt-stat_plano_ola         .
+***      <fs_outdata>-stat_envio_asn            = es_outdata_nxt-stat_envio_asn         .
+***      <fs_outdata>-stat_imp_factura          = es_outdata_nxt-stat_imp_factura       .
+***      <fs_outdata>-kurrf                     = es_outdata_nxt-kurrf. "Adicion18Mar2024 Sebastian Restrepo Villa
+***    ENDLOOP.
+***    ti_outdata = ti_outdata_aux.
+******    ENDIF.
+***
+***    CLEAR ti_outdata_aux.
+
+    LOOP AT ti_outdata INTO es_outdata.
+      es_pedidos-status_pedido                      = es_outdata-stat_pedido                   .
+      es_pedidos-status_logistico                   = es_outdata-stat_logistico                .
+      es_pedidos-pedido                             = es_outdata-vbelnp                        .
+      es_pedidos-posicion_pedido                    = es_outdata-posnrp                        .
+      es_pedidos-pedido_cliente                     = es_outdata-bstkd                         .
+      es_pedidos-clase_documento                    = es_outdata-auart                         .
+      es_pedidos-clasificacion                      = es_outdata-zz1_clasificacion_sdh         .
+      es_pedidos-clasificacion_desc                 = es_outdata-desc_clasificacion            .
+      es_pedidos-marca_sd                           = es_outdata-zz1_marca_sdh                 .
+      es_pedidos-tipo_medio_pago                    = es_outdata-zz1_tipomediopago_sdh         .
+      es_pedidos-tipomediopago_desc                 = es_outdata-cmdtx_tipomediopago           .
+      es_pedidos-medio_pago                         = es_outdata-zz1_mediopago_sdh             .
+      es_pedidos-mediopago_desc                     = es_outdata-cmdtx                         .
+      es_pedidos-motivo_bloqueo_entrega             = es_outdata-lifsk                         .
+      es_pedidos-motivo_bloqueo_entrega_desc        = es_outdata-motivo_bloqueo_entrega_desc   .
+      es_pedidos-motivo_bloqueo_factura             = es_outdata-faksk                         .
+      es_pedidos-motivo_bloqueo_factura_desc        = es_outdata-motivo_bloqueo_factura_desc   .
+      es_pedidos-motivo_rechazo                     = es_outdata-abgru                         .
+      es_pedidos-motivo_rechazo_desc                = es_outdata-motivo_rechazo_desc           .
+      es_pedidos-motivo_pedido                      = es_outdata-augru                         .
+      es_pedidos-descripcion_motivo_de_pedido       = es_outdata-desc_motivo_de_pedido_cab     .
+      es_pedidos-motivo_pedido_posicion             = es_outdata-zz1_augru_sdi                 .
+      es_pedidos-descripcion_motivo_pedido_pos      = es_outdata-desc_motivo_de_pedido_pos     .
+      es_pedidos-grupo_compra                       = es_outdata-ekgrp                         .
+*      es_pedidos-descripcion_grupo_compra           = es_outdata-                              .
+      es_pedidos-estado_global_de_procesamiento     = es_outdata-gbstk                         .
+      es_pedidos-cantidad_entregada_parcial         = es_outdata-antlf                         .
+      es_pedidos-indicador_borrado                  = es_outdata-loekz                         .
+*      es_pedidos-posicion_es_estadistica            = es_outdata-                              .
+      es_pedidos-entrega_parcial_posicion           = es_outdata-kztlf                         .
+      es_pedidos-vkorg                              = es_outdata-vkorg                         .
+      es_pedidos-segmento                           = es_outdata-sgt_rcat                      .
+      es_pedidos-vtweg                              = es_outdata-vtweg                         .
+      es_pedidos-werks                              = es_outdata-werks                         .
+      es_pedidos-lgort                              = es_outdata-lgort                         .
+      es_pedidos-centro_receptor                    = es_outdata-werkr                         .
+      es_pedidos-almacen_receptor                   = es_outdata-reslo                         .
+      es_pedidos-lote                               = es_outdata-charg                         .
+      es_pedidos-segmento_necesidad                 = es_outdata-sgt_rcat                      .
+*      es_pedidos-objek                              = es_outdata-                              .
+      es_pedidos-plu                                = es_outdata-kdmat                         .
+      es_pedidos-precio_neto_unitario               = es_outdata-netpr                         .
+      es_pedidos-precio_sugerido                    = es_outdata-precio_sugerido               .
+      es_pedidos-precio_sugerido_mx                 = es_outdata-precio_sugerido_mx            .
+      es_pedidos-precio_cliente                     = es_outdata-precio_cliente                .
+      es_pedidos-precio_sugerido_cliente            = es_outdata-precio_sugerido_cliente       .
+      es_pedidos-costo_interno                      = es_outdata-wavwr                         .
+      es_pedidos-margen_cliente                     = es_outdata-margen_cliente                .
+      es_pedidos-precio_exportacion                 = es_outdata-precio_exportacion            .
+      es_pedidos-valor_neto_pedido                  = es_outdata-netwr_hp                      .
+      es_pedidos-pago_clinete_impuestos             = es_outdata-pago_cliente_impuestos        .
+*      es_pedidos-impuestos                          = es_outdata-sumar(mwsbp_ip)               .
+      es_pedidos-pedido_impuesto_posicion           = es_outdata-mwsbp_ip                      .
+*      es_pedidos-guia_devolucion                    = es_outdata-                              .
+      es_pedidos-moneda                             = es_outdata-waerk_hp                      .
+      es_pedidos-fecha_preferente_entrega           = es_outdata-vdatu                         .
+*      es_pedidos-fecha_confirmada                   = es_outdata-                              .
+      es_pedidos-fecha_creacion_pedido              = es_outdata-erdat                         .
+      es_pedidos-hora_creacion_pedido               = es_outdata-erzet                         .
+      es_pedidos-fecha_liberacion                   = es_outdata-cmfre                         .
+      es_pedidos-fecha_anulacion                    = es_outdata-fsh_candate                   .
+      es_pedidos-knumv                              = es_outdata-knumv                         .
+      es_pedidos-tienda                             = es_outdata-kunmf                         .
+      es_pedidos-nombre_tienda                      = es_outdata-nammf                         .
+      es_pedidos-id_fiscal_tienda                   = es_outdata-nitmf                         .
+      es_pedidos-pais_tienda                        = es_outdata-conmf                         .
+      es_pedidos-telefono_tienda                    = es_outdata-telmf                         .
+      es_pedidos-direccion_tienda                   = es_outdata-strmf                         .
+      es_pedidos-zonatransporte_tienda              = es_outdata-ztrmf                         .
+      es_pedidos-solicitante                        = es_outdata-kunag                         .
+      es_pedidos-nombre_solicitante                 = es_outdata-namag                         .
+      es_pedidos-id_fiscal_solicitante              = es_outdata-nitag                         .
+      es_pedidos-pais_solicitante                   = es_outdata-conag                         .
+      es_pedidos-ciudad_solicitante                 = es_outdata-citag                         .
+      es_pedidos-telefono_solicitante               = es_outdata-telag                         .
+      es_pedidos-direccion_solicitante              = es_outdata-strag                         .
+      es_pedidos-zonatransporte_solicitante         = es_outdata-ztrag                         .
+      es_pedidos-responsable_pago                   = es_outdata-kunrg                         .
+      es_pedidos-nombre_responsable_pago            = es_outdata-namrg                         .
+      es_pedidos-id_fiscal_responsable_pago         = es_outdata-nitrg                         .
+      es_pedidos-pais_responsable_pago              = es_outdata-conrg                         .
+      es_pedidos-ciudad_responsable_pago            = es_outdata-citrg                         .
+      es_pedidos-telefono_responsable_pago          = es_outdata-telrg                         .
+      es_pedidos-direccion_responsable_pago         = es_outdata-strrg                         .
+      es_pedidos-zonatransporte_resp_pago           = es_outdata-ztrrg                         .
+      es_pedidos-destinatario                       = es_outdata-kunwe                         .
+      es_pedidos-nombre_destinatario                = es_outdata-namwe                         .
+      es_pedidos-id_fiscal_destinatario             = es_outdata-nitwe                         .
+      es_pedidos-pais_destinatario                  = es_outdata-conwe                         .
+      es_pedidos-telefono_destinatario              = es_outdata-telwe                         .
+      es_pedidos-direccion_destinatario             = es_outdata-strwe                         .
+      es_pedidos-zonatransporte_destinatario        = es_outdata-ztrwe                         .
+      es_pedidos-correo_electronico                 = es_outdata-emailag                       .
+      es_pedidos-encargado_comercial                = es_outdata-namzv                         .
+      es_pedidos-tipo_posicion                      = es_outdata-pstyv                         .
+      es_pedidos-material_generico                  = es_outdata-satnr                         .
+      es_pedidos-desc_material_generico             = es_outdata-sattx                         .
+      es_pedidos-matnr                              = es_outdata-matnr                         .
+      es_pedidos-maktx                              = es_outdata-arktx                         .
+      es_pedidos-talla                              = es_outdata-talla                         .
+      es_pedidos-descripcion_talla                  = es_outdata-descr_talla                   .
+      es_pedidos-color                              = es_outdata-color                         .
+      es_pedidos-descripcion_color                  = es_outdata-descr_color                   .
+      es_pedidos-ean11                              = es_outdata-ean11                         .
+      es_pedidos-marca                              = es_outdata-zz1_marca_sdh                 .
+      es_pedidos-grupo_de_articulo                  = es_outdata-matkl                         .
+      es_pedidos-unidad_venta                       = es_outdata-vrkme                         .
+      es_pedidos-cantidad_pedida                    = es_outdata-kwmeng                        .
+      es_pedidos-unidad_medida                      = es_outdata-meins                         .
+      es_pedidos-cantidad_confirmada                = es_outdata-kbmeng                        .
+      es_pedidos-valor_neto                         = es_outdata-netwr_ip                      .
+      es_pedidos-porcentaje_cumplimiento            = es_outdata-porcentaje_cumplimiento       .
+      es_pedidos-porcentaje_asignacion              = es_outdata-porcentaje_asignacion         .
+      es_pedidos-inventario_disponible              = es_outdata-inventario_disponible         .
+      es_pedidos-cantidad_asignada                  = es_outdata-cantidad_asignada             .
+      es_pedidos-cantidad_pendiente                 = es_outdata-cantidad_pendiente            .
+      es_pedidos-cantidad_pendiente_nueva           = es_outdata-cantidad_pendiente_nueva      .
+      es_pedidos-material_cliente                   = es_outdata-kdmat                         .
+      es_pedidos-descripcion_mat_cliente            = es_outdata-postx                         .
+      es_pedidos-talla_cliente                      = es_outdata-talla_cli_nom_car             .
+      es_pedidos-descripcion_talla_cliente          = es_outdata-talla_cli_vlr_car             .
+      es_pedidos-color_cliente                      = es_outdata-color_cli_nom_car             .
+      es_pedidos-descripcion_color_cliente          = es_outdata-color_cli_vlr_car             .
+*      es_pedidos-status_cancelado                   = es_outdata-                              .
+      es_pedidos-ecommerce_remitente                = es_outdata-ecommerce_remitente           .
+      es_pedidos-ecommerce_destinatario             = es_outdata-ecommerce_destinatario        .
+      es_pedidos-ecommerce_texto_del_mensaje        = es_outdata-ecommerce_texto               .
+      es_pedidos-ecommerce_empaque_regalo           = es_outdata-ecommerce_empaque_regalo      .
+      es_pedidos-entregas_parciales                 = es_outdata-antlf                         .
+      es_pedidos-entrega                            = es_outdata-vbelne                        .
+      es_pedidos-posicion_entrega                   = es_outdata-posnre                        .
+      es_pedidos-fecha_creacion_entrega             = es_outdata-erdate                        .
+      es_pedidos-clase_entrega                      = es_outdata-lfart                         .
+*      es_pedidos-tipo_documento_entrega             = es_outdata-                              .
+      es_pedidos-cantidad_entrega                   = es_outdata-lfimg                         .
+      es_pedidos-estado_picking                     = es_outdata-kosta                         .
+      es_pedidos-estado_picking_ewm                 = es_outdata-vlstk                         .
+      es_pedidos-estado_movimiento_mercancia        = es_outdata-wbsta                         .
+      es_pedidos-kostk                              = es_outdata-kostk                         .
+      es_pedidos-cantidad_cajas_erp                 = es_outdata-anzpk                         .
+      es_pedidos-uecha                              = es_outdata-uecha                         .
+      es_pedidos-orden_flete                        = es_outdata-tor_id                        .
+      es_pedidos-unidad_flete                       = es_outdata-tor_id_fu                     .
+      es_pedidos-indic_entrega_salida_completa      = es_outdata-eglkz                         .
+*      es_pedidos-status_entrega_final               = es_outdata-                              .
+*      es_pedidos-indicador_entrega_completa         = es_outdata-                              .
+      es_pedidos-status_entrega_completa            = es_outdata-elikz                         .
+      es_pedidos-fu_tm                              = es_outdata-tor_id_fu                     .
+      es_pedidos-zz1_numeroguianueva_dlh            = es_outdata-zz1_numeroguianueva_dlh       .
+      es_pedidos-zz1_tipovinculo_dlh                = es_outdata-zz1_tipovinculo_dlh           .
+      es_pedidos-idoc_fi                            = es_outdata-idoc_fi                       .
+      es_pedidos-documento_fi                       = es_outdata-documento_fi                  .
+      es_pedidos-sociedad_fi                        = es_outdata-sociedad_fi                   .
+      es_pedidos-ejercicio_fi                       = es_outdata-ejercicio_fi                  .
+      es_pedidos-guia_transporte                    = es_outdata-zz1_numeroguia_dlh            .
+*      es_pedidos-caja_ewm                           = es_outdata-                              .
+*      es_pedidos-matnr_embalaje                     = es_outdata-                              .
+      es_pedidos-cantidad_despachada                = es_outdata-cantidad_despachada           .
+      es_pedidos-factura                            = es_outdata-vbelnf                        .
+      es_pedidos-fecha_factura                      = es_outdata-fkdat                         .
+      es_pedidos-valor_factura                      = es_outdata-netwr_hf                      .
+      es_pedidos-cantidad_facturada                 = es_outdata-fkimg                         .
+      es_pedidos-valor_neto_factura                 = es_outdata-netwr_if                      .
+      es_pedidos-total_impuesto_factura             = es_outdata-val_fact_con_impuestos        .
+      es_pedidos-status_vl_pedido_vs_vl_factura     = es_outdata-vl_pedido_vs_vl_factura       .
+      es_pedidos-status_plano_ola                   = es_outdata-stat_plano_ola                .
+      es_pedidos-status_impresion_factura           = es_outdata-stat_imp_factura              .
+      es_pedidos-status_envio_asn                   = es_outdata-stat_envio_asn                .
+      es_pedidos-numero_transporte                  = es_outdata-tor_id                        .
+      es_pedidos-agente_servicio                    = es_outdata-tspid                         .
+      es_pedidos-desc_agente_servicio               = es_outdata-name1                         .
+      es_pedidos-fecha_actual_transporte            = es_outdata-actual_date                   .
+      v_char255 = es_outdata-actual_date.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-fecha_actual_transporte_d.
+      ELSE.
+        IF es_outdata-actual_date IS NOT INITIAL.
+          message = es_outdata-actual_date.
+          CONDENSE message NO-GAPS.
+          es_pedidos-fecha_actual_transporte_d        = message(8)                               .
+        ENDIF.
+      ENDIF.
+      es_pedidos-fecha_fin_transporte               = es_outdata-trans_datum                   .
+      es_pedidos-hora_fin_transporte                = es_outdata-trans_uzeit                   .
+      es_pedidos-status_novedad_transportista       = es_outdata-zz1_statustransportist_dlh    .
+      es_pedidos-desc_sta_novedad_transportista     = es_outdata-desc_sta_novedad_transportista.
+
+      v_char255 = es_outdata-zz1_fechaentregaclient_dlh.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-fecha_entrega_cliente.
+      ELSE.
+        TRY.
+            IF es_outdata-zz1_fechaentregaclient_dlh IS NOT INITIAL.
+              es_pedidos-fecha_entrega_cliente              = es_outdata-zz1_fechaentregaclient_dlh  .
+            ENDIF.
+          CATCH cx_root.
+            CLEAR es_pedidos-fecha_entrega_cliente.
+        ENDTRY.
+      ENDIF.
+      v_char255 = es_outdata-zz1_horaentregacliente_dlh.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-hora_entrega_cliente.
+      ELSE.
+        TRY.
+            IF es_outdata-zz1_horaentregacliente_dlh IS NOT INITIAL.
+              es_pedidos-hora_entrega_cliente               = es_outdata-zz1_horaentregacliente_dlh    .
+            ENDIF.
+          CATCH cx_root.
+            CLEAR es_pedidos-hora_entrega_cliente.
+        ENDTRY.
+      ENDIF.
+      es_pedidos-fecha_contabiliza_recepcion        = es_outdata-budat_1                       .
+      es_pedidos-cantidad_recibida                  = es_outdata-menge                         .
+      es_pedidos-novedad_transportista              = es_outdata-zz1_novedadtransportis_dlh    .
+*      es_pedidos-zzest_carga                        = es_outdata-                              .
+*      es_pedidos-pedido_traslado                    = es_outdata-                              .
+*      es_pedidos-posicion_consolidada               = es_outdata-                              .
+      v_char255 = es_outdata-zz1_fechprivisit_dlh.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-zz1_fechprivisit_dlh.
+      ELSE.
+*        es_pedidos-zz1_fechprivisit_dlh               = es_outdata-zz1_fechprivisit_dlh          .
+        TRY.
+            IF es_outdata-zz1_fechprivisit_dlh IS NOT INITIAL.
+              es_pedidos-zz1_fechprivisit_dlh               = es_outdata-zz1_fechprivisit_dlh    .
+            ENDIF.
+          CATCH cx_root.
+            CLEAR es_pedidos-zz1_fechprivisit_dlh.
+        ENDTRY.
+      ENDIF.
+
+      v_char255 = es_outdata-zz1_horaprivisit_dlh.
+      CONDENSE v_char255 NO-GAPS.
+      IF v_char255 IS INITIAL.
+        CLEAR es_pedidos-zz1_horaprivisit_dlh.
+      ELSE.
+*        es_pedidos-zz1_horaprivisit_dlh               = es_outdata-zz1_horaprivisit_dlh          .
+        TRY.
+            IF es_outdata-zz1_horaprivisit_dlh IS NOT INITIAL.
+              es_pedidos-zz1_horaprivisit_dlh               = es_outdata-zz1_horaprivisit_dlh    .
+            ENDIF.
+          CATCH cx_root.
+            CLEAR es_pedidos-zz1_horaprivisit_dlh.
+        ENDTRY.
+      ENDIF.
+
+      APPEND es_pedidos TO ti_pedidos.
+
+    ENDLOOP.
+
+    CREATE DATA er_entityset TYPE zclsdapi_monitor_pedidos_mpc=>tt_pedidos.
+*      ASSIGN er_entityset->* TO FIELD-SYMBOL(<fs_ti_pedidos>).
+    ASSIGN er_entityset->* TO <fs_ti_pedidos>.
+
+    <fs_ti_pedidos> =  CORRESPONDING zclsdapi_monitor_pedidos_mpc=>tt_pedidos( ti_pedidos ).
+
+*      DATA(o_log) = zclcxr1002_log_aplicacion=>get_instancia( ).
+*      DATA(ti_log) = o_log->get_log( ).
+
+    IF ti_bapiterturn IS NOT INITIAL.
+      "Retorna Status 400 con mensaje en body
+      me->/iwbep/if_sb_dpc_comm_services~rfc_save_log(  EXPORTING
+                                                          iv_entity_type  = iv_entity_name
+                                                          it_return       = ti_bapiterturn
+                                                          it_key_tab      = it_key_tab ).
+      "Retorna Status 200 con mensaje en header del response
+      o_contenedor_msg = me->mo_context->get_message_container( ).
+*        LOOP AT ti_bapiterturn ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+      LOOP AT ti_bapiterturn INTO es_bapiret2.
+
+        o_contenedor_msg->add_message( iv_msg_type    = es_bapiret2-type
+                                       iv_msg_id      = es_bapiret2-id
+                                       iv_msg_number  = es_bapiret2-number
+                                       iv_msg_text    = es_bapiret2-message
+                                       iv_msg_v1      = es_bapiret2-message_v1
+                                       iv_msg_v2      = es_bapiret2-message_v2
+                                       iv_msg_v3      = es_bapiret2-message_v3
+                                       iv_msg_v4      = es_bapiret2-message_v4
+                                       iv_add_to_response_header = abap_true
+                                     ).
+
+      ENDLOOP.
+    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.

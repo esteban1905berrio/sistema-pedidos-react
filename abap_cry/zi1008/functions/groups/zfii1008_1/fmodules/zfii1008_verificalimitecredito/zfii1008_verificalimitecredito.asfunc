@@ -1,0 +1,32 @@
+FUNCTION zfii1008_verificalimitecredito
+  IMPORTING
+    VALUE(i_cliente) TYPE kunnr
+    VALUE(i_valor_pedido) TYPE ukm_amount OPTIONAL
+    VALUE(i_moneda) TYPE vbak-waerk
+    VALUE(i_grupo_de_credito) TYPE char2
+    VALUE(i_clase_pedido) TYPE vbak-auart OPTIONAL
+    VALUE(i_clase_entrega) TYPE likp-lfart OPTIONAL
+  EXPORTING
+    VALUE(e_ti_msg_resultado) TYPE bapiret2_t
+    VALUE(e_bloquear_pedido) TYPE flag
+    VALUE(e_bloquear_entrega) TYPE flag
+    VALUE(e_limite_exedido) TYPE flag.
+
+
+
+  zclfii1008_integracion_afs=>vf_limite_credito_cliente(
+    EXPORTING
+      i_cliente          = i_cliente
+      i_valor_pedido     = i_valor_pedido
+      i_moneda           = i_moneda
+      i_grupo_de_credito = i_grupo_de_credito
+      i_clase_pedido     = i_clase_pedido
+      i_clase_entrega    = i_clase_entrega
+    IMPORTING
+      e_ti_msg_resultado = e_ti_msg_resultado
+      e_bloquear_pedido  = e_bloquear_pedido
+      e_bloquear_entrega = e_bloquear_entrega
+      e_limite_exedido   = e_limite_exedido ).
+
+
+ENDFUNCTION.

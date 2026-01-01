@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZEWME1030_1",
+  "header" : {
+    "enhancementName" : "ZEWME1030_1",
+    "description" : "Norma de embalaje",
+    "toolType" : "BADI_IMPL",
+    "toolTypeText" : "BAdI Implementation",
+    "devclass" : "ZE1030",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-09-09",
+    "changedBy" : "SAGIRALD",
+    "changedOn" : "2021-09-12"
+  },
+  "elements" : [ {
+    "elementType" : "BADI_IMPL",
+    "spotName" : "",
+    "programName" : "",
+    "fullName" : "",
+    "badiName" : "/SCWM/EX_WRKC_UI_SCAN_SCREENS",
+    "badiImpl" : "ZEWM_SCWMES_WRKC_UI_1",
+    "implClass" : "ZCLEWM_EXITS_EMBALAJE",
+    "interfaceName" : "/SCWM/IF_EX_WRKC_UI_SCAN_SCR",
+    "active" : true,
+    "sourceCode" : ""
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

@@ -1,0 +1,70 @@
+CLASS zpxcl_recibir_datos_material_i DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    INTERFACES if_amdp_marker_hdb.
+    INTERFACES zpxii_recibir_datos_material_i .
+
+    CLASS-METHODS:
+      test_amdp.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zpxcl_recibir_datos_material_i IMPLEMENTATION.
+
+
+  METHOD zpxii_recibir_datos_material_i~datos_material_async.
+*** **** INSERT IMPLEMENTATION HERE **** ***
+  ENDMETHOD.
+
+  METHOD test_amdp BY DATABASE PROCEDURE FOR HDB
+                                        LANGUAGE SQLSCRIPT
+                                        OPTIONS READ-ONLY.
+
+*    declare fecha date;
+
+    fecha = SELECT TO_DATE( substring( '202101120', 1, 8 ), 'YYYYMMDD') as fechaa FROM DUMMY;
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zpxcl_recibir_datos_material_i DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    INTERFACES if_amdp_marker_hdb.
+    INTERFACES zpxii_recibir_datos_material_i .
+
+    CLASS-METHODS:
+      test_amdp.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zpxcl_recibir_datos_material_i IMPLEMENTATION.
+
+
+  METHOD zpxii_recibir_datos_material_i~datos_material_async.
+*** **** INSERT IMPLEMENTATION HERE **** ***
+  ENDMETHOD.
+
+  METHOD test_amdp BY DATABASE PROCEDURE FOR HDB
+                                        LANGUAGE SQLSCRIPT
+                                        OPTIONS READ-ONLY.
+
+*    declare fecha date;
+
+    fecha = SELECT TO_DATE( substring( '202101120', 1, 8 ), 'YYYYMMDD') as fechaa FROM DUMMY;
+
+  ENDMETHOD.
+
+ENDCLASS.

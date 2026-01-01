@@ -1,0 +1,676 @@
+CLASS zclcxr1002_dir_interfaces DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    CLASS-METHODS:
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Conexión con las interfaces de la tabla ztcxr1002_2<br/>
+      "! dependiendo de la acción
+      "! </p>
+      "! <strong>Identificador:</strong>
+                                                            "! R1002
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Santiago Giraldo Rendon
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 27.07.2021  \ S4DK900021 \ Santiago Giraldo \ Creacion Inicial \
+      "!
+      "! @parameter i_accion |
+      "! @parameter i_archivo |
+      "! @parameter i_tipo_archivo |
+      "! @parameter i_modulo |
+      "! @parameter i_aplicacion |
+      "! @parameter i_id_interface |
+      "! @parameter e_ti_bapiret2 |
+      "! @parameter e_es_interface |
+      "! @parameter c_ti_archivo |
+      directorio_de_interfaces
+        IMPORTING
+          i_accion       TYPE char1
+          i_archivo      TYPE string OPTIONAL
+          i_tipo_archivo TYPE char1
+          i_modulo       TYPE char2
+          i_aplicacion   TYPE ztcxr1002_2-aplicacion
+          i_id_interface TYPE char10
+        EXPORTING
+          e_ti_bapiret2  TYPE bapiret2_t
+          e_es_interface TYPE ztcxr1002_2
+        CHANGING
+          c_ti_archivo   TYPE re_t_string OPTIONAL.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    CONSTANTS: c_mensaje_e  TYPE c VALUE 'E',
+               c_mensaje_id TYPE symsgid VALUE 'ZCX01'.
+    CLASS-METHODS:
+      obtener_informacion_interface
+        IMPORTING
+          i_modulo               TYPE char2
+          i_aplicacion           TYPE ztcxr1002_2-aplicacion
+          i_id_interface         TYPE char10
+        RETURNING
+          VALUE(r_es_interfaces) TYPE ztcxr1002_2,
+      leer_archivo_directorio
+        IMPORTING
+          i_ruta              TYPE string
+        EXPORTING
+          e_ti_bapiret2       TYPE bapiret2_t
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      escribir_archivo_directorio
+        IMPORTING
+          i_ruta              TYPE string
+          i_modo              TYPE string
+          i_ti_archivo        TYPE re_t_string
+        EXPORTING
+          e_ti_bapiret2       TYPE bapiret2_t
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      archivar_archivo
+        IMPORTING
+          i_tipo_archivo      TYPE char1
+          i_es_interface      TYPE ztcxr1002_2
+          i_archivo           TYPE string
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      mover_archivo_a_error
+        IMPORTING
+          i_tipo_archivo      TYPE char1
+          i_es_interface      TYPE ztcxr1002_2
+          i_archivo           TYPE string
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      leer_directorio
+        IMPORTING
+          i_tipo_archivo      TYPE char1
+          i_es_interface      TYPE ztcxr1002_2
+        EXPORTING
+          e_ti_bapiret2       TYPE bapiret2_t
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      mover_de_error_a_entrada
+        IMPORTING
+          i_tipo_archivo      TYPE char1
+          i_es_interface      TYPE ztcxr1002_2
+          i_archivo           TYPE string
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string
+        .
+ENDCLASS.
+
+
+
+CLASS zclcxr1002_dir_interfaces IMPLEMENTATION.
+
+  METHOD directorio_de_interfaces.
+
+    e_es_interface = obtener_informacion_interface( i_modulo = i_modulo i_aplicacion = i_aplicacion i_id_interface = i_id_interface ).
+
+    IF e_es_interface IS INITIAL.
+      MESSAGE e034(zcx01) WITH i_modulo i_aplicacion i_id_interface INTO DATA(mtext).
+      APPEND VALUE #( type    = c_mensaje_e
+                      id      = c_mensaje_id
+                      number  = '034'
+                      message = mtext ) TO e_ti_bapiret2.
+      EXIT.
+    ENDIF.
+*    BREAK SAGIRALD.
+    APPEND LINES OF SWITCH #( i_accion
+                                WHEN 'R'
+                                  THEN
+                                    leer_archivo_directorio( EXPORTING
+                                                                i_ruta = |{  to_lower( e_es_interface-dir_interface ) }/in/{ i_archivo }|
+                                                             IMPORTING
+                                                                e_ti_bapiret2 = e_ti_bapiret2 )
+                                WHEN 'W'
+                                  THEN
+                                     escribir_archivo_directorio( EXPORTING
+                                                                    i_ruta = |{  to_lower( e_es_interface-dir_interface ) }/out/{ i_archivo }|
+*                                                                    i_ruta = |{  to_lower( e_es_interface-dir_interface ) }/{ i_archivo }|
+                                                                    i_modo = 'OUTPUT'
+                                                                    i_ti_archivo = c_ti_archivo
+                                                                  IMPORTING
+                                                                    e_ti_bapiret2 = e_ti_bapiret2 )
+                                WHEN 'A'
+                                  THEN
+                                     archivar_archivo( i_tipo_archivo = i_tipo_archivo i_es_interface = e_es_interface i_archivo = i_archivo )
+                                WHEN 'L'
+                                  THEN
+                                      escribir_archivo_directorio( EXPORTING
+                                                                    i_ruta = |{  to_lower( e_es_interface-dir_interface ) }/log/{ i_archivo }.log|
+                                                                    i_modo = 'OUTPUT'
+                                                                    i_ti_archivo = c_ti_archivo
+                                                                   IMPORTING
+                                                                    e_ti_bapiret2 = e_ti_bapiret2 )
+                                WHEN 'E'
+                                  THEN
+                                      mover_archivo_a_error( i_tipo_archivo = i_tipo_archivo i_es_interface = e_es_interface i_archivo = i_archivo )
+                                WHEN 'D'
+                                  THEN
+                                      leer_directorio( EXPORTING
+                                                         i_tipo_archivo = i_tipo_archivo i_es_interface = e_es_interface
+                                                       IMPORTING
+                                                         e_ti_bapiret2 = e_ti_bapiret2 )
+                                WHEN 'M'
+                                  THEN
+                                      mover_de_error_a_entrada( i_tipo_archivo = i_tipo_archivo i_es_interface = e_es_interface i_archivo = i_archivo ) ) TO c_ti_archivo.
+
+  ENDMETHOD.
+
+  METHOD obtener_informacion_interface.
+
+    SELECT SINGLE *
+    FROM ztcxr1002_2
+        INTO @r_es_interfaces
+        WHERE modulo       = @i_modulo
+          AND aplicacion   = @i_aplicacion
+          AND id_interface = @i_id_interface.
+
+  ENDMETHOD.
+
+  METHOD leer_archivo_directorio.
+    DATA: datos_ftp TYPE string.
+
+    OPEN DATASET i_ruta FOR INPUT IN TEXT MODE ENCODING NON-UNICODE.
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e035(zcx01) WITH i_ruta INTO DATA(mtext).
+      APPEND VALUE #( type    = c_mensaje_e
+                      id      = c_mensaje_id
+                      number  = '035'
+                      message = mtext ) TO e_ti_bapiret2.
+      RETURN.
+
+    ENDIF.
+
+    DO.
+      READ DATASET i_ruta INTO datos_ftp.
+      IF NOT sy-subrc IS INITIAL.
+        EXIT.
+      ENDIF.
+      APPEND datos_ftp TO r_ti_archivo.
+    ENDDO.
+    CLOSE DATASET i_ruta.
+
+
+  ENDMETHOD.
+
+  METHOD escribir_archivo_directorio.
+
+    CASE i_modo.
+      WHEN 'OUTPUT'.
+        OPEN DATASET i_ruta FOR OUTPUT IN TEXT MODE ENCODING NON-UNICODE.
+      WHEN 'APPENDING'.
+        OPEN DATASET i_ruta FOR APPENDING IN TEXT MODE ENCODING NON-UNICODE.
+      WHEN OTHERS.
+        MESSAGE e036(zcx01) WITH 'f_grabar_fichero_unix'
+                                 '(OUTPUT -> si existe el fichero lo sobre escribe, APPENDING -> lo modifica)' INTO DATA(mtext).
+        APPEND VALUE #( type    = c_mensaje_e
+                        id      = c_mensaje_id
+                        number  = '036'
+                        message = mtext ) TO e_ti_bapiret2.
+        RETURN.
+    ENDCASE.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e035(zcx01) WITH i_ruta INTO mtext.
+      APPEND VALUE #( type    = c_mensaje_e
+                      id      = c_mensaje_id
+                      number  = '035'
+                      message = mtext ) TO e_ti_bapiret2.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        LOOP AT i_ti_archivo INTO DATA(es_archivo).
+
+          TRANSFER es_archivo TO i_ruta.
+
+        ENDLOOP.
+
+      CATCH cx_sy_conversion_codepage.
+*.....Falla en ciertas archivos con caracteres especiales.
+        MESSAGE e037(zcx01) WITH i_ruta INTO mtext.
+        APPEND VALUE #( type    = c_mensaje_e
+                        id      = c_mensaje_id
+                        number  = '037'
+                        message = mtext ) TO e_ti_bapiret2.
+    ENDTRY.
+
+    CLOSE DATASET i_ruta.
+
+  ENDMETHOD.
+
+  METHOD archivar_archivo.
+
+    DATA(parcom_loc) = SWITCH #( i_tipo_archivo
+                                    WHEN 'I'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/in/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/arc_in/|
+                                    WHEN 'O'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/out/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/arc_out/| ).
+
+
+    CALL 'SYSTEM' ID 'COMMAND' FIELD parcom_loc.
+
+  ENDMETHOD.
+
+  METHOD mover_archivo_a_error.
+
+    DATA(parcom_loc) = SWITCH #( i_tipo_archivo
+                                    WHEN 'I'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/in/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/error/|
+                                    WHEN 'O'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/out/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/arc_out/| ).
+
+
+    CALL 'SYSTEM' ID 'COMMAND' FIELD parcom_loc.
+
+  ENDMETHOD.
+
+  METHOD leer_directorio.
+
+    DATA: ti_archivos TYPE STANDARD TABLE OF epsfili.
+
+    DATA(direccion_ruta) = SWITCH epsdirnam( i_tipo_archivo
+                                              WHEN 'I'
+                                                THEN
+                                                   |{ to_lower( i_es_interface-dir_interface ) }/in/|
+                                              WHEN 'O'
+                                                THEN
+                                                   |{ to_lower( i_es_interface-dir_interface ) }/out/|
+                                              WHEN 'E'
+                                                THEN
+                                                   |{ to_lower( i_es_interface-dir_interface ) }/error/| ).
+    CALL FUNCTION 'EPS_GET_DIRECTORY_LISTING'
+      EXPORTING
+        dir_name               = direccion_ruta
+        file_mask              = '*'
+      TABLES
+        dir_list               = ti_archivos
+      EXCEPTIONS
+        invalid_eps_subdir     = 1
+        sapgparam_failed       = 2
+        build_directory_failed = 3
+        no_authorization       = 4
+        read_directory_failed  = 5
+        too_many_read_errors   = 6
+        empty_directory_list   = 7
+        OTHERS                 = 8.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+           INTO DATA(mtext).
+      APPEND VALUE #( type    = sy-msgty
+                     id      = sy-msgid
+                     number  = sy-msgno
+                     message = mtext ) TO e_ti_bapiret2.
+    ENDIF.
+
+    LOOP AT ti_archivos INTO DATA(es_archivo).
+
+      APPEND es_archivo-name TO r_ti_archivo.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD mover_de_error_a_entrada.
+
+    DATA(parcom_loc) = SWITCH #( i_tipo_archivo
+                                    WHEN 'I'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/error/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/in/| ).
+
+    CALL 'SYSTEM' ID 'COMMAND' FIELD parcom_loc.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclcxr1002_dir_interfaces DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    CLASS-METHODS:
+      "! <strong>Descripción:</strong>
+      "! <p>
+      "! Conexión con las interfaces de la tabla ztcxr1002_2<br/>
+      "! dependiendo de la acción
+      "! </p>
+      "! <strong>Identificador:</strong>
+                                                            "! R1002
+      "! <br/>
+      "! <strong>Autor:</strong>
+      "! Santiago Giraldo Rendon
+      "! <br/>
+      "! <strong>Historial de cambios:
+      "! <br/><br/>
+      "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+      "! </strong><br/>
+      "! \ 27.07.2021  \ S4DK900021 \ Santiago Giraldo \ Creacion Inicial \
+      "!
+      "! @parameter i_accion |
+      "! @parameter i_archivo |
+      "! @parameter i_tipo_archivo |
+      "! @parameter i_modulo |
+      "! @parameter i_aplicacion |
+      "! @parameter i_id_interface |
+      "! @parameter e_ti_bapiret2 |
+      "! @parameter e_es_interface |
+      "! @parameter c_ti_archivo |
+      directorio_de_interfaces
+        IMPORTING
+          i_accion       TYPE char1
+          i_archivo      TYPE string OPTIONAL
+          i_tipo_archivo TYPE char1
+          i_modulo       TYPE char2
+          i_aplicacion   TYPE ztcxr1002_2-aplicacion
+          i_id_interface TYPE char10
+        EXPORTING
+          e_ti_bapiret2  TYPE bapiret2_t
+          e_es_interface TYPE ztcxr1002_2
+        CHANGING
+          c_ti_archivo   TYPE re_t_string OPTIONAL.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    CONSTANTS: c_mensaje_e  TYPE c VALUE 'E',
+               c_mensaje_id TYPE symsgid VALUE 'ZCX01'.
+    CLASS-METHODS:
+      obtener_informacion_interface
+        IMPORTING
+          i_modulo               TYPE char2
+          i_aplicacion           TYPE ztcxr1002_2-aplicacion
+          i_id_interface         TYPE char10
+        RETURNING
+          VALUE(r_es_interfaces) TYPE ztcxr1002_2,
+      leer_archivo_directorio
+        IMPORTING
+          i_ruta              TYPE string
+        EXPORTING
+          e_ti_bapiret2       TYPE bapiret2_t
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      escribir_archivo_directorio
+        IMPORTING
+          i_ruta              TYPE string
+          i_modo              TYPE string
+          i_ti_archivo        TYPE re_t_string
+        EXPORTING
+          e_ti_bapiret2       TYPE bapiret2_t
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      archivar_archivo
+        IMPORTING
+          i_tipo_archivo      TYPE char1
+          i_es_interface      TYPE ztcxr1002_2
+          i_archivo           TYPE string
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      mover_archivo_a_error
+        IMPORTING
+          i_tipo_archivo      TYPE char1
+          i_es_interface      TYPE ztcxr1002_2
+          i_archivo           TYPE string
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      leer_directorio
+        IMPORTING
+          i_tipo_archivo      TYPE char1
+          i_es_interface      TYPE ztcxr1002_2
+        EXPORTING
+          e_ti_bapiret2       TYPE bapiret2_t
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string,
+      mover_de_error_a_entrada
+        IMPORTING
+          i_tipo_archivo      TYPE char1
+          i_es_interface      TYPE ztcxr1002_2
+          i_archivo           TYPE string
+        RETURNING
+          VALUE(r_ti_archivo) TYPE re_t_string
+        .
+ENDCLASS.
+
+
+
+CLASS zclcxr1002_dir_interfaces IMPLEMENTATION.
+
+  METHOD directorio_de_interfaces.
+
+    e_es_interface = obtener_informacion_interface( i_modulo = i_modulo i_aplicacion = i_aplicacion i_id_interface = i_id_interface ).
+
+    IF e_es_interface IS INITIAL.
+      MESSAGE e034(zcx01) WITH i_modulo i_aplicacion i_id_interface INTO DATA(mtext).
+      APPEND VALUE #( type    = c_mensaje_e
+                      id      = c_mensaje_id
+                      number  = '034'
+                      message = mtext ) TO e_ti_bapiret2.
+      EXIT.
+    ENDIF.
+*    BREAK SAGIRALD.
+    APPEND LINES OF SWITCH #( i_accion
+                                WHEN 'R'
+                                  THEN
+                                    leer_archivo_directorio( EXPORTING
+                                                                i_ruta = |{  to_lower( e_es_interface-dir_interface ) }/in/{ i_archivo }|
+                                                             IMPORTING
+                                                                e_ti_bapiret2 = e_ti_bapiret2 )
+                                WHEN 'W'
+                                  THEN
+                                     escribir_archivo_directorio( EXPORTING
+                                                                    i_ruta = |{  to_lower( e_es_interface-dir_interface ) }/out/{ i_archivo }|
+*                                                                    i_ruta = |{  to_lower( e_es_interface-dir_interface ) }/{ i_archivo }|
+                                                                    i_modo = 'OUTPUT'
+                                                                    i_ti_archivo = c_ti_archivo
+                                                                  IMPORTING
+                                                                    e_ti_bapiret2 = e_ti_bapiret2 )
+                                WHEN 'A'
+                                  THEN
+                                     archivar_archivo( i_tipo_archivo = i_tipo_archivo i_es_interface = e_es_interface i_archivo = i_archivo )
+                                WHEN 'L'
+                                  THEN
+                                      escribir_archivo_directorio( EXPORTING
+                                                                    i_ruta = |{  to_lower( e_es_interface-dir_interface ) }/log/{ i_archivo }.log|
+                                                                    i_modo = 'OUTPUT'
+                                                                    i_ti_archivo = c_ti_archivo
+                                                                   IMPORTING
+                                                                    e_ti_bapiret2 = e_ti_bapiret2 )
+                                WHEN 'E'
+                                  THEN
+                                      mover_archivo_a_error( i_tipo_archivo = i_tipo_archivo i_es_interface = e_es_interface i_archivo = i_archivo )
+                                WHEN 'D'
+                                  THEN
+                                      leer_directorio( EXPORTING
+                                                         i_tipo_archivo = i_tipo_archivo i_es_interface = e_es_interface
+                                                       IMPORTING
+                                                         e_ti_bapiret2 = e_ti_bapiret2 )
+                                WHEN 'M'
+                                  THEN
+                                      mover_de_error_a_entrada( i_tipo_archivo = i_tipo_archivo i_es_interface = e_es_interface i_archivo = i_archivo ) ) TO c_ti_archivo.
+
+  ENDMETHOD.
+
+  METHOD obtener_informacion_interface.
+
+    SELECT SINGLE *
+    FROM ztcxr1002_2
+        INTO @r_es_interfaces
+        WHERE modulo       = @i_modulo
+          AND aplicacion   = @i_aplicacion
+          AND id_interface = @i_id_interface.
+
+  ENDMETHOD.
+
+  METHOD leer_archivo_directorio.
+    DATA: datos_ftp TYPE string.
+
+    OPEN DATASET i_ruta FOR INPUT IN TEXT MODE ENCODING NON-UNICODE.
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e035(zcx01) WITH i_ruta INTO DATA(mtext).
+      APPEND VALUE #( type    = c_mensaje_e
+                      id      = c_mensaje_id
+                      number  = '035'
+                      message = mtext ) TO e_ti_bapiret2.
+      RETURN.
+
+    ENDIF.
+
+    DO.
+      READ DATASET i_ruta INTO datos_ftp.
+      IF NOT sy-subrc IS INITIAL.
+        EXIT.
+      ENDIF.
+      APPEND datos_ftp TO r_ti_archivo.
+    ENDDO.
+    CLOSE DATASET i_ruta.
+
+
+  ENDMETHOD.
+
+  METHOD escribir_archivo_directorio.
+
+    CASE i_modo.
+      WHEN 'OUTPUT'.
+        OPEN DATASET i_ruta FOR OUTPUT IN TEXT MODE ENCODING NON-UNICODE.
+      WHEN 'APPENDING'.
+        OPEN DATASET i_ruta FOR APPENDING IN TEXT MODE ENCODING NON-UNICODE.
+      WHEN OTHERS.
+        MESSAGE e036(zcx01) WITH 'f_grabar_fichero_unix'
+                                 '(OUTPUT -> si existe el fichero lo sobre escribe, APPENDING -> lo modifica)' INTO DATA(mtext).
+        APPEND VALUE #( type    = c_mensaje_e
+                        id      = c_mensaje_id
+                        number  = '036'
+                        message = mtext ) TO e_ti_bapiret2.
+        RETURN.
+    ENDCASE.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE e035(zcx01) WITH i_ruta INTO mtext.
+      APPEND VALUE #( type    = c_mensaje_e
+                      id      = c_mensaje_id
+                      number  = '035'
+                      message = mtext ) TO e_ti_bapiret2.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        LOOP AT i_ti_archivo INTO DATA(es_archivo).
+
+          TRANSFER es_archivo TO i_ruta.
+
+        ENDLOOP.
+
+      CATCH cx_sy_conversion_codepage.
+*.....Falla en ciertas archivos con caracteres especiales.
+        MESSAGE e037(zcx01) WITH i_ruta INTO mtext.
+        APPEND VALUE #( type    = c_mensaje_e
+                        id      = c_mensaje_id
+                        number  = '037'
+                        message = mtext ) TO e_ti_bapiret2.
+    ENDTRY.
+
+    CLOSE DATASET i_ruta.
+
+  ENDMETHOD.
+
+  METHOD archivar_archivo.
+
+    DATA(parcom_loc) = SWITCH #( i_tipo_archivo
+                                    WHEN 'I'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/in/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/arc_in/|
+                                    WHEN 'O'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/out/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/arc_out/| ).
+
+
+    CALL 'SYSTEM' ID 'COMMAND' FIELD parcom_loc.
+
+  ENDMETHOD.
+
+  METHOD mover_archivo_a_error.
+
+    DATA(parcom_loc) = SWITCH #( i_tipo_archivo
+                                    WHEN 'I'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/in/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/error/|
+                                    WHEN 'O'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/out/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/arc_out/| ).
+
+
+    CALL 'SYSTEM' ID 'COMMAND' FIELD parcom_loc.
+
+  ENDMETHOD.
+
+  METHOD leer_directorio.
+
+    DATA: ti_archivos TYPE STANDARD TABLE OF epsfili.
+
+    DATA(direccion_ruta) = SWITCH epsdirnam( i_tipo_archivo
+                                              WHEN 'I'
+                                                THEN
+                                                   |{ to_lower( i_es_interface-dir_interface ) }/in/|
+                                              WHEN 'O'
+                                                THEN
+                                                   |{ to_lower( i_es_interface-dir_interface ) }/out/|
+                                              WHEN 'E'
+                                                THEN
+                                                   |{ to_lower( i_es_interface-dir_interface ) }/error/| ).
+    CALL FUNCTION 'EPS_GET_DIRECTORY_LISTING'
+      EXPORTING
+        dir_name               = direccion_ruta
+        file_mask              = '*'
+      TABLES
+        dir_list               = ti_archivos
+      EXCEPTIONS
+        invalid_eps_subdir     = 1
+        sapgparam_failed       = 2
+        build_directory_failed = 3
+        no_authorization       = 4
+        read_directory_failed  = 5
+        too_many_read_errors   = 6
+        empty_directory_list   = 7
+        OTHERS                 = 8.
+
+    IF sy-subrc IS NOT INITIAL.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+           WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+           INTO DATA(mtext).
+      APPEND VALUE #( type    = sy-msgty
+                     id      = sy-msgid
+                     number  = sy-msgno
+                     message = mtext ) TO e_ti_bapiret2.
+    ENDIF.
+
+    LOOP AT ti_archivos INTO DATA(es_archivo).
+
+      APPEND es_archivo-name TO r_ti_archivo.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD mover_de_error_a_entrada.
+
+    DATA(parcom_loc) = SWITCH #( i_tipo_archivo
+                                    WHEN 'I'
+                                      THEN
+                                         |mv { to_lower( i_es_interface-dir_interface ) }/error/{ i_archivo } { to_lower( i_es_interface-dir_interface ) }/in/| ).
+
+    CALL 'SYSTEM' ID 'COMMAND' FIELD parcom_loc.
+
+  ENDMETHOD.
+
+ENDCLASS.

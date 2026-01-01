@@ -1,0 +1,68 @@
+CLASS zclppi1049_notifica_op_mpc_ext DEFINITION
+  PUBLIC
+  INHERITING FROM zclppi1049_notifica_op_mpc
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF ts_deep_entity,
+             aufnr    TYPE zeppi1049_1-aufnr,
+             ordenset TYPE STANDARD TABLE OF ts_orden WITH EMPTY KEY,
+           END OF ts_deep_entity.
+
+    METHODS: define REDEFINITION.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclppi1049_notifica_op_mpc_ext IMPLEMENTATION.
+  METHOD define.
+    DATA: o_annotation   TYPE REF TO /iwbep/if_mgw_odata_annotation,
+          o_entity_type  TYPE REF TO /iwbep/if_mgw_odata_entity_typ,
+          o_complex_type TYPE REF TO /iwbep/if_mgw_odata_cmplx_type,
+          o_property     TYPE REF TO /iwbep/if_mgw_odata_property,
+          o_entity_set   TYPE REF TO /iwbep/if_mgw_odata_entity_set.
+
+    super->define( ).
+    o_entity_type = model->get_entity_type( iv_entity_name = 'OrdenNotificar' ).
+    o_entity_type->bind_structure( iv_structure_name  = 'ZCLPPI1049_NOTIFICA_OP_MPC_EXT=>TS_DEEP_ENTITY' ).
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclppi1049_notifica_op_mpc_ext DEFINITION
+  PUBLIC
+  INHERITING FROM zclppi1049_notifica_op_mpc
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF ts_deep_entity,
+             aufnr    TYPE zeppi1049_1-aufnr,
+             ordenset TYPE STANDARD TABLE OF ts_orden WITH EMPTY KEY,
+           END OF ts_deep_entity.
+
+    METHODS: define REDEFINITION.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclppi1049_notifica_op_mpc_ext IMPLEMENTATION.
+  METHOD define.
+    DATA: o_annotation   TYPE REF TO /iwbep/if_mgw_odata_annotation,
+          o_entity_type  TYPE REF TO /iwbep/if_mgw_odata_entity_typ,
+          o_complex_type TYPE REF TO /iwbep/if_mgw_odata_cmplx_type,
+          o_property     TYPE REF TO /iwbep/if_mgw_odata_property,
+          o_entity_set   TYPE REF TO /iwbep/if_mgw_odata_entity_set.
+
+    super->define( ).
+    o_entity_type = model->get_entity_type( iv_entity_name = 'OrdenNotificar' ).
+    o_entity_type->bind_structure( iv_structure_name  = 'ZCLPPI1049_NOTIFICA_OP_MPC_EXT=>TS_DEEP_ENTITY' ).
+  ENDMETHOD.
+
+ENDCLASS.

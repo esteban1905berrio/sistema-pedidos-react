@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFIE1007_1",
+  "header" : {
+    "enhancementName" : "ZFIE1007_1",
+    "description" : "Agregar linea de impuesto en documento contable desde CAR",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZE1007",
+    "author" : "SEBLONDO",
+    "createdOn" : "2024-02-14",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2025-05-15"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "ES_SAPLFACI",
+    "programName" : "SAPLFACI",
+    "fullName" : "\\PR:SAPLFACI\\EX:DOCUMENT_TAX_BSET_03\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "*----------------------------------------------------------------------*\n* Información General\n*----------------------------------------------------------------------*\n* Identificador: E1007 - Contabilización Operaciones de Caja\n* Programa     : ZFIE1007_1\n* Tipo Objeto  : ENHANCEMENT\n* Descripción  : Agregar posicion automatica de impuesto en documento\n* Autor Prog.  : Sebastian Londoño\n* Fecha Creac. : 19.01.2024\n*----------------------------------------------------------------------*\n* Ordenes de Transporte\n*----------------------------------------------------------------------*\n* Fecha       | CR#         | Autor                   | Modificación\n*----------------------------------------------------------------------*\n* 19.01.2024     S4DK926409   Sebastian Londoño         Creación\n*----------------------------------------------------------------------*\n  zclfi_exits_wpufib=>document_tax_bset_03(\n    CHANGING\n      c_ti_bseg = xbseg[]\n      c_ti_bsez = xbsez[]\n      c_ti_bkpf = xbkpf[]\n      c_ti_bset = xbset[]\n      c_ti_accposnr = accposnr[]\n      c_ti_accit    = t_accit[]\n      c_ti_acccr    = t_acccr[] ).\n"
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

@@ -1,0 +1,324 @@
+CLASS zclfii1008_amdp_datos_idoc DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    CLASS-METHODS:
+      datos_general_financiero
+        FOR TABLE FUNCTION ztfi1008_1,
+      log_idoc
+        FOR TABLE FUNCTION ztfi1008_2.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfii1008_amdp_datos_idoc IMPLEMENTATION.
+  METHOD datos_general_financiero
+          BY DATABASE FUNCTION FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING edidc edid4.
+    declare client varchar(3) := session_context ('CLIENT');
+
+        ti_datos_fi = SELECT
+                        k.mandt,
+                        k.docnum as numero_idoc,
+                        k.mestyp,
+                        segnam,
+                        k.status,
+                        substring( sdata, 1, 4)  as sociedad,
+                        substring( sdata, 7, 10) as belnr,
+                        substring( sdata, 17, 4) as gjahr,
+                        substring( sdata, 21, 2) as blart,
+                        substring( sdata, 41, 8) as bldat,
+                        substring( sdata, 31, 8) as budat
+                        from edidc as k
+                        inner join edid4 AS d
+                        ON k.mandt = d.mandt
+                        and k.docnum = d.docnum
+                        where k.mandt = :client
+                        and d.segnam = 'E1FIKPF';
+
+        ti_datos_co = SELECT
+                        k.mandt,
+                        k.docnum as numero_idoc,
+                        k.mestyp,
+                        segnam,
+                        k.status,
+                        substring( sdata, 1, 4)  as sociedad,
+                        substring( sdata, 5, 10) as belnr,
+                        substring( sdata, 15, 4) as gjahr,
+                        substring( sdata, 19, 3) as perab,
+                        substring( sdata, 22, 3) as perbi,
+                        substring( sdata, 25, 3) as versn,
+                        substring( sdata, 28, 4) as vrgng,
+                        substring( sdata, 32, 8) as bldat,
+                        substring( sdata, 40, 8) as budat
+                        from edidc as k
+                        inner join edid4 AS d
+                        ON k.mandt = d.mandt
+                        and k.docnum = d.docnum
+                        where k.mandt = :client
+                        and   segnam = 'E1COBK';
+
+        ti_datos_cebe = SELECT
+                        k.mandt,
+                        k.docnum as numero_idoc,
+                        k.mestyp,
+                        segnam,
+                        k.status,
+                        substring( sdata, 60, 4)  as sociedad,
+                        substring( sdata, 47, 10) as belnr,
+                        substring( sdata, 7, 4) as gjahr,
+                        '' as perab,
+                        '' as perbi,
+                        '' as versn,
+                        '' as vrgng,
+                        substring( sdata, 321, 8) as bldat,
+                        substring( sdata, 329, 8) as budat
+                        FROM edidc as k
+                        INNER JOIN edid4 AS d
+                        ON    k.mandt = d.mandt
+                        AND   k.docnum = d.docnum
+                        WHERE k.mandt = :client
+                        AND   segnam = 'E1BPPCADOC';
+
+        ti_documentos =
+        SELECT mandt, numero_idoc, mestyp, segnam, status, sociedad, belnr, gjahr, blart as tipo_doc, bldat, budat
+        from :ti_datos_fi
+        UNION
+        SELECT mandt, numero_idoc, mestyp, segnam, status, sociedad, belnr, gjahr, vrgng as tipo_doc, bldat, budat
+        from :ti_datos_co
+        UNION
+        SELECT mandt, numero_idoc, mestyp, segnam, status, sociedad, belnr, gjahr, vrgng as tipo_doc, bldat, budat
+        from :ti_datos_cebe;
+
+        RETURN SELECT
+        mandt,
+        numero_idoc,
+        mestyp,
+        segnam,
+        status,
+        sociedad,
+        belnr,
+        gjahr,
+        tipo_doc,
+        bldat,
+        budat
+        from :ti_documentos;
+  ENDMETHOD.
+
+  METHOD log_idoc BY DATABASE FUNCTION FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING edidc edids.
+
+    declare client varchar(3) := session_context ('CLIENT');
+
+    ti_log_idoc = SELECT k.mandt, k.docnum, MAX( countr ) as countr
+                  from edidc as k
+                  inner join edids as d
+                  ON d.mandt = k.mandt
+                  and d.docnum = k.docnum
+                  where k.mestyp IN ( 'FIDCC2', 'CODCMT', 'PRCDOC' )
+                  group by  k.mandt, k.docnum;
+
+    return select
+             k.mandt,
+             k.docnum as numero_idoc,
+             mestyp,
+             k.status,
+             d.statyp,
+             d.statxt,
+             d.stapa1,
+             d.stapa2,
+             d.stapa3,
+             d.stapa4,
+             d.stamid,
+             d.stamno,
+             d.uname,
+             logdat,
+             logtim,
+             d.countr
+                from edidc as k
+                inner join edids as d
+                on d.mandt = k.mandt
+                and d.docnum = k.docnum
+                inner join :ti_log_idoc as c
+                on d.mandt = k.mandt
+                and c.docnum = k.docnum
+                and c.countr = d.countr
+            where k.mandt = :client
+            order by k.docnum, statxt;
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfii1008_amdp_datos_idoc DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    CLASS-METHODS:
+      datos_general_financiero
+        FOR TABLE FUNCTION ztfi1008_1,
+      log_idoc
+        FOR TABLE FUNCTION ztfi1008_2.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfii1008_amdp_datos_idoc IMPLEMENTATION.
+  METHOD datos_general_financiero
+          BY DATABASE FUNCTION FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING edidc edid4.
+    declare client varchar(3) := session_context ('CLIENT');
+
+        ti_datos_fi = SELECT
+                        k.mandt,
+                        k.docnum as numero_idoc,
+                        k.mestyp,
+                        segnam,
+                        k.status,
+                        substring( sdata, 1, 4)  as sociedad,
+                        substring( sdata, 7, 10) as belnr,
+                        substring( sdata, 17, 4) as gjahr,
+                        substring( sdata, 21, 2) as blart,
+                        substring( sdata, 41, 8) as bldat,
+                        substring( sdata, 31, 8) as budat
+                        from edidc as k
+                        inner join edid4 AS d
+                        ON k.mandt = d.mandt
+                        and k.docnum = d.docnum
+                        where k.mandt = :client
+                        and d.segnam = 'E1FIKPF';
+
+        ti_datos_co = SELECT
+                        k.mandt,
+                        k.docnum as numero_idoc,
+                        k.mestyp,
+                        segnam,
+                        k.status,
+                        substring( sdata, 1, 4)  as sociedad,
+                        substring( sdata, 5, 10) as belnr,
+                        substring( sdata, 15, 4) as gjahr,
+                        substring( sdata, 19, 3) as perab,
+                        substring( sdata, 22, 3) as perbi,
+                        substring( sdata, 25, 3) as versn,
+                        substring( sdata, 28, 4) as vrgng,
+                        substring( sdata, 32, 8) as bldat,
+                        substring( sdata, 40, 8) as budat
+                        from edidc as k
+                        inner join edid4 AS d
+                        ON k.mandt = d.mandt
+                        and k.docnum = d.docnum
+                        where k.mandt = :client
+                        and   segnam = 'E1COBK';
+
+        ti_datos_cebe = SELECT
+                        k.mandt,
+                        k.docnum as numero_idoc,
+                        k.mestyp,
+                        segnam,
+                        k.status,
+                        substring( sdata, 60, 4)  as sociedad,
+                        substring( sdata, 47, 10) as belnr,
+                        substring( sdata, 7, 4) as gjahr,
+                        '' as perab,
+                        '' as perbi,
+                        '' as versn,
+                        '' as vrgng,
+                        substring( sdata, 321, 8) as bldat,
+                        substring( sdata, 329, 8) as budat
+                        FROM edidc as k
+                        INNER JOIN edid4 AS d
+                        ON    k.mandt = d.mandt
+                        AND   k.docnum = d.docnum
+                        WHERE k.mandt = :client
+                        AND   segnam = 'E1BPPCADOC';
+
+        ti_documentos =
+        SELECT mandt, numero_idoc, mestyp, segnam, status, sociedad, belnr, gjahr, blart as tipo_doc, bldat, budat
+        from :ti_datos_fi
+        UNION
+        SELECT mandt, numero_idoc, mestyp, segnam, status, sociedad, belnr, gjahr, vrgng as tipo_doc, bldat, budat
+        from :ti_datos_co
+        UNION
+        SELECT mandt, numero_idoc, mestyp, segnam, status, sociedad, belnr, gjahr, vrgng as tipo_doc, bldat, budat
+        from :ti_datos_cebe;
+
+        RETURN SELECT
+        mandt,
+        numero_idoc,
+        mestyp,
+        segnam,
+        status,
+        sociedad,
+        belnr,
+        gjahr,
+        tipo_doc,
+        bldat,
+        budat
+        from :ti_documentos;
+  ENDMETHOD.
+
+  METHOD log_idoc BY DATABASE FUNCTION FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING edidc edids.
+
+    declare client varchar(3) := session_context ('CLIENT');
+
+    ti_log_idoc = SELECT k.mandt, k.docnum, MAX( countr ) as countr
+                  from edidc as k
+                  inner join edids as d
+                  ON d.mandt = k.mandt
+                  and d.docnum = k.docnum
+                  where k.mestyp IN ( 'FIDCC2', 'CODCMT', 'PRCDOC' )
+                  group by  k.mandt, k.docnum;
+
+    return select
+             k.mandt,
+             k.docnum as numero_idoc,
+             mestyp,
+             k.status,
+             d.statyp,
+             d.statxt,
+             d.stapa1,
+             d.stapa2,
+             d.stapa3,
+             d.stapa4,
+             d.stamid,
+             d.stamno,
+             d.uname,
+             logdat,
+             logtim,
+             d.countr
+                from edidc as k
+                inner join edids as d
+                on d.mandt = k.mandt
+                and d.docnum = k.docnum
+                inner join :ti_log_idoc as c
+                on d.mandt = k.mandt
+                and c.docnum = k.docnum
+                and c.countr = d.countr
+            where k.mandt = :client
+            order by k.docnum, statxt;
+  ENDMETHOD.
+
+ENDCLASS.

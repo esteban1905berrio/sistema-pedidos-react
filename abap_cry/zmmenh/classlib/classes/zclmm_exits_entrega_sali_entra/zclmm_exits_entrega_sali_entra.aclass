@@ -1,0 +1,118 @@
+CLASS zclmm_exits_entrega_sali_entra DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    "! Exit para modificar los valores del documento de compras
+    "!
+    "! @parameter c_ti_xmcekpo | EKPO
+    CLASS-METHODS exit_sapleins_001
+      CHANGING
+        !c_ti_xmcekpo TYPE mmda_pur_tty_xmcekpo .
+    "! Exit para modificar crear lotes pendientes
+    "!
+    "! @parameter i_vbeln| VBELN
+    "! @parameter i_vbelp| VBELP
+    CLASS-METHODS exit_sapleins_002
+      IMPORTING
+        !i_vbeln TYPE ekes-vbeln
+        !i_vbelp TYPE ekes-vbelp .
+    "! Exit para modificar asignar el lote
+    "!
+    "! @parameter is_interface_internal| is_interface_internal
+    "! @parameter cs_komdlgn| cs_komdlgn
+    CLASS-METHODS exit_saplv50r_crea_003
+      IMPORTING
+        !is_interface_internal TYPE leshp_delivery_create
+      CHANGING
+        !cs_komdlgn            TYPE komdlgn .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLMM_EXITS_ENTREGA_SALI_ENTRA IMPLEMENTATION.
+
+
+  METHOD exit_sapleins_001.
+
+    zclmme1089_indic_entrega_final=>indicador_entrega_final( CHANGING c_ti_xmcekpo = c_ti_xmcekpo ).
+    zclmmc1005_entrega_entrante=>limpiar_almacen( CHANGING c_ti_xmcekpo = c_ti_xmcekpo ).
+
+  ENDMETHOD.
+
+
+  METHOD exit_sapleins_002.
+    zclmmc1005_entrega_entrante=>crear_lote( EXPORTING i_vbeln = i_vbeln i_vbelp = i_vbelp ).
+  ENDMETHOD.
+
+
+  METHOD exit_saplv50r_crea_003.
+    zclmmc1005_entrega_entrante=>asignar_lote(
+      EXPORTING is_interface_internal = is_interface_internal
+      CHANGING  cs_komdlgn            = cs_komdlgn
+    ).
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclmm_exits_entrega_sali_entra DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    "! Exit para modificar los valores del documento de compras
+    "!
+    "! @parameter c_ti_xmcekpo | EKPO
+    CLASS-METHODS exit_sapleins_001
+      CHANGING
+        !c_ti_xmcekpo TYPE mmda_pur_tty_xmcekpo .
+    "! Exit para modificar crear lotes pendientes
+    "!
+    "! @parameter i_vbeln| VBELN
+    "! @parameter i_vbelp| VBELP
+    CLASS-METHODS exit_sapleins_002
+      IMPORTING
+        !i_vbeln TYPE ekes-vbeln
+        !i_vbelp TYPE ekes-vbelp .
+    "! Exit para modificar asignar el lote
+    "!
+    "! @parameter is_interface_internal| is_interface_internal
+    "! @parameter cs_komdlgn| cs_komdlgn
+    CLASS-METHODS exit_saplv50r_crea_003
+      IMPORTING
+        !is_interface_internal TYPE leshp_delivery_create
+      CHANGING
+        !cs_komdlgn            TYPE komdlgn .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCLMM_EXITS_ENTREGA_SALI_ENTRA IMPLEMENTATION.
+
+
+  METHOD exit_sapleins_001.
+
+    zclmme1089_indic_entrega_final=>indicador_entrega_final( CHANGING c_ti_xmcekpo = c_ti_xmcekpo ).
+    zclmmc1005_entrega_entrante=>limpiar_almacen( CHANGING c_ti_xmcekpo = c_ti_xmcekpo ).
+
+  ENDMETHOD.
+
+
+  METHOD exit_sapleins_002.
+    zclmmc1005_entrega_entrante=>crear_lote( EXPORTING i_vbeln = i_vbeln i_vbelp = i_vbelp ).
+  ENDMETHOD.
+
+
+  METHOD exit_saplv50r_crea_003.
+    zclmmc1005_entrega_entrante=>asignar_lote(
+      EXPORTING is_interface_internal = is_interface_internal
+      CHANGING  cs_komdlgn            = cs_komdlgn
+    ).
+  ENDMETHOD.
+ENDCLASS.

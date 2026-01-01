@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFII1008_3",
+  "header" : {
+    "enhancementName" : "ZFII1008_3",
+    "description" : "Compensar documentos FI que entrar por IDOC FIDCC2",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZI1008",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-06-25",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-07-23"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "SAPLF050",
+    "fullName" : "\\PR:SAPLF050\\FO:WORKFLOW_RESULT_FUELLEN\\SE:END\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "  zclfi_exits_gestion_documentos=>compensar_documento_anulado(\n    CHANGING\n      c_es_datos_documento = wrf_accdn )."
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

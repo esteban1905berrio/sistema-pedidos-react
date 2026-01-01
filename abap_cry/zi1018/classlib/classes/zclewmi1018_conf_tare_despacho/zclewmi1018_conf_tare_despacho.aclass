@@ -1,0 +1,1648 @@
+CLASS zclewmi1018_conf_tare_despacho DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_mensaje TYPE string VALUE 'ZEWM01',
+               gc_ricefw        TYPE zzedricefw  VALUE 'I1018'.
+
+    TYPES: BEGIN OF gtp_es_um,
+             vbeln     TYPE /scdl/db_proci_o-docno,
+             lgnum     TYPE /scwm/aqua-lgnum,
+             lgpla     TYPE /scwm/aqua-lgpla,
+             um        TYPE /scwm/de_huident,
+             cantindad TYPE /scwm/de_quantity,
+             matnr     TYPE mara-matnr,
+             productid TYPE /scdl/db_proci_o-productid,
+           END OF gtp_es_um,
+
+           BEGIN OF gtp_es_entrega_salida,
+             docid               TYPE /scdl/db_proci_o-docid,
+             itemid              TYPE /scdl/db_proci_o-itemid,
+             doccat              TYPE /scdl/db_proci_o-doccat,
+             docno               TYPE /scdl/db_proci_o-docno,
+             itemno              TYPE /scdl/db_proci_o-itemno,
+             productno           TYPE /scdl/db_proci_o-productno,
+             productid           TYPE /scdl/db_proci_o-productid,
+             ean11               TYPE mean-ean11,
+             batchno             TYPE /scdl/dl_batchno,
+             batch_id            TYPE mcha-batch_id,
+             prcode              TYPE /scdl/s_sp_a_item_prcodes-prcode,
+             cantidad_producto   TYPE /scdl/db_proci_o-qty,
+             cantidad_confirmada TYPE /scdl/db_proci_o-qty,
+             uom                 TYPE /scdl/db_proci_o-uom,
+             /scwm/procty        TYPE /scwm/de_procty,
+             stock_owner         TYPE /scdl/dl_stock_owner,
+             stock_owner_role    TYPE /scdl/dl_stock_owner_role,
+             werks               TYPE werks_d,
+             lgort               TYPE lgort_d,
+             whnumwme            TYPE /scwm/tmapwhnum-whnumwme,
+             whnumerp            TYPE /scwm/tmapwhnum-whnumerp,
+             lgnum               TYPE /scwm/lgnum,
+           END OF gtp_es_entrega_salida.
+
+
+    TYPES: gtp_ti_um             TYPE STANDARD TABLE OF gtp_es_um WITH EMPTY KEY,
+           gtp_ti_entrega_salida TYPE STANDARD TABLE OF gtp_es_entrega_salida
+                                      WITH NON-UNIQUE KEY docid itemid doccat.
+
+    DATA: go_log        TYPE REF TO zclcxr1002_log_aplicacion,
+          go_parametros TYPE REF TO zclcxr1000_parametros.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      ingreso_proxy
+        EXPORTING
+          e_ti_return   TYPE bapiret2_t
+        CHANGING
+          i_datos_proxy TYPE REF TO data,
+      confirmar_tarea_distribucion
+        CHANGING
+          c_ti_entrega_salida TYPE gtp_ti_entrega_salida
+          c_ti_datos_proxy    TYPE zpxcajas_despacho_cajas_tab.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    DATA: g_ubicacion              TYPE /scwm/aqua-lgpla VALUE 'EMBALAJE',
+          g_tipo_material_embalaje TYPE /scwm/de_pmtyp  VALUE 'CJ',
+          g_tipo_almacen_destino   TYPE string,
+          g_material_embaleje      TYPE mara-matnr,
+          g_clase_proceso          TYPE /scdl/dl_prcode.
+
+    METHODS:
+      validar_mensaje_proxy
+        CHANGING
+          c_ti_datos_proxy           TYPE zpxcajas_despacho_cajas_tab
+        RETURNING
+          VALUE(r_ti_entrega_salida) TYPE gtp_ti_entrega_salida,
+      consultar_ean
+        CHANGING
+          c_ti_datos_proxy TYPE zpxcajas_despacho_cajas_tab
+        RETURNING
+          VALUE(r_ti_ean)  TYPE mean_tab,
+      entrega_salida_valida
+        EXPORTING
+          e_ti_entrega_salida TYPE gtp_ti_entrega_salida
+        CHANGING
+          c_ti_datos_proxy    TYPE zpxcajas_despacho_cajas_tab,
+      um_valida
+        IMPORTING
+          i_ti_entrega_salida TYPE gtp_ti_entrega_salida
+        CHANGING
+          c_ti_datos_proxy    TYPE zpxcajas_despacho_cajas_tab,
+      crear_unidad_manipulacion
+        IMPORTING
+          VALUE(i_ti_um) TYPE gtp_ti_um,
+      crear_tarea_almacen
+        CHANGING
+          c_ti_entrega_salida TYPE gtp_ti_entrega_salida
+          c_ti_datos_proxy    TYPE zpxcajas_despacho_cajas_tab,
+      ajuste_cantidad
+        IMPORTING
+          VALUE(i_ti_entrega_salida) TYPE gtp_ti_entrega_salida
+        CHANGING
+          c_ti_datos_proxy           TYPE zpxcajas_despacho_cajas_tab,
+      iniciar_embalaje
+        IMPORTING
+          i_lgnum      TYPE /scwm/lgnum
+        CHANGING
+          c_o_scwn_log TYPE REF TO /scwm/cl_log
+          c_o_embalaje TYPE REF TO /scwm/cl_wm_packing,
+      obtener_tarea_almacen
+        IMPORTING
+          i_ti_entrega_salida    TYPE gtp_ti_entrega_salida  OPTIONAL
+          i_ti_datos_proxy       TYPE zpxcajas_despacho_cajas_tab
+        RETURNING
+          VALUE(r_tarea_almacen) TYPE /scwm/tanum.
+
+ENDCLASS.
+
+
+
+CLASS zclewmi1018_conf_tare_despacho IMPLEMENTATION.
+
+  METHOD ingreso_proxy.
+
+    DATA: es_recibir_cajas_despacho TYPE zpxrecibir_cajas_despacho.
+
+    FIELD-SYMBOLS: <fs_es_recibir_cajas_despacho> TYPE zpxrecibir_cajas_despacho.
+
+    go_log->remover_mensage( ).
+
+    ASSIGN i_datos_proxy->* TO <fs_es_recibir_cajas_despacho>.
+
+    es_recibir_cajas_despacho = <fs_es_recibir_cajas_despacho>.
+
+    LOOP AT es_recibir_cajas_despacho-recibir_cajas_despacho-cajas ASSIGNING FIELD-SYMBOL(<fs_es_caja>).
+      <fs_es_caja>-exidv_wcs = CONV /scwm/de_huident( |{ <fs_es_caja>-exidv_wcs ALPHA = IN }| ).
+      CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+        EXPORTING
+          input        = <fs_es_caja>-matnr
+        IMPORTING
+          output       = <fs_es_caja>-matnr
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+      IF sy-subrc <> 0.
+        go_log->set_es_log(  i_es = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno
+                                             message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                             message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+      ENDIF.
+
+    ENDLOOP.
+
+    DATA(ti_entrega_salida) = validar_mensaje_proxy( CHANGING
+                                                        c_ti_datos_proxy = es_recibir_cajas_despacho-recibir_cajas_despacho-cajas ).
+
+    IF go_log->get_errores( ) IS INITIAL.
+
+      TRY.
+          confirmar_tarea_distribucion(
+            CHANGING
+              c_ti_entrega_salida = ti_entrega_salida
+              c_ti_datos_proxy    = es_recibir_cajas_despacho-recibir_cajas_despacho-cajas ).
+        CATCH cx_sy_itab_line_not_found INTO DATA(o_cx).
+          go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+      ENDTRY.
+
+    ENDIF.
+
+    e_ti_return = CORRESPONDING #( go_log->get_log( ) ).
+
+    SORT e_ti_return BY id number.
+
+    DELETE ADJACENT DUPLICATES FROM e_ti_return COMPARING ALL FIELDS.
+
+  ENDMETHOD.
+
+  METHOD confirmar_tarea_distribucion.
+
+    "1.
+    crear_unidad_manipulacion( i_ti_um = VALUE #( FOR es_dato_proxy IN c_ti_datos_proxy
+                                                  (  lgnum = c_ti_entrega_salida[ docno = |{ CONV /scdl/dl_docno_int( es_dato_proxy-vbeln ) ALPHA = IN }| ]-whnumwme
+                                                     matnr = es_dato_proxy-matnr
+                                                     productid = c_ti_entrega_salida[ docno = |{ CONV /scdl/dl_docno_int( es_dato_proxy-vbeln ) ALPHA = IN }| ]-productid
+                                                     um = |{ es_dato_proxy-exidv_wcs ALPHA = IN }|
+                                                     cantindad = es_dato_proxy-vemng
+                                                     vbeln = |{ es_dato_proxy-vbeln  ALPHA = IN }|
+                                                  )
+                                                )
+                             ).
+    "2.
+    crear_tarea_almacen(
+      CHANGING
+        c_ti_entrega_salida = c_ti_entrega_salida
+        c_ti_datos_proxy    = c_ti_datos_proxy  ).
+
+    "3.
+    ajuste_cantidad( EXPORTING
+                        i_ti_entrega_salida = c_ti_entrega_salida
+                     CHANGING
+                        c_ti_datos_proxy    = c_ti_datos_proxy ).
+  ENDMETHOD.
+
+  METHOD ajuste_cantidad.
+
+    DATA: ti_cabecera           TYPE /scdl/t_sp_k_head,
+          ti_proceso_entrada    TYPE /scdl/t_sp_a_item_prcodes,
+          ti_proceso_salida     TYPE /scdl/t_sp_a_item_prcodes,
+          ti_seleccion_cabecera TYPE /scdl/t_sp_a_head,
+          o_mensaje             TYPE REF TO /scdl/cl_sp_message_box,
+          indicador_de_rechazo  TYPE boole_d,
+          ti_codigos_retorno    TYPE /scdl/t_sp_return_code,
+          o_entrega_salida      TYPE REF TO /scdl/cl_sp_prd_out.
+
+    FIELD-SYMBOLS: <fs_es_posiciones_procesadas>  LIKE LINE OF i_ti_entrega_salida.
+
+    CHECK obtener_tarea_almacen( i_ti_datos_proxy = c_ti_datos_proxy ) IS NOT INITIAL AND
+          "go_log->get_errores( ) IS INITIAL AND
+          i_ti_entrega_salida IS NOT INITIAL AND
+          line_exists( c_ti_datos_proxy[ chstat = abap_true ] ).
+
+    TRY.
+        o_mensaje = NEW /scdl/cl_sp_message_box( ).
+        o_entrega_salida = NEW /scdl/cl_sp_prd_out( io_message_box = o_mensaje
+                                                    iv_doccat      = /scdl/if_dl_doc_c=>sc_doccat_out_prd
+                                                    iv_mode        = /scdl/cl_sp=>sc_mode_classic ).
+      CATCH /scdl/cx_sp_message_box INTO DATA(o_cx_msg).
+        go_log->set_o_cx_log( i_o_cx_log = o_cx_msg ).
+        RETURN.
+    ENDTRY.
+
+    ASSIGN i_ti_entrega_salida[ 1 ] TO <fs_es_posiciones_procesadas>.
+
+    APPEND VALUE #( docid = <fs_es_posiciones_procesadas>-docid ) TO ti_cabecera.
+
+    o_entrega_salida->select(
+      EXPORTING
+        inkeys       = ti_cabecera
+        aspect       = /scdl/if_sp_c=>sc_asp_head
+      IMPORTING
+        outrecords   = ti_seleccion_cabecera
+        rejected     = indicador_de_rechazo
+        return_codes = ti_codigos_retorno ).
+
+    " bloquear OD
+    o_entrega_salida->lock(
+      EXPORTING
+        inkeys       = ti_cabecera
+        aspect       = /scdl/if_sp_c=>sc_asp_head
+        lockmode     = /scdl/if_sp1_locking=>sc_exclusive_lock
+      IMPORTING
+        rejected     = indicador_de_rechazo
+        return_codes = ti_codigos_retorno ).
+
+    IF line_exists( ti_codigos_retorno[ failed = abap_true ] ) OR
+       indicador_de_rechazo = abap_true.
+      go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '014'
+                                           message_v1 = <fs_es_posiciones_procesadas>-docid ) ).
+      RETURN.
+    ENDIF.
+
+    "agregar codigo de proceso y cantidad = diferencia entre Cantidad de la entrega - Cantidad enviada por WSC, esta cantidad debe ser negativa
+    LOOP AT i_ti_entrega_salida ASSIGNING <fs_es_posiciones_procesadas>.
+      IF <fs_es_posiciones_procesadas>-cantidad_confirmada NE <fs_es_posiciones_procesadas>-cantidad_producto.
+
+        <fs_es_posiciones_procesadas>-prcode  = g_clase_proceso.
+        <fs_es_posiciones_procesadas>-cantidad_confirmada = -1 * abs( <fs_es_posiciones_procesadas>-cantidad_producto - <fs_es_posiciones_procesadas>-cantidad_confirmada ).
+      ELSE.
+        "Eliminar posiciones con cantidad igual
+        DELETE TABLE i_ti_entrega_salida FROM <fs_es_posiciones_procesadas>.
+      ENDIF.
+    ENDLOOP.
+
+    CLEAR: ti_codigos_retorno, indicador_de_rechazo.
+
+    ti_proceso_entrada = CORRESPONDING #( i_ti_entrega_salida MAPPING qty = cantidad_confirmada  ).
+
+    CHECK ti_proceso_entrada IS NOT INITIAL.
+
+    o_entrega_salida->update(
+      EXPORTING
+        inrecords    = ti_proceso_entrada
+        aspect       = /scdl/if_sp_c=>sc_asp_item_prcodes
+      IMPORTING
+        outrecords   = ti_proceso_salida
+        rejected     = indicador_de_rechazo
+        return_codes = ti_codigos_retorno ).
+
+    IF line_exists( ti_codigos_retorno[ failed = abap_true ] ) OR
+       indicador_de_rechazo = abap_true.
+      go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '015'
+                                           message_v1 = <fs_es_posiciones_procesadas>-docid ) ).
+      RETURN.
+    ENDIF.
+
+    "guardar datos
+    o_entrega_salida->save( IMPORTING rejected = indicador_de_rechazo ).
+    COMMIT WORK AND WAIT.
+    IF indicador_de_rechazo = abap_true.
+      go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '015'
+                                           message_v1 = <fs_es_posiciones_procesadas>-docid ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD crear_tarea_almacen.
+
+    DATA: ti_orden_transferencia TYPE /scwm/tt_to_prep_whr_int,
+          tarea_de_almacen       TYPE /scwm/tanum,
+          ti_tarea_interna       TYPE /scwm/tt_ltap_vb,
+          ti_msg_retorno         TYPE bapirettab,
+          docno                  TYPE /scdl/dl_docno_int,
+          tipo_mensaje_retorno   TYPE bapi_mtype.
+
+    FIELD-SYMBOLS: <fs_es_datos_proxy> LIKE LINE OF c_ti_datos_proxy.
+
+    TRY.
+        LOOP AT c_ti_entrega_salida ASSIGNING FIELD-SYMBOL(<fs_es_entrega_salida>).
+
+          docno = <fs_es_entrega_salida>-docno.
+
+          UNASSIGN <fs_es_datos_proxy>.
+
+          ASSIGN c_ti_datos_proxy[ ean = <fs_es_entrega_salida>-ean11 ] TO <fs_es_datos_proxy>.
+
+          IF sy-subrc IS NOT INITIAL.
+            ASSIGN c_ti_datos_proxy[ matnr = <fs_es_entrega_salida>-productno ] TO <fs_es_datos_proxy>.
+          ENDIF.
+
+          IF <fs_es_datos_proxy> IS ASSIGNED.
+
+            <fs_es_entrega_salida>-cantidad_confirmada = COND #( WHEN <fs_es_datos_proxy>-vemng < <fs_es_entrega_salida>-cantidad_producto THEN
+                                                                      <fs_es_datos_proxy>-vemng
+                                                                    ELSE
+                                                                      <fs_es_entrega_salida>-cantidad_producto ).
+
+            ti_orden_transferencia = VALUE #( BASE ti_orden_transferencia
+                                              ( rdoccat = <fs_es_entrega_salida>-doccat
+                                                rdocid  = <fs_es_entrega_salida>-docid
+                                                ritmid  = <fs_es_entrega_salida>-itemid
+                                                squit = abap_true
+                                                anfme = <fs_es_entrega_salida>-cantidad_confirmada "Cantidad
+                                                altme = <fs_es_entrega_salida>-uom
+                                                matid = <fs_es_entrega_salida>-productid
+                                                batchid = <fs_es_entrega_salida>-batch_id
+                                                nltyp = g_tipo_almacen_destino
+                                                nlpla = g_ubicacion "Ubicacion destino
+                                                nlenr = |{ <fs_es_datos_proxy>-exidv_wcs ALPHA = IN }|
+                                              )
+                                            ).
+
+            <fs_es_datos_proxy>-vemng = <fs_es_datos_proxy>-vemng - <fs_es_entrega_salida>-cantidad_confirmada.
+          ELSE.
+            go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '081'
+                                 message_v1 = <fs_es_entrega_salida>-ean11
+                                 message_v2 = <fs_es_entrega_salida>-productno ) ).
+          ENDIF.
+        ENDLOOP.
+
+        "Validar si la tarea de almacen ya habia sido creada para la UM
+        CHECK obtener_tarea_almacen( i_ti_datos_proxy = c_ti_datos_proxy ) IS INITIAL.
+
+        CALL FUNCTION '/SCWM/TO_CREATE_WHR'
+          EXPORTING
+            iv_lgnum       = <fs_es_entrega_salida>-whnumwme
+            iv_process     = '2'
+            iv_mve_mat     = abap_true
+            iv_squit       = abap_true
+            iv_to_init     = abap_true
+            it_create_whr  = ti_orden_transferencia
+*           iv_update_task = abap_true
+            iv_commit_work = abap_false
+          IMPORTING
+            ev_tanum       = tarea_de_almacen
+            et_ltap_vb     = ti_tarea_interna
+            et_bapiret     = ti_msg_retorno
+            ev_severity    = tipo_mensaje_retorno.
+        "Se maneja el Commit de forma externa para evitar que se generen tareas incompletas
+***        if tipo_mensaje_retorno = 'I' AND ti_msg_retorno is INITIAL.
+        IF tarea_de_almacen IS INITIAL AND tipo_mensaje_retorno = 'E'.
+          ROLLBACK WORK.
+        ELSE.
+          COMMIT WORK AND WAIT.
+        ENDIF.
+
+        go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno )  ).
+
+      CATCH cx_sy_itab_line_not_found INTO DATA(o_cx).
+
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD crear_unidad_manipulacion.
+
+    DATA: r_numero_almacen TYPE RANGE OF /scwm/aqua-lgnum.
+
+    DATA: es_huhdr               TYPE /scwm/s_huhdr_int,
+          ti_parametros_gc       TYPE /scwm/tt_wip_whrhead_out,
+          ti_grupo_consolidacion TYPE /scwm/tt_wip_whritem_out,
+          o_scwm_log             TYPE REF TO /scwm/cl_log.
+
+    CONSTANTS: c_referencia_ump TYPE string VALUE 'UMP'.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                         = i_ti_um
+        i_nombre_columna             = 'LGNUM'
+        i_convertir_in               = abap_true
+      CHANGING
+        c_ti_rango                   = r_numero_almacen ).
+
+
+    IF i_ti_um IS INITIAL.
+      "no existen UMp
+      go_log->set_es_log(  i_es = VALUE #( type = 'E' id = '/SCWM/RF_EN' number = '732' ) ).
+      RETURN.
+    ENDIF.
+
+    "Datos de material de embalaje
+    SELECT DISTINCT key~matnr, key~matid_x16
+        FROM mara
+        JOIN /sapapo/v_matidm AS key ON key~matnr EQ mara~matnr "Tabla de materiales
+        WHERE key~matnr EQ @g_material_embaleje
+        INTO TABLE @DATA(ti_material_embalaje).
+    "Recuperar stock disponible de material
+    SELECT DISTINCT key~matnr, key~matid_x16, map~charg, map~batchid, mara~mtart, map~guid_stock, meins
+        FROM mara
+        JOIN /sapapo/v_matidm AS key ON key~matnr EQ mara~matnr "Tabla de materiales
+        LEFT JOIN /scwm/aqua AS map ON
+          map~lgpla EQ @g_ubicacion AND
+          map~matid EQ key~matid_x16 "Tabla material ID lote y mas
+        FOR ALL ENTRIES IN @i_ti_um
+        WHERE key~matnr EQ @i_ti_um-matnr
+          AND map~lgnum IN @r_numero_almacen
+        INTO TABLE @DATA(ti_matid_16).
+
+    SORT i_ti_um BY vbeln lgnum um.
+    DELETE ADJACENT DUPLICATES FROM i_ti_um COMPARING vbeln lgnum um.
+
+    DATA(o_embalaje) = NEW /scwm/cl_wm_packing( ).
+
+    LOOP AT i_ti_um ASSIGNING FIELD-SYMBOL(<fs_es_um>).
+
+      AT NEW vbeln.
+        iniciar_embalaje(
+          EXPORTING
+            i_lgnum      = <fs_es_um>-lgnum
+          CHANGING
+            c_o_scwn_log = o_scwm_log
+            c_o_embalaje = o_embalaje ).
+
+        TRY .
+            " Creación de la UMp
+            o_embalaje->/scwm/if_pack_bas~create_hu(
+              EXPORTING
+                iv_pmat    = ti_material_embalaje[ matnr = g_material_embaleje ]-matid_x16
+                iv_huident = <fs_es_um>-um
+                i_location = g_ubicacion
+              RECEIVING
+                es_huhdr   = es_huhdr
+              EXCEPTIONS
+                error      = 1
+                OTHERS     = 2 ).
+
+            IF go_log->evaluar_valor_retorno( i_fila_referencia = c_referencia_ump i_sysubrc = sy-subrc ) = abap_false.
+
+              o_embalaje->/scwm/if_pack_bas~save(  EXCEPTIONS
+                                                      error  = 1
+                                                      OTHERS = 2 ).
+
+              CHECK go_log->evaluar_valor_retorno( i_sysubrc = sy-subrc ) = abap_false.
+
+              iniciar_embalaje( EXPORTING
+                                    i_lgnum      = <fs_es_um>-lgnum
+                                  CHANGING
+                                    c_o_scwn_log     = o_scwm_log
+                                    c_o_embalaje = o_embalaje ).
+
+              ti_parametros_gc = VALUE #( ( docno_h = |{ <fs_es_um>-vbeln ALPHA = IN }| ) ).
+
+              CALL FUNCTION '/SCWM/WHRITEM_MON_OUT'
+                EXPORTING
+                  iv_lgnum       = <fs_es_um>-lgnum
+                  iv_mode        = '2'
+                  it_data_parent = ti_parametros_gc
+                IMPORTING
+                  et_data        = ti_grupo_consolidacion.
+
+              IF lines( ti_grupo_consolidacion ) > 1.
+                es_huhdr-dstgrp = ti_grupo_consolidacion[ 1 ]-dstgrp.
+                o_embalaje->/scwm/if_pack_bas~change_huhdr( EXPORTING
+                                                              is_huhdr = es_huhdr
+                                                            IMPORTING
+                                                              es_huhdr = es_huhdr
+                                                            EXCEPTIONS
+                                                                error = 1
+                                                                not_locked = 2
+                                                                OTHERS = 3 ).
+
+                CHECK go_log->evaluar_valor_retorno( i_sysubrc = sy-subrc ) = abap_false.
+
+                o_embalaje->/scwm/if_pack_bas~save(  EXCEPTIONS
+                                                      error  = 1
+                                                      OTHERS = 2 ).
+
+                CHECK go_log->evaluar_valor_retorno( i_sysubrc = sy-subrc ) = abap_false.
+
+              ENDIF.
+            ELSE.
+
+              SELECT SINGLE *
+              FROM /scwm/huhdr
+              WHERE huident = @<fs_es_um>-um
+              INTO CORRESPONDING FIELDS OF @es_huhdr.
+
+              IF sy-subrc IS INITIAL.
+                go_log->remover_mensage( i_fila_referencia = CONV #( c_referencia_ump ) ).
+              ELSE.
+                RETURN.
+              ENDIF.
+
+            ENDIF.
+
+          CATCH cx_sy_itab_line_not_found /scwm/cx_mon_noexec.
+
+        ENDTRY.
+      ENDAT.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD consultar_ean.
+
+    DATA: r_ean TYPE RANGE OF mean-ean11.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                         = c_ti_datos_proxy
+        i_nombre_columna             = 'EAN'
+      CHANGING
+        c_ti_rango                   = r_ean ).
+
+    SELECT *
+    FROM mean
+    WHERE ean11 IN @r_ean
+    INTO TABLE @r_ti_ean.
+
+
+  ENDMETHOD.
+
+  METHOD entrega_salida_valida.
+    DATA: BEGIN OF es_datos_reducidos,
+            docno TYPE /scdl/db_proci_o-docno,
+            werks TYPE t320-werks,
+            lgort TYPE t320-lgort,
+          END OF es_datos_reducidos.
+
+    DATA: ti_datos_reducidos LIKE STANDARD TABLE OF es_datos_reducidos,
+          cantidad_producto  TYPE /scdl/db_proci_o-qty.
+    BREAK seblondo.
+
+    SORT c_ti_datos_proxy BY vbeln ean matnr.
+
+    ti_datos_reducidos = VALUE #( FOR es_datos IN c_ti_datos_proxy
+                                   ( docno = |{ es_datos-vbeln ALPHA = IN }|
+                                     werks = es_datos-werks
+                                     lgort = |{ es_datos-lgort ALPHA = IN }| )
+                                ).
+
+    DATA(ti_ean) = consultar_ean( CHANGING c_ti_datos_proxy = c_ti_datos_proxy ).
+
+    SELECT e~docid, e~itemid, e~doccat, e~docno, e~itemno, e~productno, e~productid, ean~ean11,
+           batchno, m~batch_id,  qty AS cantidad_producto, e~uom,  /scwm/procty,
+           stock_owner, stock_owner_role, al~werks, lgort,
+           whnumwme, whnumerp, lgnum
+    FROM /scdl/db_proci_o AS e
+    INNER JOIN mean AS ean
+    ON ean~matnr = e~productno
+    LEFT JOIN /scwm/tmapwhnum AS a
+    ON a~whnumwme = e~/scwm/whno
+    LEFT JOIN t320 AS al
+    ON al~lgnum = a~whnumerp
+    LEFT JOIN mcha AS m
+    ON m~matnr = e~productno
+    AND m~charg = e~batchno
+    AND m~werks = al~werks
+    FOR ALL ENTRIES IN @ti_datos_reducidos
+    WHERE docno = @ti_datos_reducidos-docno
+    AND   al~werks = @ti_datos_reducidos-werks
+    AND   lgort = @ti_datos_reducidos-lgort
+    AND   e~status_pick NE '0' "Status de picking diferente de "No relevante"
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_entrega_salida.
+
+    SORT e_ti_entrega_salida BY docno productno cantidad_producto ASCENDING.
+
+    IF e_ti_entrega_salida IS NOT INITIAL.
+      "Validar que la entrega de salida no tenga tareas de picking directo abiertas
+      SELECT
+      FROM /scwm/ordim_o AS _tarea_abierta
+      FIELDS _tarea_abierta~rdocid AS docid, _tarea_abierta~tostat, _tarea_abierta~procty
+      FOR ALL ENTRIES IN @e_ti_entrega_salida
+      WHERE _tarea_abierta~rdocid = @e_ti_entrega_salida-docid
+      AND   _tarea_abierta~tostat NE 'A'
+      INTO TABLE @DATA(ti_tareas_abiertas).
+
+      SELECT
+      FROM /scwm/ordim_c AS _tarea_confirmada
+      FIELDS _tarea_confirmada~rdocid AS docid, _tarea_confirmada~tostat, _tarea_confirmada~procty
+      FOR ALL ENTRIES IN @e_ti_entrega_salida
+      WHERE _tarea_confirmada~rdocid = @e_ti_entrega_salida-docid
+      AND   _tarea_confirmada~tostat NE 'A'
+      INTO TABLE @DATA(ti_tareas_confirmada).
+
+    ENDIF.
+
+    LOOP AT c_ti_datos_proxy ASSIGNING FIELD-SYMBOL(<fs_es_dato_proxy>).
+
+      CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+        EXPORTING
+          input        = <fs_es_dato_proxy>-matnr
+        IMPORTING
+          output       = <fs_es_dato_proxy>-matnr
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+      "Centro almacen
+      IF NOT line_exists( e_ti_entrega_salida[ werks = <fs_es_dato_proxy>-werks lgort = |{ <fs_es_dato_proxy>-lgort ALPHA = IN }| ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '012'
+                                             message_v1 = <fs_es_dato_proxy>-werks message_v2 = <fs_es_dato_proxy>-lgort ) ).
+
+      ENDIF.
+      "numero de entrega
+      es_datos_reducidos-docno = |{ <fs_es_dato_proxy>-vbeln ALPHA = IN }|.
+      IF NOT line_exists( e_ti_entrega_salida[ docno = es_datos_reducidos-docno ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '013'
+                                             message_v1 = <fs_es_dato_proxy>-vbeln ) ).
+
+      ENDIF.
+
+      "Validar que la entrega de salida no tenga tareas de picking directo abiertas
+      DATA(docid) = VALUE #( e_ti_entrega_salida[ docno = es_datos_reducidos-docno ]-docid OPTIONAL ).
+
+      IF line_exists( ti_tareas_abiertas[ docid = docid procty = 'Y214' ] ) OR
+         line_exists( ti_tareas_abiertas[ docid = docid procty = 'Y215' ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '111'
+                                             message_v1 = <fs_es_dato_proxy>-vbeln  ) ).
+
+      ENDIF.
+      "Validar que la entrega de salida no tenga tareas de picking directo cerrada
+      IF line_exists( ti_tareas_confirmada[ docid = docid procty = 'Y214' tostat = 'C' ] ) OR
+         line_exists( ti_tareas_confirmada[ docid = docid procty = 'Y215' tostat = 'C' ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '113'
+                                             message_v1 = <fs_es_dato_proxy>-vbeln  ) ).
+
+      ENDIF.
+
+      "EAN/material
+      IF NOT line_exists( ti_ean[ ean11 = <fs_es_dato_proxy>-ean ] ) OR
+         NOT line_exists( e_ti_entrega_salida[ ean11 = <fs_es_dato_proxy>-ean ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = 'WG' number = '026'
+                                             message_v1 = <fs_es_dato_proxy>-ean  ) ).
+
+      ENDIF.
+
+      "Cantidad
+      cantidad_producto = REDUCE #( INIT cantidad TYPE /scdl/db_proci_o-qty
+                                    FOR  es_cantidad_producto IN e_ti_entrega_salida WHERE ( ean11 = <fs_es_dato_proxy>-ean )
+                                    NEXT cantidad += es_cantidad_producto-cantidad_producto
+                                  ).
+
+      IF cantidad_producto < <fs_es_dato_proxy>-vemng.
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = 'ESD01' number = '005'
+                                             message_v1 = cantidad_producto message_v2 = <fs_es_dato_proxy>-vemng
+                                             message_v3 = <fs_es_dato_proxy>-vbeln ) ).
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD um_valida.
+
+    LOOP AT c_ti_datos_proxy ASSIGNING FIELD-SYMBOL(<fs_es_dato_proxy>).
+      TRY.
+          /scwm/cl_hu_appl_ewm=>huident_int_check(
+            EXPORTING
+              iv_lgnum   =   i_ti_entrega_salida[ docno = |{ CONV /scdl/dl_docno_int( <fs_es_dato_proxy>-vbeln ) ALPHA = IN }| ]-whnumwme
+              iv_huident =   |{ <fs_es_dato_proxy>-exidv_wcs ALPHA = IN }|
+              iv_pmtyp   =   g_tipo_material_embalaje ).
+
+        CATCH cx_sy_itab_line_not_found.
+
+        CATCH /scwm/cx_basics.
+          go_log->set_es_log(  i_es = VALUE #( type = 'W' id = sy-msgid number = sy-msgno
+                                             message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                             message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+      ENDTRY.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD validar_mensaje_proxy.
+
+    entrega_salida_valida( IMPORTING e_ti_entrega_salida = r_ti_entrega_salida
+                           CHANGING c_ti_datos_proxy = c_ti_datos_proxy ).
+
+    um_valida( EXPORTING
+                i_ti_entrega_salida = r_ti_entrega_salida
+               CHANGING
+                c_ti_datos_proxy    = c_ti_datos_proxy ).
+
+  ENDMETHOD.
+
+  METHOD constructor.
+
+    DATA: r_valor_parametro TYPE RANGE OF string.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'EWM' i_ricefw = gc_ricefw ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'UBICACION'
+      IMPORTING
+        e_ti_valrango           = r_valor_parametro
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    g_ubicacion = r_valor_parametro[ 1 ]-low.
+
+    go_parametros->get_parametro(
+     EXPORTING
+       i_idparam               = 'TPMATEMBAL'
+     IMPORTING
+       e_ti_valrango           = r_valor_parametro
+     EXCEPTIONS
+       parametro_no_encontrado = 1
+       OTHERS                  = 2 ).
+
+    g_tipo_material_embalaje = r_valor_parametro[ 1 ]-low.
+
+    go_parametros->get_parametro(
+     EXPORTING
+       i_idparam               = 'TPALMACEND'
+     IMPORTING
+       e_ti_valrango           = r_valor_parametro
+     EXCEPTIONS
+       parametro_no_encontrado = 1
+       OTHERS                  = 2 ).
+
+    g_tipo_almacen_destino = r_valor_parametro[ 1 ]-low.
+
+    go_parametros->get_parametro(
+     EXPORTING
+       i_idparam               = 'MTEMBALAJE'
+     IMPORTING
+       e_ti_valrango           = r_valor_parametro
+     EXCEPTIONS
+       parametro_no_encontrado = 1
+       OTHERS                  = 2 ).
+
+    g_material_embaleje = r_valor_parametro[ 1 ]-low.
+
+    go_parametros->get_parametro(
+     EXPORTING
+       i_idparam               = 'CLPROCESO'
+     IMPORTING
+       e_ti_valrango           = r_valor_parametro
+     EXCEPTIONS
+       parametro_no_encontrado = 1
+       OTHERS                  = 2 ).
+
+    g_clase_proceso = r_valor_parametro[ 1 ]-low.
+
+  ENDMETHOD.
+
+  METHOD iniciar_embalaje.
+    " Preparar la creación de la UMp
+    c_o_embalaje->init( iv_lgnum = i_lgnum ).
+
+    /scwm/cl_log=>get_instance( IMPORTING eo_instance = c_o_scwn_log ).
+
+    CALL FUNCTION '/SCWM/TO_INIT_NEW'
+      EXPORTING
+        iv_lgnum = i_lgnum
+        io_prot  = c_o_scwn_log.
+  ENDMETHOD.
+
+
+  METHOD obtener_tarea_almacen.
+
+    SELECT lgnum, tanum
+    FROM /scwm/ordim_c
+    FOR ALL ENTRIES IN @i_ti_datos_proxy
+    WHERE vlenr = @i_ti_datos_proxy-exidv_wcs
+    INTO TABLE @DATA(ti_tarea).
+
+    IF ti_tarea IS INITIAL.
+      SELECT lgnum, tanum
+      FROM /scwm/ordim_o
+      FOR ALL ENTRIES IN @i_ti_datos_proxy
+      WHERE vlenr = @i_ti_datos_proxy-exidv_wcs
+      INTO TABLE @ti_tarea.
+    ENDIF.
+
+    CHECK ti_tarea IS NOT INITIAL.
+
+    r_tarea_almacen = ti_tarea[ 1 ]-tanum.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclewmi1018_conf_tare_despacho DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_clase_mensaje TYPE string VALUE 'ZEWM01',
+               gc_ricefw        TYPE zzedricefw  VALUE 'I1018'.
+
+    TYPES: BEGIN OF gtp_es_um,
+             vbeln     TYPE /scdl/db_proci_o-docno,
+             lgnum     TYPE /scwm/aqua-lgnum,
+             lgpla     TYPE /scwm/aqua-lgpla,
+             um        TYPE /scwm/de_huident,
+             cantindad TYPE /scwm/de_quantity,
+             matnr     TYPE mara-matnr,
+             productid TYPE /scdl/db_proci_o-productid,
+           END OF gtp_es_um,
+
+           BEGIN OF gtp_es_entrega_salida,
+             docid               TYPE /scdl/db_proci_o-docid,
+             itemid              TYPE /scdl/db_proci_o-itemid,
+             doccat              TYPE /scdl/db_proci_o-doccat,
+             docno               TYPE /scdl/db_proci_o-docno,
+             itemno              TYPE /scdl/db_proci_o-itemno,
+             productno           TYPE /scdl/db_proci_o-productno,
+             productid           TYPE /scdl/db_proci_o-productid,
+             ean11               TYPE mean-ean11,
+             batchno             TYPE /scdl/dl_batchno,
+             batch_id            TYPE mcha-batch_id,
+             prcode              TYPE /scdl/s_sp_a_item_prcodes-prcode,
+             cantidad_producto   TYPE /scdl/db_proci_o-qty,
+             cantidad_confirmada TYPE /scdl/db_proci_o-qty,
+             uom                 TYPE /scdl/db_proci_o-uom,
+             /scwm/procty        TYPE /scwm/de_procty,
+             stock_owner         TYPE /scdl/dl_stock_owner,
+             stock_owner_role    TYPE /scdl/dl_stock_owner_role,
+             werks               TYPE werks_d,
+             lgort               TYPE lgort_d,
+             whnumwme            TYPE /scwm/tmapwhnum-whnumwme,
+             whnumerp            TYPE /scwm/tmapwhnum-whnumerp,
+             lgnum               TYPE /scwm/lgnum,
+           END OF gtp_es_entrega_salida.
+
+
+    TYPES: gtp_ti_um             TYPE STANDARD TABLE OF gtp_es_um WITH EMPTY KEY,
+           gtp_ti_entrega_salida TYPE STANDARD TABLE OF gtp_es_entrega_salida
+                                      WITH NON-UNIQUE KEY docid itemid doccat.
+
+    DATA: go_log        TYPE REF TO zclcxr1002_log_aplicacion,
+          go_parametros TYPE REF TO zclcxr1000_parametros.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      ingreso_proxy
+        EXPORTING
+          e_ti_return   TYPE bapiret2_t
+        CHANGING
+          i_datos_proxy TYPE REF TO data,
+      confirmar_tarea_distribucion
+        CHANGING
+          c_ti_entrega_salida TYPE gtp_ti_entrega_salida
+          c_ti_datos_proxy    TYPE zpxcajas_despacho_cajas_tab.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    DATA: g_ubicacion              TYPE /scwm/aqua-lgpla VALUE 'EMBALAJE',
+          g_tipo_material_embalaje TYPE /scwm/de_pmtyp  VALUE 'CJ',
+          g_tipo_almacen_destino   TYPE string,
+          g_material_embaleje      TYPE mara-matnr,
+          g_clase_proceso          TYPE /scdl/dl_prcode.
+
+    METHODS:
+      validar_mensaje_proxy
+        CHANGING
+          c_ti_datos_proxy           TYPE zpxcajas_despacho_cajas_tab
+        RETURNING
+          VALUE(r_ti_entrega_salida) TYPE gtp_ti_entrega_salida,
+      consultar_ean
+        CHANGING
+          c_ti_datos_proxy TYPE zpxcajas_despacho_cajas_tab
+        RETURNING
+          VALUE(r_ti_ean)  TYPE mean_tab,
+      entrega_salida_valida
+        EXPORTING
+          e_ti_entrega_salida TYPE gtp_ti_entrega_salida
+        CHANGING
+          c_ti_datos_proxy    TYPE zpxcajas_despacho_cajas_tab,
+      um_valida
+        IMPORTING
+          i_ti_entrega_salida TYPE gtp_ti_entrega_salida
+        CHANGING
+          c_ti_datos_proxy    TYPE zpxcajas_despacho_cajas_tab,
+      crear_unidad_manipulacion
+        IMPORTING
+          VALUE(i_ti_um) TYPE gtp_ti_um,
+      crear_tarea_almacen
+        CHANGING
+          c_ti_entrega_salida TYPE gtp_ti_entrega_salida
+          c_ti_datos_proxy    TYPE zpxcajas_despacho_cajas_tab,
+      ajuste_cantidad
+        IMPORTING
+          VALUE(i_ti_entrega_salida) TYPE gtp_ti_entrega_salida
+        CHANGING
+          c_ti_datos_proxy           TYPE zpxcajas_despacho_cajas_tab,
+      iniciar_embalaje
+        IMPORTING
+          i_lgnum      TYPE /scwm/lgnum
+        CHANGING
+          c_o_scwn_log TYPE REF TO /scwm/cl_log
+          c_o_embalaje TYPE REF TO /scwm/cl_wm_packing,
+      obtener_tarea_almacen
+        IMPORTING
+          i_ti_entrega_salida    TYPE gtp_ti_entrega_salida  OPTIONAL
+          i_ti_datos_proxy       TYPE zpxcajas_despacho_cajas_tab
+        RETURNING
+          VALUE(r_tarea_almacen) TYPE /scwm/tanum.
+
+ENDCLASS.
+
+
+
+CLASS zclewmi1018_conf_tare_despacho IMPLEMENTATION.
+
+  METHOD ingreso_proxy.
+
+    DATA: es_recibir_cajas_despacho TYPE zpxrecibir_cajas_despacho.
+
+    FIELD-SYMBOLS: <fs_es_recibir_cajas_despacho> TYPE zpxrecibir_cajas_despacho.
+
+    go_log->remover_mensage( ).
+
+    ASSIGN i_datos_proxy->* TO <fs_es_recibir_cajas_despacho>.
+
+    es_recibir_cajas_despacho = <fs_es_recibir_cajas_despacho>.
+
+    LOOP AT es_recibir_cajas_despacho-recibir_cajas_despacho-cajas ASSIGNING FIELD-SYMBOL(<fs_es_caja>).
+      <fs_es_caja>-exidv_wcs = CONV /scwm/de_huident( |{ <fs_es_caja>-exidv_wcs ALPHA = IN }| ).
+      CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+        EXPORTING
+          input        = <fs_es_caja>-matnr
+        IMPORTING
+          output       = <fs_es_caja>-matnr
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+      IF sy-subrc <> 0.
+        go_log->set_es_log(  i_es = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno
+                                             message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                             message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+      ENDIF.
+
+    ENDLOOP.
+
+    DATA(ti_entrega_salida) = validar_mensaje_proxy( CHANGING
+                                                        c_ti_datos_proxy = es_recibir_cajas_despacho-recibir_cajas_despacho-cajas ).
+
+    IF go_log->get_errores( ) IS INITIAL.
+
+      TRY.
+          confirmar_tarea_distribucion(
+            CHANGING
+              c_ti_entrega_salida = ti_entrega_salida
+              c_ti_datos_proxy    = es_recibir_cajas_despacho-recibir_cajas_despacho-cajas ).
+        CATCH cx_sy_itab_line_not_found INTO DATA(o_cx).
+          go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+      ENDTRY.
+
+    ENDIF.
+
+    e_ti_return = CORRESPONDING #( go_log->get_log( ) ).
+
+    SORT e_ti_return BY id number.
+
+    DELETE ADJACENT DUPLICATES FROM e_ti_return COMPARING ALL FIELDS.
+
+  ENDMETHOD.
+
+  METHOD confirmar_tarea_distribucion.
+
+    "1.
+    crear_unidad_manipulacion( i_ti_um = VALUE #( FOR es_dato_proxy IN c_ti_datos_proxy
+                                                  (  lgnum = c_ti_entrega_salida[ docno = |{ CONV /scdl/dl_docno_int( es_dato_proxy-vbeln ) ALPHA = IN }| ]-whnumwme
+                                                     matnr = es_dato_proxy-matnr
+                                                     productid = c_ti_entrega_salida[ docno = |{ CONV /scdl/dl_docno_int( es_dato_proxy-vbeln ) ALPHA = IN }| ]-productid
+                                                     um = |{ es_dato_proxy-exidv_wcs ALPHA = IN }|
+                                                     cantindad = es_dato_proxy-vemng
+                                                     vbeln = |{ es_dato_proxy-vbeln  ALPHA = IN }|
+                                                  )
+                                                )
+                             ).
+    "2.
+    crear_tarea_almacen(
+      CHANGING
+        c_ti_entrega_salida = c_ti_entrega_salida
+        c_ti_datos_proxy    = c_ti_datos_proxy  ).
+
+    "3.
+    ajuste_cantidad( EXPORTING
+                        i_ti_entrega_salida = c_ti_entrega_salida
+                     CHANGING
+                        c_ti_datos_proxy    = c_ti_datos_proxy ).
+  ENDMETHOD.
+
+  METHOD ajuste_cantidad.
+
+    DATA: ti_cabecera           TYPE /scdl/t_sp_k_head,
+          ti_proceso_entrada    TYPE /scdl/t_sp_a_item_prcodes,
+          ti_proceso_salida     TYPE /scdl/t_sp_a_item_prcodes,
+          ti_seleccion_cabecera TYPE /scdl/t_sp_a_head,
+          o_mensaje             TYPE REF TO /scdl/cl_sp_message_box,
+          indicador_de_rechazo  TYPE boole_d,
+          ti_codigos_retorno    TYPE /scdl/t_sp_return_code,
+          o_entrega_salida      TYPE REF TO /scdl/cl_sp_prd_out.
+
+    FIELD-SYMBOLS: <fs_es_posiciones_procesadas>  LIKE LINE OF i_ti_entrega_salida.
+
+    CHECK obtener_tarea_almacen( i_ti_datos_proxy = c_ti_datos_proxy ) IS NOT INITIAL AND
+          "go_log->get_errores( ) IS INITIAL AND
+          i_ti_entrega_salida IS NOT INITIAL AND
+          line_exists( c_ti_datos_proxy[ chstat = abap_true ] ).
+
+    TRY.
+        o_mensaje = NEW /scdl/cl_sp_message_box( ).
+        o_entrega_salida = NEW /scdl/cl_sp_prd_out( io_message_box = o_mensaje
+                                                    iv_doccat      = /scdl/if_dl_doc_c=>sc_doccat_out_prd
+                                                    iv_mode        = /scdl/cl_sp=>sc_mode_classic ).
+      CATCH /scdl/cx_sp_message_box INTO DATA(o_cx_msg).
+        go_log->set_o_cx_log( i_o_cx_log = o_cx_msg ).
+        RETURN.
+    ENDTRY.
+
+    ASSIGN i_ti_entrega_salida[ 1 ] TO <fs_es_posiciones_procesadas>.
+
+    APPEND VALUE #( docid = <fs_es_posiciones_procesadas>-docid ) TO ti_cabecera.
+
+    o_entrega_salida->select(
+      EXPORTING
+        inkeys       = ti_cabecera
+        aspect       = /scdl/if_sp_c=>sc_asp_head
+      IMPORTING
+        outrecords   = ti_seleccion_cabecera
+        rejected     = indicador_de_rechazo
+        return_codes = ti_codigos_retorno ).
+
+    " bloquear OD
+    o_entrega_salida->lock(
+      EXPORTING
+        inkeys       = ti_cabecera
+        aspect       = /scdl/if_sp_c=>sc_asp_head
+        lockmode     = /scdl/if_sp1_locking=>sc_exclusive_lock
+      IMPORTING
+        rejected     = indicador_de_rechazo
+        return_codes = ti_codigos_retorno ).
+
+    IF line_exists( ti_codigos_retorno[ failed = abap_true ] ) OR
+       indicador_de_rechazo = abap_true.
+      go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '014'
+                                           message_v1 = <fs_es_posiciones_procesadas>-docid ) ).
+      RETURN.
+    ENDIF.
+
+    "agregar codigo de proceso y cantidad = diferencia entre Cantidad de la entrega - Cantidad enviada por WSC, esta cantidad debe ser negativa
+    LOOP AT i_ti_entrega_salida ASSIGNING <fs_es_posiciones_procesadas>.
+      IF <fs_es_posiciones_procesadas>-cantidad_confirmada NE <fs_es_posiciones_procesadas>-cantidad_producto.
+
+        <fs_es_posiciones_procesadas>-prcode  = g_clase_proceso.
+        <fs_es_posiciones_procesadas>-cantidad_confirmada = -1 * abs( <fs_es_posiciones_procesadas>-cantidad_producto - <fs_es_posiciones_procesadas>-cantidad_confirmada ).
+      ELSE.
+        "Eliminar posiciones con cantidad igual
+        DELETE TABLE i_ti_entrega_salida FROM <fs_es_posiciones_procesadas>.
+      ENDIF.
+    ENDLOOP.
+
+    CLEAR: ti_codigos_retorno, indicador_de_rechazo.
+
+    ti_proceso_entrada = CORRESPONDING #( i_ti_entrega_salida MAPPING qty = cantidad_confirmada  ).
+
+    CHECK ti_proceso_entrada IS NOT INITIAL.
+
+    o_entrega_salida->update(
+      EXPORTING
+        inrecords    = ti_proceso_entrada
+        aspect       = /scdl/if_sp_c=>sc_asp_item_prcodes
+      IMPORTING
+        outrecords   = ti_proceso_salida
+        rejected     = indicador_de_rechazo
+        return_codes = ti_codigos_retorno ).
+
+    IF line_exists( ti_codigos_retorno[ failed = abap_true ] ) OR
+       indicador_de_rechazo = abap_true.
+      go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '015'
+                                           message_v1 = <fs_es_posiciones_procesadas>-docid ) ).
+      RETURN.
+    ENDIF.
+
+    "guardar datos
+    o_entrega_salida->save( IMPORTING rejected = indicador_de_rechazo ).
+    COMMIT WORK AND WAIT.
+    IF indicador_de_rechazo = abap_true.
+      go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '015'
+                                           message_v1 = <fs_es_posiciones_procesadas>-docid ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD crear_tarea_almacen.
+
+    DATA: ti_orden_transferencia TYPE /scwm/tt_to_prep_whr_int,
+          tarea_de_almacen       TYPE /scwm/tanum,
+          ti_tarea_interna       TYPE /scwm/tt_ltap_vb,
+          ti_msg_retorno         TYPE bapirettab,
+          docno                  TYPE /scdl/dl_docno_int,
+          tipo_mensaje_retorno   TYPE bapi_mtype.
+
+    FIELD-SYMBOLS: <fs_es_datos_proxy> LIKE LINE OF c_ti_datos_proxy.
+
+    TRY.
+        LOOP AT c_ti_entrega_salida ASSIGNING FIELD-SYMBOL(<fs_es_entrega_salida>).
+
+          docno = <fs_es_entrega_salida>-docno.
+
+          UNASSIGN <fs_es_datos_proxy>.
+
+          ASSIGN c_ti_datos_proxy[ ean = <fs_es_entrega_salida>-ean11 ] TO <fs_es_datos_proxy>.
+
+          IF sy-subrc IS NOT INITIAL.
+            ASSIGN c_ti_datos_proxy[ matnr = <fs_es_entrega_salida>-productno ] TO <fs_es_datos_proxy>.
+          ENDIF.
+
+          IF <fs_es_datos_proxy> IS ASSIGNED.
+
+            <fs_es_entrega_salida>-cantidad_confirmada = COND #( WHEN <fs_es_datos_proxy>-vemng < <fs_es_entrega_salida>-cantidad_producto THEN
+                                                                      <fs_es_datos_proxy>-vemng
+                                                                    ELSE
+                                                                      <fs_es_entrega_salida>-cantidad_producto ).
+
+            ti_orden_transferencia = VALUE #( BASE ti_orden_transferencia
+                                              ( rdoccat = <fs_es_entrega_salida>-doccat
+                                                rdocid  = <fs_es_entrega_salida>-docid
+                                                ritmid  = <fs_es_entrega_salida>-itemid
+                                                squit = abap_true
+                                                anfme = <fs_es_entrega_salida>-cantidad_confirmada "Cantidad
+                                                altme = <fs_es_entrega_salida>-uom
+                                                matid = <fs_es_entrega_salida>-productid
+                                                batchid = <fs_es_entrega_salida>-batch_id
+                                                nltyp = g_tipo_almacen_destino
+                                                nlpla = g_ubicacion "Ubicacion destino
+                                                nlenr = |{ <fs_es_datos_proxy>-exidv_wcs ALPHA = IN }|
+                                              )
+                                            ).
+
+            <fs_es_datos_proxy>-vemng = <fs_es_datos_proxy>-vemng - <fs_es_entrega_salida>-cantidad_confirmada.
+          ELSE.
+            go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '081'
+                                 message_v1 = <fs_es_entrega_salida>-ean11
+                                 message_v2 = <fs_es_entrega_salida>-productno ) ).
+          ENDIF.
+        ENDLOOP.
+
+        "Validar si la tarea de almacen ya habia sido creada para la UM
+        CHECK obtener_tarea_almacen( i_ti_datos_proxy = c_ti_datos_proxy ) IS INITIAL.
+
+        CALL FUNCTION '/SCWM/TO_CREATE_WHR'
+          EXPORTING
+            iv_lgnum       = <fs_es_entrega_salida>-whnumwme
+            iv_process     = '2'
+            iv_mve_mat     = abap_true
+            iv_squit       = abap_true
+            iv_to_init     = abap_true
+            it_create_whr  = ti_orden_transferencia
+*           iv_update_task = abap_true
+            iv_commit_work = abap_false
+          IMPORTING
+            ev_tanum       = tarea_de_almacen
+            et_ltap_vb     = ti_tarea_interna
+            et_bapiret     = ti_msg_retorno
+            ev_severity    = tipo_mensaje_retorno.
+        "Se maneja el Commit de forma externa para evitar que se generen tareas incompletas
+***        if tipo_mensaje_retorno = 'I' AND ti_msg_retorno is INITIAL.
+        IF tarea_de_almacen IS INITIAL AND tipo_mensaje_retorno = 'E'.
+          ROLLBACK WORK.
+        ELSE.
+          COMMIT WORK AND WAIT.
+        ENDIF.
+
+        go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msg_retorno )  ).
+
+      CATCH cx_sy_itab_line_not_found INTO DATA(o_cx).
+
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD crear_unidad_manipulacion.
+
+    DATA: r_numero_almacen TYPE RANGE OF /scwm/aqua-lgnum.
+
+    DATA: es_huhdr               TYPE /scwm/s_huhdr_int,
+          ti_parametros_gc       TYPE /scwm/tt_wip_whrhead_out,
+          ti_grupo_consolidacion TYPE /scwm/tt_wip_whritem_out,
+          o_scwm_log             TYPE REF TO /scwm/cl_log.
+
+    CONSTANTS: c_referencia_ump TYPE string VALUE 'UMP'.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                         = i_ti_um
+        i_nombre_columna             = 'LGNUM'
+        i_convertir_in               = abap_true
+      CHANGING
+        c_ti_rango                   = r_numero_almacen ).
+
+
+    IF i_ti_um IS INITIAL.
+      "no existen UMp
+      go_log->set_es_log(  i_es = VALUE #( type = 'E' id = '/SCWM/RF_EN' number = '732' ) ).
+      RETURN.
+    ENDIF.
+
+    "Datos de material de embalaje
+    SELECT DISTINCT key~matnr, key~matid_x16
+        FROM mara
+        JOIN /sapapo/v_matidm AS key ON key~matnr EQ mara~matnr "Tabla de materiales
+        WHERE key~matnr EQ @g_material_embaleje
+        INTO TABLE @DATA(ti_material_embalaje).
+    "Recuperar stock disponible de material
+    SELECT DISTINCT key~matnr, key~matid_x16, map~charg, map~batchid, mara~mtart, map~guid_stock, meins
+        FROM mara
+        JOIN /sapapo/v_matidm AS key ON key~matnr EQ mara~matnr "Tabla de materiales
+        LEFT JOIN /scwm/aqua AS map ON
+          map~lgpla EQ @g_ubicacion AND
+          map~matid EQ key~matid_x16 "Tabla material ID lote y mas
+        FOR ALL ENTRIES IN @i_ti_um
+        WHERE key~matnr EQ @i_ti_um-matnr
+          AND map~lgnum IN @r_numero_almacen
+        INTO TABLE @DATA(ti_matid_16).
+
+    SORT i_ti_um BY vbeln lgnum um.
+    DELETE ADJACENT DUPLICATES FROM i_ti_um COMPARING vbeln lgnum um.
+
+    DATA(o_embalaje) = NEW /scwm/cl_wm_packing( ).
+
+    LOOP AT i_ti_um ASSIGNING FIELD-SYMBOL(<fs_es_um>).
+
+      AT NEW vbeln.
+        iniciar_embalaje(
+          EXPORTING
+            i_lgnum      = <fs_es_um>-lgnum
+          CHANGING
+            c_o_scwn_log = o_scwm_log
+            c_o_embalaje = o_embalaje ).
+
+        TRY .
+            " Creación de la UMp
+            o_embalaje->/scwm/if_pack_bas~create_hu(
+              EXPORTING
+                iv_pmat    = ti_material_embalaje[ matnr = g_material_embaleje ]-matid_x16
+                iv_huident = <fs_es_um>-um
+                i_location = g_ubicacion
+              RECEIVING
+                es_huhdr   = es_huhdr
+              EXCEPTIONS
+                error      = 1
+                OTHERS     = 2 ).
+
+            IF go_log->evaluar_valor_retorno( i_fila_referencia = c_referencia_ump i_sysubrc = sy-subrc ) = abap_false.
+
+              o_embalaje->/scwm/if_pack_bas~save(  EXCEPTIONS
+                                                      error  = 1
+                                                      OTHERS = 2 ).
+
+              CHECK go_log->evaluar_valor_retorno( i_sysubrc = sy-subrc ) = abap_false.
+
+              iniciar_embalaje( EXPORTING
+                                    i_lgnum      = <fs_es_um>-lgnum
+                                  CHANGING
+                                    c_o_scwn_log     = o_scwm_log
+                                    c_o_embalaje = o_embalaje ).
+
+              ti_parametros_gc = VALUE #( ( docno_h = |{ <fs_es_um>-vbeln ALPHA = IN }| ) ).
+
+              CALL FUNCTION '/SCWM/WHRITEM_MON_OUT'
+                EXPORTING
+                  iv_lgnum       = <fs_es_um>-lgnum
+                  iv_mode        = '2'
+                  it_data_parent = ti_parametros_gc
+                IMPORTING
+                  et_data        = ti_grupo_consolidacion.
+
+              IF lines( ti_grupo_consolidacion ) > 1.
+                es_huhdr-dstgrp = ti_grupo_consolidacion[ 1 ]-dstgrp.
+                o_embalaje->/scwm/if_pack_bas~change_huhdr( EXPORTING
+                                                              is_huhdr = es_huhdr
+                                                            IMPORTING
+                                                              es_huhdr = es_huhdr
+                                                            EXCEPTIONS
+                                                                error = 1
+                                                                not_locked = 2
+                                                                OTHERS = 3 ).
+
+                CHECK go_log->evaluar_valor_retorno( i_sysubrc = sy-subrc ) = abap_false.
+
+                o_embalaje->/scwm/if_pack_bas~save(  EXCEPTIONS
+                                                      error  = 1
+                                                      OTHERS = 2 ).
+
+                CHECK go_log->evaluar_valor_retorno( i_sysubrc = sy-subrc ) = abap_false.
+
+              ENDIF.
+            ELSE.
+
+              SELECT SINGLE *
+              FROM /scwm/huhdr
+              WHERE huident = @<fs_es_um>-um
+              INTO CORRESPONDING FIELDS OF @es_huhdr.
+
+              IF sy-subrc IS INITIAL.
+                go_log->remover_mensage( i_fila_referencia = CONV #( c_referencia_ump ) ).
+              ELSE.
+                RETURN.
+              ENDIF.
+
+            ENDIF.
+
+          CATCH cx_sy_itab_line_not_found /scwm/cx_mon_noexec.
+
+        ENDTRY.
+      ENDAT.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD consultar_ean.
+
+    DATA: r_ean TYPE RANGE OF mean-ean11.
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                         = c_ti_datos_proxy
+        i_nombre_columna             = 'EAN'
+      CHANGING
+        c_ti_rango                   = r_ean ).
+
+    SELECT *
+    FROM mean
+    WHERE ean11 IN @r_ean
+    INTO TABLE @r_ti_ean.
+
+
+  ENDMETHOD.
+
+  METHOD entrega_salida_valida.
+    DATA: BEGIN OF es_datos_reducidos,
+            docno TYPE /scdl/db_proci_o-docno,
+            werks TYPE t320-werks,
+            lgort TYPE t320-lgort,
+          END OF es_datos_reducidos.
+
+    DATA: ti_datos_reducidos LIKE STANDARD TABLE OF es_datos_reducidos,
+          cantidad_producto  TYPE /scdl/db_proci_o-qty.
+    BREAK seblondo.
+
+    SORT c_ti_datos_proxy BY vbeln ean matnr.
+
+    ti_datos_reducidos = VALUE #( FOR es_datos IN c_ti_datos_proxy
+                                   ( docno = |{ es_datos-vbeln ALPHA = IN }|
+                                     werks = es_datos-werks
+                                     lgort = |{ es_datos-lgort ALPHA = IN }| )
+                                ).
+
+    DATA(ti_ean) = consultar_ean( CHANGING c_ti_datos_proxy = c_ti_datos_proxy ).
+
+    SELECT e~docid, e~itemid, e~doccat, e~docno, e~itemno, e~productno, e~productid, ean~ean11,
+           batchno, m~batch_id,  qty AS cantidad_producto, e~uom,  /scwm/procty,
+           stock_owner, stock_owner_role, al~werks, lgort,
+           whnumwme, whnumerp, lgnum
+    FROM /scdl/db_proci_o AS e
+    INNER JOIN mean AS ean
+    ON ean~matnr = e~productno
+    LEFT JOIN /scwm/tmapwhnum AS a
+    ON a~whnumwme = e~/scwm/whno
+    LEFT JOIN t320 AS al
+    ON al~lgnum = a~whnumerp
+    LEFT JOIN mcha AS m
+    ON m~matnr = e~productno
+    AND m~charg = e~batchno
+    AND m~werks = al~werks
+    FOR ALL ENTRIES IN @ti_datos_reducidos
+    WHERE docno = @ti_datos_reducidos-docno
+    AND   al~werks = @ti_datos_reducidos-werks
+    AND   lgort = @ti_datos_reducidos-lgort
+    AND   e~status_pick NE '0' "Status de picking diferente de "No relevante"
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_entrega_salida.
+
+    SORT e_ti_entrega_salida BY docno productno cantidad_producto ASCENDING.
+
+    IF e_ti_entrega_salida IS NOT INITIAL.
+      "Validar que la entrega de salida no tenga tareas de picking directo abiertas
+      SELECT
+      FROM /scwm/ordim_o AS _tarea_abierta
+      FIELDS _tarea_abierta~rdocid AS docid, _tarea_abierta~tostat, _tarea_abierta~procty
+      FOR ALL ENTRIES IN @e_ti_entrega_salida
+      WHERE _tarea_abierta~rdocid = @e_ti_entrega_salida-docid
+      AND   _tarea_abierta~tostat NE 'A'
+      INTO TABLE @DATA(ti_tareas_abiertas).
+
+      SELECT
+      FROM /scwm/ordim_c AS _tarea_confirmada
+      FIELDS _tarea_confirmada~rdocid AS docid, _tarea_confirmada~tostat, _tarea_confirmada~procty
+      FOR ALL ENTRIES IN @e_ti_entrega_salida
+      WHERE _tarea_confirmada~rdocid = @e_ti_entrega_salida-docid
+      AND   _tarea_confirmada~tostat NE 'A'
+      INTO TABLE @DATA(ti_tareas_confirmada).
+
+    ENDIF.
+
+    LOOP AT c_ti_datos_proxy ASSIGNING FIELD-SYMBOL(<fs_es_dato_proxy>).
+
+      CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+        EXPORTING
+          input        = <fs_es_dato_proxy>-matnr
+        IMPORTING
+          output       = <fs_es_dato_proxy>-matnr
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+      "Centro almacen
+      IF NOT line_exists( e_ti_entrega_salida[ werks = <fs_es_dato_proxy>-werks lgort = |{ <fs_es_dato_proxy>-lgort ALPHA = IN }| ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '012'
+                                             message_v1 = <fs_es_dato_proxy>-werks message_v2 = <fs_es_dato_proxy>-lgort ) ).
+
+      ENDIF.
+      "numero de entrega
+      es_datos_reducidos-docno = |{ <fs_es_dato_proxy>-vbeln ALPHA = IN }|.
+      IF NOT line_exists( e_ti_entrega_salida[ docno = es_datos_reducidos-docno ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '013'
+                                             message_v1 = <fs_es_dato_proxy>-vbeln ) ).
+
+      ENDIF.
+
+      "Validar que la entrega de salida no tenga tareas de picking directo abiertas
+      DATA(docid) = VALUE #( e_ti_entrega_salida[ docno = es_datos_reducidos-docno ]-docid OPTIONAL ).
+
+      IF line_exists( ti_tareas_abiertas[ docid = docid procty = 'Y214' ] ) OR
+         line_exists( ti_tareas_abiertas[ docid = docid procty = 'Y215' ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '111'
+                                             message_v1 = <fs_es_dato_proxy>-vbeln  ) ).
+
+      ENDIF.
+      "Validar que la entrega de salida no tenga tareas de picking directo cerrada
+      IF line_exists( ti_tareas_confirmada[ docid = docid procty = 'Y214' tostat = 'C' ] ) OR
+         line_exists( ti_tareas_confirmada[ docid = docid procty = 'Y215' tostat = 'C' ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = gc_clase_mensaje number = '113'
+                                             message_v1 = <fs_es_dato_proxy>-vbeln  ) ).
+
+      ENDIF.
+
+      "EAN/material
+      IF NOT line_exists( ti_ean[ ean11 = <fs_es_dato_proxy>-ean ] ) OR
+         NOT line_exists( e_ti_entrega_salida[ ean11 = <fs_es_dato_proxy>-ean ] ).
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = 'WG' number = '026'
+                                             message_v1 = <fs_es_dato_proxy>-ean  ) ).
+
+      ENDIF.
+
+      "Cantidad
+      cantidad_producto = REDUCE #( INIT cantidad TYPE /scdl/db_proci_o-qty
+                                    FOR  es_cantidad_producto IN e_ti_entrega_salida WHERE ( ean11 = <fs_es_dato_proxy>-ean )
+                                    NEXT cantidad += es_cantidad_producto-cantidad_producto
+                                  ).
+
+      IF cantidad_producto < <fs_es_dato_proxy>-vemng.
+        go_log->set_es_log(  i_es = VALUE #( type = 'E' id = 'ESD01' number = '005'
+                                             message_v1 = cantidad_producto message_v2 = <fs_es_dato_proxy>-vemng
+                                             message_v3 = <fs_es_dato_proxy>-vbeln ) ).
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD um_valida.
+
+    LOOP AT c_ti_datos_proxy ASSIGNING FIELD-SYMBOL(<fs_es_dato_proxy>).
+      TRY.
+          /scwm/cl_hu_appl_ewm=>huident_int_check(
+            EXPORTING
+              iv_lgnum   =   i_ti_entrega_salida[ docno = |{ CONV /scdl/dl_docno_int( <fs_es_dato_proxy>-vbeln ) ALPHA = IN }| ]-whnumwme
+              iv_huident =   |{ <fs_es_dato_proxy>-exidv_wcs ALPHA = IN }|
+              iv_pmtyp   =   g_tipo_material_embalaje ).
+
+        CATCH cx_sy_itab_line_not_found.
+
+        CATCH /scwm/cx_basics.
+          go_log->set_es_log(  i_es = VALUE #( type = 'W' id = sy-msgid number = sy-msgno
+                                             message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                             message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+      ENDTRY.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD validar_mensaje_proxy.
+
+    entrega_salida_valida( IMPORTING e_ti_entrega_salida = r_ti_entrega_salida
+                           CHANGING c_ti_datos_proxy = c_ti_datos_proxy ).
+
+    um_valida( EXPORTING
+                i_ti_entrega_salida = r_ti_entrega_salida
+               CHANGING
+                c_ti_datos_proxy    = c_ti_datos_proxy ).
+
+  ENDMETHOD.
+
+  METHOD constructor.
+
+    DATA: r_valor_parametro TYPE RANGE OF string.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = 'EWM' i_ricefw = gc_ricefw ).
+
+    go_parametros->get_parametro(
+      EXPORTING
+        i_idparam               = 'UBICACION'
+      IMPORTING
+        e_ti_valrango           = r_valor_parametro
+      EXCEPTIONS
+        parametro_no_encontrado = 1
+        OTHERS                  = 2 ).
+
+    g_ubicacion = r_valor_parametro[ 1 ]-low.
+
+    go_parametros->get_parametro(
+     EXPORTING
+       i_idparam               = 'TPMATEMBAL'
+     IMPORTING
+       e_ti_valrango           = r_valor_parametro
+     EXCEPTIONS
+       parametro_no_encontrado = 1
+       OTHERS                  = 2 ).
+
+    g_tipo_material_embalaje = r_valor_parametro[ 1 ]-low.
+
+    go_parametros->get_parametro(
+     EXPORTING
+       i_idparam               = 'TPALMACEND'
+     IMPORTING
+       e_ti_valrango           = r_valor_parametro
+     EXCEPTIONS
+       parametro_no_encontrado = 1
+       OTHERS                  = 2 ).
+
+    g_tipo_almacen_destino = r_valor_parametro[ 1 ]-low.
+
+    go_parametros->get_parametro(
+     EXPORTING
+       i_idparam               = 'MTEMBALAJE'
+     IMPORTING
+       e_ti_valrango           = r_valor_parametro
+     EXCEPTIONS
+       parametro_no_encontrado = 1
+       OTHERS                  = 2 ).
+
+    g_material_embaleje = r_valor_parametro[ 1 ]-low.
+
+    go_parametros->get_parametro(
+     EXPORTING
+       i_idparam               = 'CLPROCESO'
+     IMPORTING
+       e_ti_valrango           = r_valor_parametro
+     EXCEPTIONS
+       parametro_no_encontrado = 1
+       OTHERS                  = 2 ).
+
+    g_clase_proceso = r_valor_parametro[ 1 ]-low.
+
+  ENDMETHOD.
+
+  METHOD iniciar_embalaje.
+    " Preparar la creación de la UMp
+    c_o_embalaje->init( iv_lgnum = i_lgnum ).
+
+    /scwm/cl_log=>get_instance( IMPORTING eo_instance = c_o_scwn_log ).
+
+    CALL FUNCTION '/SCWM/TO_INIT_NEW'
+      EXPORTING
+        iv_lgnum = i_lgnum
+        io_prot  = c_o_scwn_log.
+  ENDMETHOD.
+
+
+  METHOD obtener_tarea_almacen.
+
+    SELECT lgnum, tanum
+    FROM /scwm/ordim_c
+    FOR ALL ENTRIES IN @i_ti_datos_proxy
+    WHERE vlenr = @i_ti_datos_proxy-exidv_wcs
+    INTO TABLE @DATA(ti_tarea).
+
+    IF ti_tarea IS INITIAL.
+      SELECT lgnum, tanum
+      FROM /scwm/ordim_o
+      FOR ALL ENTRIES IN @i_ti_datos_proxy
+      WHERE vlenr = @i_ti_datos_proxy-exidv_wcs
+      INTO TABLE @ti_tarea.
+    ENDIF.
+
+    CHECK ti_tarea IS NOT INITIAL.
+
+    r_tarea_almacen = ti_tarea[ 1 ]-tanum.
+
+  ENDMETHOD.
+
+ENDCLASS.

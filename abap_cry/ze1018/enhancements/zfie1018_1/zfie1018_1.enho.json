@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFIE1018_1",
+  "header" : {
+    "enhancementName" : "ZFIE1018_1",
+    "description" : "Implementar BADI BADI_UKM_VECTOR_CALCULATE",
+    "toolType" : "BADI_IMPL",
+    "toolTypeText" : "BAdI Implementation",
+    "devclass" : "ZE1018",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-07-07",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-07-07"
+  },
+  "elements" : [ {
+    "elementType" : "BADI_IMPL",
+    "spotName" : "",
+    "programName" : "",
+    "fullName" : "",
+    "badiName" : "BADI_UKM_VECTOR_CALCULATE",
+    "badiImpl" : "ZFI_BADIUKMVECTORCALCULATE_1",
+    "implClass" : "ZCLFI_IM_UKM_VECTOR_CALCULATE",
+    "interfaceName" : "IF_VECTOR_CALCULATE",
+    "active" : true,
+    "sourceCode" : ""
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

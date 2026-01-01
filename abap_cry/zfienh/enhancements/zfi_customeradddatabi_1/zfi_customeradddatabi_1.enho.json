@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFI_CUSTOMERADDDATABI_1",
+  "header" : {
+    "enhancementName" : "ZFI_CUSTOMERADDDATABI_1",
+    "description" : "Implementación BADI CUSTOMER_ADD_DATA_BI",
+    "toolType" : "BADI_IMPL",
+    "toolTypeText" : "BAdI Implementation",
+    "devclass" : "ZFIENH",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-07-12",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-07-12"
+  },
+  "elements" : [ {
+    "elementType" : "BADI_IMPL",
+    "spotName" : "",
+    "programName" : "",
+    "fullName" : "",
+    "badiName" : "CUSTOMER_ADD_DATA_BI",
+    "badiImpl" : "ZFI_CUSTOMERADDDATABI_1",
+    "implClass" : "ZCLFI_EXITS_GESTION_BP",
+    "interfaceName" : "IF_EX_CUSTOMER_ADD_DATA_BI",
+    "active" : true,
+    "sourceCode" : ""
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

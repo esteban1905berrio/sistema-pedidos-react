@@ -1,0 +1,84 @@
+*---------------------------------------------------------------------*
+*    program for:   VIEWPROC_ZVMME1006_2
+*   generation date: 30.06.2021 at 07:32:52
+*   view maintenance generator version: #001407#
+*---------------------------------------------------------------------*
+FUNCTION VIEWPROC_ZVMME1006_2
+  IMPORTING
+    VALUE(FCODE) TYPE ANY DEFAULT 'RDED' ##ADT_PARAMETER_UNTYPED
+    VALUE(VIEW_ACTION) TYPE ANY DEFAULT 'S' ##ADT_PARAMETER_UNTYPED
+    VALUE(VIEW_NAME) LIKE DD02V-TABNAME
+    VALUE(CORR_NUMBER) LIKE E070-TRKORR DEFAULT ' '
+  EXPORTING
+    VALUE(LAST_ACT_ENTRY) TYPE ANY ##ADT_PARAMETER_UNTYPED
+    VALUE(UCOMM) TYPE ANY ##ADT_PARAMETER_UNTYPED
+    VALUE(UPDATE_REQUIRED) TYPE ANY ##ADT_PARAMETER_UNTYPED
+  TABLES
+    CORR_KEYTAB LIKE E071K
+    DBA_SELLIST LIKE VIMSELLIST
+    DPL_SELLIST LIKE VIMSELLIST
+    EXCL_CUA_FUNCT LIKE VIMEXCLFUN
+    EXTRACT TYPE STANDARD TABLE ##ADT_PARAMETER_UNTYPED
+    TOTAL TYPE STANDARD TABLE ##ADT_PARAMETER_UNTYPED
+    X_HEADER LIKE VIMDESC
+    X_NAMTAB LIKE VIMNAMTAB
+  EXCEPTIONS
+    NO_VALUE_FOR_SUBSET_IDENT
+    MISSING_CORR_NUMBER
+    SAVING_CORRECTION_FAILED.
+*----------------------------------------------------------------------*
+* Initialization: set field-symbols etc.                               *
+*----------------------------------------------------------------------*
+   IF LAST_VIEW_INFO NE VIEW_NAME.
+ASSIGN ZVMME1006_2 TO <TABLE1>.
+ASSIGN *ZVMME1006_2 TO <INITIAL>.
+ASSIGN STATUS_ZVMME1006_2 TO <STATUS>.
+     PERFORM INITIALISIEREN.
+   ENDIF.
+   PERFORM JUSTIFY_ACTION_MODE.
+   MOVE: VIEW_ACTION TO MAINT_MODE,
+         CORR_NUMBER TO CORR_NBR.
+
+*----------------------------------------------------------------------*
+* Get data from database                                               *
+*----------------------------------------------------------------------*
+  IF FCODE EQ READ OR FCODE EQ READ_AND_EDIT.
+    PERFORM PREPARE_READ_REQUEST.
+    IF X_HEADER-FRM_RP_GET NE SPACE.
+            PERFORM (X_HEADER-FRM_RP_GET) IN PROGRAM.
+    ELSE.
+PERFORM GET_DATA_ZVMME1006_2.
+    ENDIF.
+    IF FCODE EQ READ_AND_EDIT. FCODE = EDIT. ENDIF.
+  ENDIF.
+
+  CASE FCODE.
+    WHEN  EDIT.                          " Edit read data
+      PERFORM CALL_DYNPRO.
+      PERFORM CHECK_UPD.
+*....................................................................*
+
+    WHEN SAVE.                           " Write data into database
+      PERFORM PREPARE_SAVING.
+      IF <STATUS>-UPD_FLAG NE SPACE.
+        IF X_HEADER-FRM_RP_UPD NE SPACE.
+          PERFORM (X_HEADER-FRM_RP_UPD) IN PROGRAM.
+        ELSE.
+          IF SY-SUBRC EQ 0.
+PERFORM DB_UPD_ZVMME1006_2.
+          ENDIF.
+        ENDIF.
+        PERFORM AFTER_SAVING.
+      ENDIF.
+*....................................................................*
+
+    WHEN RESET_LIST.     " Refresh all marked entries of EXTRACT from db
+      PERFORM RESET_ENTRIES USING LIST_BILD.
+*....................................................................*
+
+    WHEN RESET_ENTRY.               " Refresh single entry from database
+      PERFORM RESET_ENTRIES USING DETAIL_BILD.
+*.......................................................................
+  ENDCASE.
+MOVE STATUS_ZVMME1006_2-UPD_FLAG TO UPDATE_REQUIRED.
+ENDFUNCTION.

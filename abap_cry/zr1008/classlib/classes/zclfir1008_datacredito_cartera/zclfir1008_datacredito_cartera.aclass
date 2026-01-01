@@ -1,0 +1,824 @@
+CLASS zclfir1008_datacredito_cartera DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    TYPES: BEGIN OF gtp_es_datos_salida,
+             stcd1           TYPE kna1-stcd1,
+             kunnr           TYPE kna1-kunnr,
+             nombrecliente   TYPE /plmi/customer_name,
+             valortotaldeuda TYPE bseg-wrbtr,
+             valormora       TYPE bseg-wrbtr,
+             waers           TYPE bseg-h_waers,
+             edadmora        TYPE i,
+           END OF gtp_es_datos_salida,
+
+           BEGIN OF gtp_es_datos_cliente,
+             stcd1              TYPE kna1-stcd1,
+             kunnr              TYPE kna1-kunnr,
+             stcdt              TYPE kna1-stcdt,
+             name1              TYPE kna1-name1,
+             name2              TYPE kna1-name2,
+             erdat              TYPE kna1-erdat,
+             ort01              TYPE kna1-ort01,
+             city_code          TYPE adrc-city_code,
+             departamento       TYPE t005u-bezei,
+             stras              TYPE kna1-stras,
+             telf1              TYPE kna1-telf1,
+             correo_electronico TYPE knb1-intad,
+             fdtag              TYPE bseg-fdtag,
+             budat              TYPE bkpf-budat,
+             fechavencimiento   TYPE d,
+             valortotaldeuda    TYPE bseg-wrbtr,
+             valormora          TYPE bseg-wrbtr,
+             waers              TYPE bseg-h_waers,
+             edadmora           TYPE i,
+           END OF gtp_es_datos_cliente,
+
+           BEGIN OF gtp_es_movimientos_cliente,
+             bukrs            TYPE bseg-bukrs,
+             kunnr            TYPE bseg-kunnr,
+             zuonr            TYPE bseg-zuonr,
+             gjahr            TYPE bseg-gjahr,
+             belnr            TYPE bseg-belnr,
+             budat            TYPE acdoca-budat,
+             bldat            TYPE acdoca-bldat,
+             blart            TYPE acdoca-blart,
+             bschl            TYPE bseg-bschl,
+             shkzg            TYPE bseg-shkzg,
+             dmbtr            TYPE bseg-dmbtr,
+             wrbtr            TYPE bseg-wrbtr,
+             waers            TYPE bkpf-waers,
+             zfbdt            TYPE bseg-zfbdt,
+             zbd1t            TYPE bseg-zbd1t,
+             zterm            TYPE bseg-zterm,
+             fechavencimiento TYPE d,
+             edadmora         TYPE i,
+             zlspr            TYPE bseg-zlspr,
+             vbeln            TYPE bseg-vbeln,
+             fdtag            TYPE bseg-fdtag,
+             stcd1            TYPE kna1-stcd1,
+           END OF gtp_es_movimientos_cliente,
+
+           gtp_ti_cartera_cliente     TYPE STANDARD TABLE OF gtp_es_datos_salida WITH EMPTY KEY,
+           gtp_ti_datos_cliente       TYPE STANDARD TABLE OF gtp_es_datos_cliente WITH NON-UNIQUE KEY stcd1 kunnr,
+           gtp_ti_movimientos_cliente TYPE STANDARD TABLE OF gtp_es_movimientos_cliente WITH EMPTY KEY.
+
+    CLASS-METHODS:
+      "! Consultar movimientos financieros del cliente
+      "!
+      "! @parameter i_r_kunnr | Cliente
+      "! @parameter i_fechacorte | Fecha de corte para generar el reporte
+      "! @parameter i_bukrs | Sociedad
+      "! @parameter i_dias | Dias de gracia
+      "! @parameter e_ti_movimientos_cliente | Partidas abiertas generados por el cliente
+      consultar_movimientos_clientes
+        IMPORTING
+          VALUE(i_r_kunnr)                TYPE string
+          VALUE(i_fechacorte)             TYPE acdoca-budat
+          VALUE(i_bukrs)                  TYPE acdoca-rbukrs
+          VALUE(i_dias)                   TYPE numc4
+        EXPORTING
+          VALUE(e_ti_movimientos_cliente) TYPE gtp_ti_movimientos_cliente,
+      "! Consulta el estado de cartera de los clientes
+      "!
+      "! @parameter i_r_kunnr | Cliente
+      "! @parameter i_fechacorte | Fecha de corte para generar el reporte
+      "! @parameter i_bukrs | Sociedad
+      "! @parameter i_dias | Dias de gracia
+      "! @parameter e_ti_estado_cartera | Estado de cartera del cliente
+      "! @parameter e_ti_datos_cliente | Datos necesarios para generar archivo Datacredito
+      generar_estado_cartera
+        IMPORTING
+          VALUE(i_r_kunnr)           TYPE string
+          VALUE(i_fechacorte)        TYPE acdoca-budat
+          VALUE(i_bukrs)             TYPE acdoca-rbukrs
+          VALUE(i_dias)              TYPE numc4
+
+        EXPORTING
+          VALUE(e_ti_estado_cartera) TYPE gtp_ti_cartera_cliente
+          VALUE(e_ti_datos_cliente)  TYPE gtp_ti_datos_cliente.
+
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfir1008_datacredito_cartera IMPLEMENTATION.
+
+
+
+  METHOD consultar_movimientos_clientes BY DATABASE PROCEDURE FOR HDB
+                                        LANGUAGE SQLSCRIPT
+                                        OPTIONS READ-ONLY
+                                        USING kna1 ukmbp_cms bkpf bseg.
+    --Clientes
+    ti_clientes =
+    SELECT c.mandt, c.kunnr, c.name1, c.name2, c.ort01, c.stras, c.telf1,
+    c.stcd1, c.stcdt, c.stkzn, gc.credit_group, c.erdat, c.regio,
+    c.adrnr
+    FROM kna1 as c
+    INNER JOIN ukmbp_cms as gc
+    ON  c.mandt = gc.client
+    AND c.kunnr = gc.partner
+    WHERE c.mandt = SESSION_CONTEXT('CLIENT')
+    AND   gc.credit_group = '0001'
+    ORDER BY c.kunnr;
+
+    ti_clientes = apply_filter( :ti_clientes, :i_r_kunnr );
+
+    e_ti_movimientos_cliente =
+    SELECT b.bukrs, b.kunnr, b.zuonr, b.gjahr, b.belnr, budat, bldat,
+    blart, b.bschl, b.shkzg,
+    CASE
+    WHEN shkzg = 'H' THEN
+        b.dmbtr * -1
+    ELSE
+        b.dmbtr
+    END AS dmbtr,
+    -- Signo negativo para indicador debe H
+    CASE
+    WHEN shkzg = 'H' THEN
+        wrbtr * -1
+    ELSE
+        wrbtr
+    END AS wrbtr,
+    waers,
+    zfbdt,
+    CASE
+    WHEN zbd3t <> '0' THEN
+        zbd3t
+    WHEN zbd2t <> '0' THEN
+        zbd2t
+    ELSE
+        zbd1t
+    END AS zbd1t,
+    zterm,
+    CASE
+    WHEN zterm IS NOT NULL AND zterm <> '' THEN
+        TO_DATS( ADD_DAYS ( zfbdt, zbd1t ) )
+    WHEN zfbdt IS NOT NULL AND zfbdt <> '00000000' THEN
+        zfbdt
+    END AS fechavencimiento,
+    0 as edadmora,
+    zlspr,
+    vbeln,
+    fdtag,
+    stcd1
+    FROM bseg as b
+    INNER JOIN bkpf as k
+    ON  k.mandt = b.mandt
+    AND k.bukrs = b.bukrs
+    AND k.gjahr = b.gjahr
+    AND k.belnr = b.belnr
+    INNER JOIN :ti_clientes as c
+    on  c.mandt = b.mandt
+    AND c.kunnr = b.kunnr
+    WHERE b.mandt = SESSION_CONTEXT('CLIENT')
+    AND   b.bukrs = i_bukrs
+    AND   b.augbl = ''                       -- Consulta solo partidas abiertas
+    AND   k.budat <= i_fechacorte
+    ORDER BY bukrs, kunnr, fechavencimiento ASC;
+
+    --Calcular edad de la mora
+    e_ti_movimientos_cliente =
+    SELECT bukrs, kunnr, zuonr, gjahr, belnr, budat, bldat, blart, bschl, shkzg, dmbtr,
+           wrbtr, waers, zfbdt, zbd1t, zterm, fechavencimiento,
+           DAYS_BETWEEN( TO_DATE( ADD_DAYS ( fechavencimiento, :i_dias ) ), :i_fechacorte )
+           AS edadmora,
+           zlspr, vbeln, fdtag, stcd1
+    FROM :e_ti_movimientos_cliente;
+
+
+  ENDMETHOD.
+
+  METHOD generar_estado_cartera BY DATABASE PROCEDURE FOR HDB
+                                        LANGUAGE SQLSCRIPT
+                                        OPTIONS READ-ONLY
+                                        USING kna1 knb1 adrc t005u zclfir1008_datacredito_cartera=>consultar_movimientos_clientes.
+
+    CALL "ZCLFIR1008_DATACREDITO_CARTERA=>CONSULTAR_MOVIMIENTOS_CLIENTES"
+                                          ( i_r_kunnr => :i_r_kunnr,
+                                            i_fechacorte => :i_fechacorte,
+                                            i_dias => :i_dias,
+                                            i_bukrs => :i_bukrs,
+                                            e_ti_movimientos_cliente => :ti_movimientos_cliente );
+
+    -- Calcular edad de la mora, convertir campo tipo moneda
+    ti_cartera_cliente =
+    SELECT
+    c.stcdt,
+    c.stcd1,
+    c.kunnr,
+    c.name1,
+    c.name2,
+    c.erdat,
+    c.ort01,
+    CASE
+    WHEN LENGTH( city_code ) = 12 THEN
+       SUBSTRING (city_code,4,8)
+    WHEN LENGTH( city_code ) = 8 THEN
+       city_code
+    END AS city_code,
+    dp.bezei as departamento,
+    stras,
+    telf1,
+    intad as  correo_electronico,
+    fdtag,
+    budat,
+    fechavencimiento,
+    k.bukrs,
+    k.gjahr,
+    k.belnr,
+    k.vbeln,
+    wrbtr,
+*    CONVERT_CURRENCY("AMOUNT" => wrbtr,
+*                     "SOURCE_UNIT" => waers,
+*                     "SCHEMA" => CURRENT_SCHEMA ,
+*                     "TARGET_UNIT" => waers,
+*                     "REFERENCE_DATE" => SESSION_CONTEXT('SAP_SYSTEM_DATE'),
+*                     "ERROR_HANDLING"=>'set to null',
+*                     "CLIENT" => SESSION_CONTEXT('CLIENT')
+*                    ) as wrbtr,
+    waers,
+    -- Para montos negativos con edad de mora mayor a cero, se multiplica por -1 la edad
+    CASE
+     WHEN wrbtr < 0 AND edadmora > 0 THEN
+        edadmora * -1
+     ELSE
+        edadmora
+     END AS edadmora
+
+    FROM kna1 as c
+    INNER JOIN :ti_movimientos_cliente as k
+    ON k.kunnr = c.kunnr
+    LEFT JOIN adrc as d
+    ON  d.client = c.mandt
+    AND d.addrnumber = c.adrnr
+    LEFT JOIN t005u as dp
+    ON  dp.mandt = c.mandt
+    AND dp.spras = SESSION_CONTEXT('LOCALE_SAP')
+    AND dp.land1 = 'CO'
+    AND dp.bland = c.regio
+    LEFT JOIN knb1 as kb
+    ON  kb.mandt = c.mandt
+    AND kb.kunnr = c.kunnr
+    AND kb.bukrs = k.bukrs
+    WHERE c.mandt = SESSION_CONTEXT('CLIENT')
+    ORDER BY stcdt, stcd1, c.kunnr, fechavencimiento;
+
+    -- Validaciones y reglas adicionales
+    -- Condiciones de edad de la mora
+    -- Totalizar valor de la deuda
+    ti_cartera_cliente_hom_valormora =
+    SELECT
+     stcd1,
+     kunnr,
+     stcdt,
+     name1,
+     name2,
+     erdat,
+     ort01,
+     city_code,
+     departamento,
+     stras,
+     telf1,
+     correo_electronico,
+     fdtag,
+     budat,
+     fechavencimiento,
+     SUM ( wrbtr ) as valortotaldeuda,
+     SUM ( wrbtr ) as valormora,
+     waers,
+     edadmora
+    FROM :ti_cartera_cliente
+    WHERE edadmora >= :i_dias
+    GROUP BY stcdt, stcd1, kunnr, name1, name2, erdat, ort01, city_code, departamento, stras, telf1, correo_electronico, fdtag,
+             budat,fechavencimiento, waers, edadmora
+    ORDER BY stcd1, kunnr, fechavencimiento, edadmora;
+
+    ti_cartera_cliente_homologado =
+    SELECT
+     a.stcd1,
+     a.kunnr,
+     a.stcdt,
+     a.name1,
+     a.name2,
+     a.erdat,
+     a.ort01,
+     a.city_code,
+     a.departamento,
+     a.stras,
+     a.telf1,
+     a.correo_electronico,
+     a.fdtag,
+     a.budat,
+     a.fechavencimiento,
+     SUM ( a.wrbtr ) as valortotaldeuda,
+     a.waers,
+     CASE
+     WHEN a.edadmora < 0 THEN
+        0
+     ELSE
+        CASE WHEN b.valormora > 0 THEN
+            b.valormora
+        ELSE
+            a.wrbtr
+        END
+     END AS valormora,
+     a.edadmora
+    FROM :ti_cartera_cliente AS a
+        LEFT JOIN :ti_cartera_cliente_hom_valormora AS b
+        ON  b.stcd1 = a.stcd1 AND
+            b.kunnr = a.kunnr AND
+            b.fechavencimiento = a.fechavencimiento
+    GROUP BY a.stcdt, a.stcd1, a.kunnr, a.name1, a.name2, a.erdat, a.ort01, a.city_code, a.departamento, a.stras, a.telf1, a.correo_electronico, a.fdtag,
+             a.budat, a.fechavencimiento, a.wrbtr, a.waers, a.edadmora, b.valormora
+    ORDER BY stcd1, kunnr, fechavencimiento, edadmora;
+
+    --Seleccionar el minimo dia (Por fecha de vencimiento) del valor de la mora
+    ti_edad_minima_en_mora =
+    SELECT DISTINCT a.stcd1, a.kunnr, fm.fechavencimiento, edadmora
+    FROM ( SELECT stcd1, kunnr, min( fechavencimiento ) as fechavencimiento
+           FROM :ti_cartera_cliente_homologado
+           WHERE edadmora > 0 AND valormora > 0
+           GROUP BY stcd1, kunnr ) AS fm
+    INNER JOIN :ti_cartera_cliente_homologado AS a
+    ON a.stcd1 = fm.stcd1
+    AND a.kunnr = fm.kunnr
+    AND a.fechavencimiento = fm.fechavencimiento
+    WHERE a.valormora > 0 AND a.edadmora > 0
+    ORDER BY stcd1, kunnr, fechavencimiento ASC;
+
+    -- Totalizar valores y preparar datos para salida
+    e_ti_estado_cartera_aux =
+    SELECT a.stcd1, a.kunnr, CONCAT( CONCAT( name1, ' ' ), name2 ) as nombrecliente,
+    SUM ( valortotaldeuda ) as valortotaldeuda, SUM ( valormora ) as valormora, a.waers,
+    b.edadmora
+    FROM :ti_cartera_cliente_homologado AS a
+    LEFT JOIN :ti_edad_minima_en_mora AS b
+    ON b.stcd1 = a.stcd1
+    AND b.kunnr = a.kunnr
+    GROUP BY a.stcd1, a.kunnr, name1, name2, a.waers, b.edadmora;
+
+    --Si el valor de la deuda es negativo entonces convertir en cero
+    -- columnas valortotaldeuda, valormora y edadmora
+    e_ti_estado_cartera =
+    SELECT a.stcd1, a.kunnr, a.nombrecliente,
+    CASE
+     WHEN a.valortotaldeuda < 0 THEN
+        0
+     ELSE
+        a.valortotaldeuda
+    END AS valortotaldeuda,
+    CASE
+     WHEN a.valortotaldeuda < 0 THEN
+        0
+     ELSE
+        CASE WHEN a.valormora > a.valortotaldeuda THEN
+            a.valortotaldeuda
+        ELSE
+            a.valormora
+        END
+    END AS valormora,
+    a.waers,
+    CASE
+     WHEN a.valortotaldeuda < 0 THEN
+        0
+     ELSE
+        a.edadmora
+    END AS edadmora
+    FROM :e_ti_estado_cartera_aux AS a;
+
+    e_ti_datos_cliente =
+    SELECT
+     stcd1, kunnr, stcdt, name1, name2, erdat, ort01, city_code, departamento, stras, telf1, correo_electronico,
+     fdtag, budat, fechavencimiento,
+     SUM ( valortotaldeuda ) as valortotaldeuda,
+     valormora, waers,
+     SUM ( edadmora ) as edadmora
+     FROM :ti_cartera_cliente_homologado
+     GROUP BY stcd1, kunnr, stcdt, name1, name2, erdat, ort01, city_code, departamento, stras, telf1, correo_electronico,
+              fdtag, budat, fechavencimiento, waers, valormora
+     ORDER BY stcd1, kunnr, fdtag DESC;
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfir1008_datacredito_cartera DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    TYPES: BEGIN OF gtp_es_datos_salida,
+             stcd1           TYPE kna1-stcd1,
+             kunnr           TYPE kna1-kunnr,
+             nombrecliente   TYPE /plmi/customer_name,
+             valortotaldeuda TYPE bseg-wrbtr,
+             valormora       TYPE bseg-wrbtr,
+             waers           TYPE bseg-h_waers,
+             edadmora        TYPE i,
+           END OF gtp_es_datos_salida,
+
+           BEGIN OF gtp_es_datos_cliente,
+             stcd1              TYPE kna1-stcd1,
+             kunnr              TYPE kna1-kunnr,
+             stcdt              TYPE kna1-stcdt,
+             name1              TYPE kna1-name1,
+             name2              TYPE kna1-name2,
+             erdat              TYPE kna1-erdat,
+             ort01              TYPE kna1-ort01,
+             city_code          TYPE adrc-city_code,
+             departamento       TYPE t005u-bezei,
+             stras              TYPE kna1-stras,
+             telf1              TYPE kna1-telf1,
+             correo_electronico TYPE knb1-intad,
+             fdtag              TYPE bseg-fdtag,
+             budat              TYPE bkpf-budat,
+             fechavencimiento   TYPE d,
+             valortotaldeuda    TYPE bseg-wrbtr,
+             valormora          TYPE bseg-wrbtr,
+             waers              TYPE bseg-h_waers,
+             edadmora           TYPE i,
+           END OF gtp_es_datos_cliente,
+
+           BEGIN OF gtp_es_movimientos_cliente,
+             bukrs            TYPE bseg-bukrs,
+             kunnr            TYPE bseg-kunnr,
+             zuonr            TYPE bseg-zuonr,
+             gjahr            TYPE bseg-gjahr,
+             belnr            TYPE bseg-belnr,
+             budat            TYPE acdoca-budat,
+             bldat            TYPE acdoca-bldat,
+             blart            TYPE acdoca-blart,
+             bschl            TYPE bseg-bschl,
+             shkzg            TYPE bseg-shkzg,
+             dmbtr            TYPE bseg-dmbtr,
+             wrbtr            TYPE bseg-wrbtr,
+             waers            TYPE bkpf-waers,
+             zfbdt            TYPE bseg-zfbdt,
+             zbd1t            TYPE bseg-zbd1t,
+             zterm            TYPE bseg-zterm,
+             fechavencimiento TYPE d,
+             edadmora         TYPE i,
+             zlspr            TYPE bseg-zlspr,
+             vbeln            TYPE bseg-vbeln,
+             fdtag            TYPE bseg-fdtag,
+             stcd1            TYPE kna1-stcd1,
+           END OF gtp_es_movimientos_cliente,
+
+           gtp_ti_cartera_cliente     TYPE STANDARD TABLE OF gtp_es_datos_salida WITH EMPTY KEY,
+           gtp_ti_datos_cliente       TYPE STANDARD TABLE OF gtp_es_datos_cliente WITH NON-UNIQUE KEY stcd1 kunnr,
+           gtp_ti_movimientos_cliente TYPE STANDARD TABLE OF gtp_es_movimientos_cliente WITH EMPTY KEY.
+
+    CLASS-METHODS:
+      "! Consultar movimientos financieros del cliente
+      "!
+      "! @parameter i_r_kunnr | Cliente
+      "! @parameter i_fechacorte | Fecha de corte para generar el reporte
+      "! @parameter i_bukrs | Sociedad
+      "! @parameter i_dias | Dias de gracia
+      "! @parameter e_ti_movimientos_cliente | Partidas abiertas generados por el cliente
+      consultar_movimientos_clientes
+        IMPORTING
+          VALUE(i_r_kunnr)                TYPE string
+          VALUE(i_fechacorte)             TYPE acdoca-budat
+          VALUE(i_bukrs)                  TYPE acdoca-rbukrs
+          VALUE(i_dias)                   TYPE numc4
+        EXPORTING
+          VALUE(e_ti_movimientos_cliente) TYPE gtp_ti_movimientos_cliente,
+      "! Consulta el estado de cartera de los clientes
+      "!
+      "! @parameter i_r_kunnr | Cliente
+      "! @parameter i_fechacorte | Fecha de corte para generar el reporte
+      "! @parameter i_bukrs | Sociedad
+      "! @parameter i_dias | Dias de gracia
+      "! @parameter e_ti_estado_cartera | Estado de cartera del cliente
+      "! @parameter e_ti_datos_cliente | Datos necesarios para generar archivo Datacredito
+      generar_estado_cartera
+        IMPORTING
+          VALUE(i_r_kunnr)           TYPE string
+          VALUE(i_fechacorte)        TYPE acdoca-budat
+          VALUE(i_bukrs)             TYPE acdoca-rbukrs
+          VALUE(i_dias)              TYPE numc4
+
+        EXPORTING
+          VALUE(e_ti_estado_cartera) TYPE gtp_ti_cartera_cliente
+          VALUE(e_ti_datos_cliente)  TYPE gtp_ti_datos_cliente.
+
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfir1008_datacredito_cartera IMPLEMENTATION.
+
+
+
+  METHOD consultar_movimientos_clientes BY DATABASE PROCEDURE FOR HDB
+                                        LANGUAGE SQLSCRIPT
+                                        OPTIONS READ-ONLY
+                                        USING kna1 ukmbp_cms bkpf bseg.
+    --Clientes
+    ti_clientes =
+    SELECT c.mandt, c.kunnr, c.name1, c.name2, c.ort01, c.stras, c.telf1,
+    c.stcd1, c.stcdt, c.stkzn, gc.credit_group, c.erdat, c.regio,
+    c.adrnr
+    FROM kna1 as c
+    INNER JOIN ukmbp_cms as gc
+    ON  c.mandt = gc.client
+    AND c.kunnr = gc.partner
+    WHERE c.mandt = SESSION_CONTEXT('CLIENT')
+    AND   gc.credit_group = '0001'
+    ORDER BY c.kunnr;
+
+    ti_clientes = apply_filter( :ti_clientes, :i_r_kunnr );
+
+    e_ti_movimientos_cliente =
+    SELECT b.bukrs, b.kunnr, b.zuonr, b.gjahr, b.belnr, budat, bldat,
+    blart, b.bschl, b.shkzg,
+    CASE
+    WHEN shkzg = 'H' THEN
+        b.dmbtr * -1
+    ELSE
+        b.dmbtr
+    END AS dmbtr,
+    -- Signo negativo para indicador debe H
+    CASE
+    WHEN shkzg = 'H' THEN
+        wrbtr * -1
+    ELSE
+        wrbtr
+    END AS wrbtr,
+    waers,
+    zfbdt,
+    CASE
+    WHEN zbd3t <> '0' THEN
+        zbd3t
+    WHEN zbd2t <> '0' THEN
+        zbd2t
+    ELSE
+        zbd1t
+    END AS zbd1t,
+    zterm,
+    CASE
+    WHEN zterm IS NOT NULL AND zterm <> '' THEN
+        TO_DATS( ADD_DAYS ( zfbdt, zbd1t ) )
+    WHEN zfbdt IS NOT NULL AND zfbdt <> '00000000' THEN
+        zfbdt
+    END AS fechavencimiento,
+    0 as edadmora,
+    zlspr,
+    vbeln,
+    fdtag,
+    stcd1
+    FROM bseg as b
+    INNER JOIN bkpf as k
+    ON  k.mandt = b.mandt
+    AND k.bukrs = b.bukrs
+    AND k.gjahr = b.gjahr
+    AND k.belnr = b.belnr
+    INNER JOIN :ti_clientes as c
+    on  c.mandt = b.mandt
+    AND c.kunnr = b.kunnr
+    WHERE b.mandt = SESSION_CONTEXT('CLIENT')
+    AND   b.bukrs = i_bukrs
+    AND   b.augbl = ''                       -- Consulta solo partidas abiertas
+    AND   k.budat <= i_fechacorte
+    ORDER BY bukrs, kunnr, fechavencimiento ASC;
+
+    --Calcular edad de la mora
+    e_ti_movimientos_cliente =
+    SELECT bukrs, kunnr, zuonr, gjahr, belnr, budat, bldat, blart, bschl, shkzg, dmbtr,
+           wrbtr, waers, zfbdt, zbd1t, zterm, fechavencimiento,
+           DAYS_BETWEEN( TO_DATE( ADD_DAYS ( fechavencimiento, :i_dias ) ), :i_fechacorte )
+           AS edadmora,
+           zlspr, vbeln, fdtag, stcd1
+    FROM :e_ti_movimientos_cliente;
+
+
+  ENDMETHOD.
+
+  METHOD generar_estado_cartera BY DATABASE PROCEDURE FOR HDB
+                                        LANGUAGE SQLSCRIPT
+                                        OPTIONS READ-ONLY
+                                        USING kna1 knb1 adrc t005u zclfir1008_datacredito_cartera=>consultar_movimientos_clientes.
+
+    CALL "ZCLFIR1008_DATACREDITO_CARTERA=>CONSULTAR_MOVIMIENTOS_CLIENTES"
+                                          ( i_r_kunnr => :i_r_kunnr,
+                                            i_fechacorte => :i_fechacorte,
+                                            i_dias => :i_dias,
+                                            i_bukrs => :i_bukrs,
+                                            e_ti_movimientos_cliente => :ti_movimientos_cliente );
+
+    -- Calcular edad de la mora, convertir campo tipo moneda
+    ti_cartera_cliente =
+    SELECT
+    c.stcdt,
+    c.stcd1,
+    c.kunnr,
+    c.name1,
+    c.name2,
+    c.erdat,
+    c.ort01,
+    CASE
+    WHEN LENGTH( city_code ) = 12 THEN
+       SUBSTRING (city_code,4,8)
+    WHEN LENGTH( city_code ) = 8 THEN
+       city_code
+    END AS city_code,
+    dp.bezei as departamento,
+    stras,
+    telf1,
+    intad as  correo_electronico,
+    fdtag,
+    budat,
+    fechavencimiento,
+    k.bukrs,
+    k.gjahr,
+    k.belnr,
+    k.vbeln,
+    wrbtr,
+*    CONVERT_CURRENCY("AMOUNT" => wrbtr,
+*                     "SOURCE_UNIT" => waers,
+*                     "SCHEMA" => CURRENT_SCHEMA ,
+*                     "TARGET_UNIT" => waers,
+*                     "REFERENCE_DATE" => SESSION_CONTEXT('SAP_SYSTEM_DATE'),
+*                     "ERROR_HANDLING"=>'set to null',
+*                     "CLIENT" => SESSION_CONTEXT('CLIENT')
+*                    ) as wrbtr,
+    waers,
+    -- Para montos negativos con edad de mora mayor a cero, se multiplica por -1 la edad
+    CASE
+     WHEN wrbtr < 0 AND edadmora > 0 THEN
+        edadmora * -1
+     ELSE
+        edadmora
+     END AS edadmora
+
+    FROM kna1 as c
+    INNER JOIN :ti_movimientos_cliente as k
+    ON k.kunnr = c.kunnr
+    LEFT JOIN adrc as d
+    ON  d.client = c.mandt
+    AND d.addrnumber = c.adrnr
+    LEFT JOIN t005u as dp
+    ON  dp.mandt = c.mandt
+    AND dp.spras = SESSION_CONTEXT('LOCALE_SAP')
+    AND dp.land1 = 'CO'
+    AND dp.bland = c.regio
+    LEFT JOIN knb1 as kb
+    ON  kb.mandt = c.mandt
+    AND kb.kunnr = c.kunnr
+    AND kb.bukrs = k.bukrs
+    WHERE c.mandt = SESSION_CONTEXT('CLIENT')
+    ORDER BY stcdt, stcd1, c.kunnr, fechavencimiento;
+
+    -- Validaciones y reglas adicionales
+    -- Condiciones de edad de la mora
+    -- Totalizar valor de la deuda
+    ti_cartera_cliente_hom_valormora =
+    SELECT
+     stcd1,
+     kunnr,
+     stcdt,
+     name1,
+     name2,
+     erdat,
+     ort01,
+     city_code,
+     departamento,
+     stras,
+     telf1,
+     correo_electronico,
+     fdtag,
+     budat,
+     fechavencimiento,
+     SUM ( wrbtr ) as valortotaldeuda,
+     SUM ( wrbtr ) as valormora,
+     waers,
+     edadmora
+    FROM :ti_cartera_cliente
+    WHERE edadmora >= :i_dias
+    GROUP BY stcdt, stcd1, kunnr, name1, name2, erdat, ort01, city_code, departamento, stras, telf1, correo_electronico, fdtag,
+             budat,fechavencimiento, waers, edadmora
+    ORDER BY stcd1, kunnr, fechavencimiento, edadmora;
+
+    ti_cartera_cliente_homologado =
+    SELECT
+     a.stcd1,
+     a.kunnr,
+     a.stcdt,
+     a.name1,
+     a.name2,
+     a.erdat,
+     a.ort01,
+     a.city_code,
+     a.departamento,
+     a.stras,
+     a.telf1,
+     a.correo_electronico,
+     a.fdtag,
+     a.budat,
+     a.fechavencimiento,
+     SUM ( a.wrbtr ) as valortotaldeuda,
+     a.waers,
+     CASE
+     WHEN a.edadmora < 0 THEN
+        0
+     ELSE
+        CASE WHEN b.valormora > 0 THEN
+            b.valormora
+        ELSE
+            a.wrbtr
+        END
+     END AS valormora,
+     a.edadmora
+    FROM :ti_cartera_cliente AS a
+        LEFT JOIN :ti_cartera_cliente_hom_valormora AS b
+        ON  b.stcd1 = a.stcd1 AND
+            b.kunnr = a.kunnr AND
+            b.fechavencimiento = a.fechavencimiento
+    GROUP BY a.stcdt, a.stcd1, a.kunnr, a.name1, a.name2, a.erdat, a.ort01, a.city_code, a.departamento, a.stras, a.telf1, a.correo_electronico, a.fdtag,
+             a.budat, a.fechavencimiento, a.wrbtr, a.waers, a.edadmora, b.valormora
+    ORDER BY stcd1, kunnr, fechavencimiento, edadmora;
+
+    --Seleccionar el minimo dia (Por fecha de vencimiento) del valor de la mora
+    ti_edad_minima_en_mora =
+    SELECT DISTINCT a.stcd1, a.kunnr, fm.fechavencimiento, edadmora
+    FROM ( SELECT stcd1, kunnr, min( fechavencimiento ) as fechavencimiento
+           FROM :ti_cartera_cliente_homologado
+           WHERE edadmora > 0 AND valormora > 0
+           GROUP BY stcd1, kunnr ) AS fm
+    INNER JOIN :ti_cartera_cliente_homologado AS a
+    ON a.stcd1 = fm.stcd1
+    AND a.kunnr = fm.kunnr
+    AND a.fechavencimiento = fm.fechavencimiento
+    WHERE a.valormora > 0 AND a.edadmora > 0
+    ORDER BY stcd1, kunnr, fechavencimiento ASC;
+
+    -- Totalizar valores y preparar datos para salida
+    e_ti_estado_cartera_aux =
+    SELECT a.stcd1, a.kunnr, CONCAT( CONCAT( name1, ' ' ), name2 ) as nombrecliente,
+    SUM ( valortotaldeuda ) as valortotaldeuda, SUM ( valormora ) as valormora, a.waers,
+    b.edadmora
+    FROM :ti_cartera_cliente_homologado AS a
+    LEFT JOIN :ti_edad_minima_en_mora AS b
+    ON b.stcd1 = a.stcd1
+    AND b.kunnr = a.kunnr
+    GROUP BY a.stcd1, a.kunnr, name1, name2, a.waers, b.edadmora;
+
+    --Si el valor de la deuda es negativo entonces convertir en cero
+    -- columnas valortotaldeuda, valormora y edadmora
+    e_ti_estado_cartera =
+    SELECT a.stcd1, a.kunnr, a.nombrecliente,
+    CASE
+     WHEN a.valortotaldeuda < 0 THEN
+        0
+     ELSE
+        a.valortotaldeuda
+    END AS valortotaldeuda,
+    CASE
+     WHEN a.valortotaldeuda < 0 THEN
+        0
+     ELSE
+        CASE WHEN a.valormora > a.valortotaldeuda THEN
+            a.valortotaldeuda
+        ELSE
+            a.valormora
+        END
+    END AS valormora,
+    a.waers,
+    CASE
+     WHEN a.valortotaldeuda < 0 THEN
+        0
+     ELSE
+        a.edadmora
+    END AS edadmora
+    FROM :e_ti_estado_cartera_aux AS a;
+
+    e_ti_datos_cliente =
+    SELECT
+     stcd1, kunnr, stcdt, name1, name2, erdat, ort01, city_code, departamento, stras, telf1, correo_electronico,
+     fdtag, budat, fechavencimiento,
+     SUM ( valortotaldeuda ) as valortotaldeuda,
+     valormora, waers,
+     SUM ( edadmora ) as edadmora
+     FROM :ti_cartera_cliente_homologado
+     GROUP BY stcd1, kunnr, stcdt, name1, name2, erdat, ort01, city_code, departamento, stras, telf1, correo_electronico,
+              fdtag, budat, fechavencimiento, waers, valormora
+     ORDER BY stcd1, kunnr, fdtag DESC;
+
+  ENDMETHOD.
+
+ENDCLASS.

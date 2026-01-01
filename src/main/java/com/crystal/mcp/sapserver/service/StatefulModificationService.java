@@ -20,8 +20,10 @@ import java.util.Map;
  * Provides centralized infrastructure for LOCK → MODIFY → UNLOCK workflows
  * that require stateful connections (JCoContext).
  *
- * All modification services (ClassService, ProgramService, FutureServices) should use
- * this component to execute stateful workflows instead of implementing their own
+ * All modification services (ClassService, ProgramService, FutureServices)
+ * should use
+ * this component to execute stateful workflows instead of implementing their
+ * own
  * lock/unlock logic.
  *
  * Benefits:
@@ -32,9 +34,10 @@ import java.util.Map;
  * - Thread-safe via RfcAdapter's ThreadLocal context management
  *
  * Usage Pattern:
+ * 
  * <pre>
  * {@code
- * @Service
+ * &#64;Service
  * public class ProgramService {
  *     private final StatefulModificationService statefulModificationService;
  *
@@ -73,31 +76,35 @@ public class StatefulModificationService {
      * Resultado del LOCK con datos parseados de ADT.
      *
      * Contiene toda la información retornada por el endpoint de LOCK:
-     * - lockHandle: Identificador único del bloqueo (requerido para MODIFY y UNLOCK)
+     * - lockHandle: Identificador único del bloqueo (requerido para MODIFY y
+     * UNLOCK)
      * - transportNumber: Número de transport request asignado
      * - transportUser: Usuario dueño del transport
      * - transportDescription: Descripción del transport
      * - isLocal: Indica si el objeto es local ($TMP) o transportable
      *
-     * @param lockHandle identificador único del bloqueo SAP
-     * @param transportNumber número de transport request (e.g., "CADK910827")
-     * @param transportUser usuario dueño del transport
+     * @param lockHandle           identificador único del bloqueo SAP
+     * @param transportNumber      número de transport request (e.g., "CADK910827")
+     * @param transportUser        usuario dueño del transport
      * @param transportDescription descripción del transport
-     * @param isLocal true si objeto es local ($TMP), false si es transportable
+     * @param isLocal              true si objeto es local ($TMP), false si es
+     *                             transportable
      */
     public record LockResult(
             String lockHandle,
             String transportNumber,
             String transportUser,
             String transportDescription,
-            boolean isLocal
-    ) {}
+            boolean isLocal) {
+    }
 
     /**
      * Functional interface para workflows stateful.
      *
-     * Permite pasar lógica personalizada que se ejecuta dentro del contexto stateful.
-     * El workflow tiene acceso completo a los métodos de esta clase (lockObject, unlockObject)
+     * Permite pasar lógica personalizada que se ejecuta dentro del contexto
+     * stateful.
+     * El workflow tiene acceso completo a los métodos de esta clase (lockObject,
+     * unlockObject)
      * y al RfcAdapter.
      *
      * @param <T> tipo de resultado del workflow
@@ -131,20 +138,20 @@ public class StatefulModificationService {
      * - ThreadLocal se limpia correctamente (no memory leaks)
      *
      * Patrón de uso:
+     * 
      * <pre>
      * {@code
      * ModifyResult result = statefulModificationService.executeStatefulWorkflow(
-     *     "ZCL_TEST",
-     *     () -> {
-     *         LockResult lock = statefulModificationService.lockObject(objectUri);
-     *         try {
-     *             setObjectSource(sourceUri, newSource, lock.lockHandle(), transport);
-     *             return buildSuccessResult(lock);
-     *         } finally {
-     *             statefulModificationService.unlockObject(objectUri, lock.lockHandle());
-     *         }
-     *     }
-     * );
+     *         "ZCL_TEST",
+     *         () -> {
+     *             LockResult lock = statefulModificationService.lockObject(objectUri);
+     *             try {
+     *                 setObjectSource(sourceUri, newSource, lock.lockHandle(), transport);
+     *                 return buildSuccessResult(lock);
+     *             } finally {
+     *                 statefulModificationService.unlockObject(objectUri, lock.lockHandle());
+     *             }
+     *         });
      * }
      * </pre>
      *
@@ -156,8 +163,7 @@ public class StatefulModificationService {
      */
     public <T> T executeStatefulWorkflow(
             String objectName,
-            StatefulWorkflow<T> workflow
-    ) {
+            StatefulWorkflow<T> workflow) {
         log.info("Starting stateful modification workflow for: {}", objectName);
         long startTime = System.currentTimeMillis();
 
@@ -191,8 +197,7 @@ public class StatefulModificationService {
                     objectName, e.getMessage(), e);
             throw new RuntimeException(
                     "Failed to execute stateful modification workflow for " + objectName,
-                    e
-            );
+                    e);
         }
     }
 
@@ -208,6 +213,7 @@ public class StatefulModificationService {
      * - X-sap-adt-profiling: server-time
      *
      * Respuesta ADT (XML):
+     * 
      * <pre>
      * {@code
      * <asx:abap>
@@ -232,7 +238,8 @@ public class StatefulModificationService {
      *
      * @param objectUri URI del objeto ADT (e.g., /sap/bc/adt/oo/classes/ZCL_TEST)
      * @return LockResult con lockHandle y datos del transport
-     * @throws RuntimeException si falla el lock (objeto ya bloqueado, sin permisos, etc.)
+     * @throws RuntimeException si falla el lock (objeto ya bloqueado, sin permisos,
+     *                          etc.)
      */
     public LockResult lockObject(String objectUri) {
         log.info("🔒 LOCK REQUEST | URI: {} | Stateful active: {}",
@@ -259,9 +266,8 @@ public class StatefulModificationService {
                     "POST",
                     headers,
                     params,
-                    "",  // Sin body
-                    "application/xml"
-            );
+                    "", // Sin body
+                    "application/xml");
 
             if (response.statusCode() == 200) {
                 LockResult lockResult = parseLockResponse(response.text());
@@ -273,20 +279,17 @@ public class StatefulModificationService {
             } else if (response.statusCode() == 423) {
                 // 423 Locked - Objeto ya bloqueado por otro usuario
                 throw new RuntimeException(
-                        "Object is locked by another user: HTTP 423 - " + response.text()
-                );
+                        "Object is locked by another user: HTTP 423 - " + response.text());
             } else if (response.statusCode() == 401 || response.statusCode() == 403) {
                 // 401/403 - Sin permisos
                 throw new RuntimeException(
                         "Insufficient permissions to lock object: HTTP " +
-                                response.statusCode() + " - " + response.text()
-                );
+                                response.statusCode() + " - " + response.text());
             } else {
                 // Otros errores
                 throw new RuntimeException(
                         String.format("Lock failed: HTTP %d - %s",
-                                response.statusCode(), response.text())
-                );
+                                response.statusCode(), response.text()));
             }
 
         } catch (JCoException e) {
@@ -324,11 +327,10 @@ public class StatefulModificationService {
             RfcAdapter.RfcResponse response = rfcAdapter.request(
                     objectUri,
                     "POST",
-                    null,  // Sin headers custom
+                    null, // Sin headers custom
                     params,
                     "",
-                    "application/xml"
-            );
+                    "application/xml");
 
             if (response.statusCode() == 200) {
                 log.debug("Successfully unlocked: {}", objectUri);
@@ -349,6 +351,7 @@ public class StatefulModificationService {
      * Parsea respuesta XML de LOCK.
      *
      * Formato esperado (ADT LOCK response):
+     * 
      * <pre>
      * {@code
      * <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
@@ -383,8 +386,7 @@ public class StatefulModificationService {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(
-                    new ByteArrayInputStream(xmlResponse.getBytes(StandardCharsets.UTF_8))
-            );
+                    new ByteArrayInputStream(xmlResponse.getBytes(StandardCharsets.UTF_8)));
 
             Element dataElement = (Element) doc.getElementsByTagName("DATA").item(0);
 
@@ -410,8 +412,7 @@ public class StatefulModificationService {
                     transportNumber,
                     transportUser,
                     transportDescription,
-                    isLocal
-            );
+                    isLocal);
 
         } catch (Exception e) {
             log.error("Failed to parse lock response: {}", e.getMessage(), e);
@@ -430,12 +431,12 @@ public class StatefulModificationService {
      * - devclass: Development package
      * - korrflag: Correction flag ('X' if object requires transport)
      *
-     * @param pgmid Program ID
-     * @param object Object type
+     * @param pgmid      Program ID
+     * @param object     Object type
      * @param objectName Full object name
-     * @param devclass Development package
-     * @param korrflag Correction flag
-     * @param result Result status (S=success, E=error)
+     * @param devclass   Development package
+     * @param korrflag   Correction flag
+     * @param result     Result status (S=success, E=error)
      */
     public record TransportCheckResult(
             String pgmid,
@@ -443,8 +444,8 @@ public class StatefulModificationService {
             String objectName,
             String devclass,
             String korrflag,
-            String result
-    ) {}
+            String result) {
+    }
 
     /**
      * Verifica información de transporte para un objeto.
@@ -458,6 +459,7 @@ public class StatefulModificationService {
      * - Content-Type: com.sap.adt.transport.service.checkData
      *
      * Request body (XML):
+     * 
      * <pre>
      * {@code
      * <asx:abap>
@@ -471,6 +473,7 @@ public class StatefulModificationService {
      * </pre>
      *
      * Response (XML):
+     * 
      * <pre>
      * {@code
      * <asx:abap>
@@ -520,26 +523,23 @@ public class StatefulModificationService {
                         "</DATA>" +
                         "</asx:values>" +
                         "</asx:abap>",
-                objectUri
-        );
+                objectUri);
 
         try {
             RfcAdapter.RfcResponse response = rfcAdapter.request(
                     endpoint,
                     "POST",
                     headers,
-                    null,  // No query params
+                    null, // No query params
                     requestBody,
-                    "application/xml"
-            );
+                    "application/xml");
 
             if (response.statusCode() == 200) {
                 return parseTransportCheckResponse(response.text());
             } else {
                 throw new RuntimeException(
                         String.format("Transport check failed: HTTP %d - %s",
-                                response.statusCode(), response.text())
-                );
+                                response.statusCode(), response.text()));
             }
 
         } catch (JCoException e) {
@@ -557,6 +557,7 @@ public class StatefulModificationService {
      * y después de haber bloqueado el objeto con lockObject().
      *
      * Workflow completo:
+     * 
      * <pre>
      * {@code
      * executeStatefulWorkflow(objectName, () -> {
@@ -572,9 +573,10 @@ public class StatefulModificationService {
      * }
      * </pre>
      *
-     * @param objectUri URI del objeto ADT
+     * @param objectUri  URI del objeto ADT
      * @param lockHandle handle obtenido del LOCK
-     * @param corrNr número de transport (puede venir del LOCK o del parámetro del tool)
+     * @param corrNr     número de transport (puede venir del LOCK o del parámetro
+     *                   del tool)
      * @throws RuntimeException si falla el delete
      */
     public void deleteObject(String objectUri, String lockHandle, String corrNr) {
@@ -591,19 +593,17 @@ public class StatefulModificationService {
             RfcAdapter.RfcResponse response = rfcAdapter.request(
                     objectUri,
                     "DELETE",
-                    null,  // No custom headers
+                    null, // No custom headers
                     params,
                     "",
-                    "application/xml"
-            );
+                    "application/xml");
 
             if (response.statusCode() == 200 || response.statusCode() == 204) {
                 log.info("Successfully deleted object: {}", objectUri);
             } else {
                 throw new RuntimeException(
                         String.format("Delete failed: HTTP %d - %s",
-                                response.statusCode(), response.text())
-                );
+                                response.statusCode(), response.text()));
             }
 
         } catch (JCoException e) {
@@ -622,8 +622,8 @@ public class StatefulModificationService {
      * - FUNC: /sap/bc/adt/functions/groups/{fgname}/fmodules/{name}
      * - PROG: /sap/bc/adt/programs/programs/{name}
      *
-     * @param objectType tipo de objeto (CLAS, INTF, FUGR, FUNC, PROG)
-     * @param objectName nombre del objeto
+     * @param objectType        tipo de objeto (CLAS, INTF, FUGR, FUNC, PROG)
+     * @param objectName        nombre del objeto
      * @param functionGroupName nombre del grupo de funciones (solo para FUNC)
      * @return URI ADT del objeto
      * @throws IllegalArgumentException si el tipo de objeto no es soportado
@@ -663,8 +663,7 @@ public class StatefulModificationService {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(
-                    new ByteArrayInputStream(xmlResponse.getBytes(StandardCharsets.UTF_8))
-            );
+                    new ByteArrayInputStream(xmlResponse.getBytes(StandardCharsets.UTF_8)));
 
             Element dataElement = (Element) doc.getElementsByTagName("DATA").item(0);
 
@@ -688,8 +687,7 @@ public class StatefulModificationService {
                     objectName,
                     devclass,
                     korrflag,
-                    result
-            );
+                    result);
 
         } catch (Exception e) {
             log.error("Failed to parse transport check response: {}", e.getMessage(), e);
@@ -704,7 +702,7 @@ public class StatefulModificationService {
      * Retorna string vacío si el elemento no existe (en lugar de null).
      * Esto simplifica el manejo de elementos opcionales en el XML.
      *
-     * @param parent elemento padre
+     * @param parent  elemento padre
      * @param tagName nombre del tag a extraer
      * @return contenido del elemento o string vacío si no existe
      */

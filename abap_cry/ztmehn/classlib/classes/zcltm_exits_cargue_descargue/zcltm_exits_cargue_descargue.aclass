@@ -1,0 +1,44 @@
+CLASS zcltm_exits_cargue_descargue DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      validar_cargue.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zcltm_exits_cargue_descargue IMPLEMENTATION.
+  METHOD validar_cargue.
+    zcltmr1083_gest_carga_descarga=>validar_cargue( ).
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zcltm_exits_cargue_descargue DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      validar_cargue.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zcltm_exits_cargue_descargue IMPLEMENTATION.
+  METHOD validar_cargue.
+    zcltmr1083_gest_carga_descarga=>validar_cargue( ).
+  ENDMETHOD.
+
+ENDCLASS.

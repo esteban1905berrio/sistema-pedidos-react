@@ -1,0 +1,62 @@
+FUNCTION zsdr1085_monitor_pedidos_1
+  IMPORTING
+    VALUE(i_r_vkorg) TYPE vkorg_ran_itab OPTIONAL
+    VALUE(i_r_vtweg) TYPE vtweg_ran_itab OPTIONAL
+    VALUE(i_r_spart) TYPE spart_ran_itab OPTIONAL
+    VALUE(i_r_werks) TYPE werks_t_range OPTIONAL
+    VALUE(i_r_centro_receptor) TYPE werks_t_range OPTIONAL
+    VALUE(i_r_erdat) TYPE erdat_ran_itab OPTIONAL
+    VALUE(i_r_auart) TYPE edm_auart_range_tt OPTIONAL
+    VALUE(i_r_bstnk) TYPE fagl_r_t_bstnk_range OPTIONAL
+    VALUE(i_r_vbeln) TYPE tdt_rg_vbeln OPTIONAL
+    VALUE(i_consolidado) TYPE flag OPTIONAL
+    VALUE(i_detalllado) TYPE flag OPTIONAL
+  TABLES
+    t_pedidos LIKE zesdr1085_1 OPTIONAL.
+
+
+
+
+  DATA: rc TYPE i.
+
+  DATA(o_monitor) = NEW zclsdr1085_monitor_pedidos(  ).
+
+  "      | °   &   ° |
+  "{¨<X>¨|___/[|]\___|¨<X>¨}"
+  t_pedidos[] =
+  o_monitor->generar_monitor_pedidos_venta( EXPORTING
+                                              i_r_vkorg                     = i_r_vkorg[]
+                                              i_r_vtweg                     = i_r_vtweg[]
+                                              i_r_spart                     = i_r_spart[]
+                                              i_r_werks                     = i_r_werks[]
+                                              i_r_erdat                     = i_r_erdat[]
+                                              i_r_auart                     = i_r_auart[]
+                                              i_r_bstnk                     = i_r_bstnk[]
+                                              i_r_vbele                     = i_r_vbeln[]
+                                              i_consolidado                 = i_consolidado
+                                              i_detalllado                  = i_detalllado
+                                              i_optimizar_consulta          = abap_false
+                                            IMPORTING
+                                              e_rc                        = rc
+                                          ).
+  APPEND LINES OF
+  o_monitor->generar_monitor_pedidotraslado( EXPORTING
+                                                i_r_vkorg                     = i_r_vkorg[]
+                                                i_r_vtweg                     = i_r_vtweg[]
+                                                i_r_spart                     = i_r_spart[]
+                                                i_r_werks                     = i_r_werks[]
+                                                i_r_centro_receptor           = i_r_centro_receptor[]
+                                                i_r_erdat                     = i_r_erdat[]
+                                                i_r_auart                     = i_r_auart[]
+                                                i_r_bstnk                     = i_r_bstnk[]
+                                                i_r_vbele                     = i_r_vbeln[]
+                                                i_consolidado                 = i_consolidado
+                                                i_detalllado                  = i_detalllado
+                                              IMPORTING
+                                                e_rc                        = rc
+                                     )
+    TO t_pedidos[].
+
+
+
+ENDFUNCTION.

@@ -1,0 +1,19 @@
+{
+  "enhancementName" : "ZFII1008_7",
+  "header" : {
+    "enhancementName" : "ZFII1008_7",
+    "description" : "Compensar documentos de CAJA",
+    "toolType" : "CLASENH",
+    "toolTypeText" : "Class Enhancement",
+    "devclass" : "ZI1008",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-08-13",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-08-16"
+  },
+  "elements" : [ ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

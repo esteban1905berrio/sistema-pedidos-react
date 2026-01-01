@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFII1008_5",
+  "header" : {
+    "enhancementName" : "ZFII1008_5",
+    "description" : "Homologaciones para IDOC integración con AFS",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZI1008",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-07-12",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-09-06"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "SAPLBD11",
+    "fullName" : "\\FU:IDOC_CREATE_ON_DATABASE\\SE:BEGIN\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "*&---------------------------------------------------------------------*\n*& Información General\n*&---------------------------------------------------------------------*\n* Identificador: I1008\n* Programa     : IDOC_CREATE_ON_DATABASE\n* Tipo Objeto  : ENHANCEMENT\n* Descripción  : Modificar datos de Idoc que se lanzan con FM IDOC_CREATE_ON_DATABASE\n*                Las homologaciones se hacen con base a la funcionalidad zclmmi1009_homologacion_campos\n* Autor Prog.  : Sebastian Londono\n* Fecha Creac. : 28.06.2021\n*----------------------------------------------------------------------*\n* Ordenes de Transporte\n*----------------------------------------------------------------------*\n* Fecha       | CR#         | Autor           | Modificación\n*----------------------------------------------------------------------*\n* 28.06.2021   S4DK900789    Sebastian Londono Version Inicial\n*----------------------------------------------------------------------*\n  TRY.\n      zclfi_exits_gest_dato_maestro=>homologar_idoccreateondatabase(\n        CHANGING\n          c_ti_datos_idoc   = idoc_data[]\n          c_es_control_idoc = idoc_control ).\n\n    CATCH cx_t100_msg INTO DATA(o_cx_msg).\n\n      CLEAR: idoc_data[], idoc_control.\n\n      MESSAGE i208(00) WITH o_cx_msg->get_longtext( )\n      RAISING idoc_input_inconsistent.\n\n  ENDTRY.\n"
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

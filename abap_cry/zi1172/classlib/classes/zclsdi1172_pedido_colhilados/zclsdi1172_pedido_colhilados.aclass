@@ -1,0 +1,1194 @@
+CLASS zclsdi1172_pedido_colhilados DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF g_tp_parametros,
+        mediorecep       TYPE char20,
+        id_catalogo      TYPE char20,
+        sndprn           TYPE edi_sndprn,
+        tipo_id_material TYPE edi_qualfi,
+        nrintedi_e       TYPE edi_sndprn,  "Adicion 26Abr2022 Sebastian Restrepo Villa
+      END OF g_tp_parametros .
+    TYPES:
+      BEGIN OF g_tp_cabecera,
+        ordernumber      TYPE vbak-bstnk,
+        fecha_cancel     TYPE datum,
+        fecha_pref       TYPE datum,
+        kunnr            TYPE ean11, "kunnr,
+        observaciones    TYPE char250,
+        peso_bruto_total TYPE netwr,
+        peso_neto_total  TYPE netwr,
+        centro           TYPE t001w-werks,
+      END OF g_tp_cabecera .
+    TYPES:
+      BEGIN OF g_tp_detalle,
+        codigo          TYPE ean11,
+        cantidad        TYPE menge_d,
+        importe         TYPE netwr,
+        peso_bruto      TYPE brgew,
+        peso_neto       TYPE ntgew,
+        unidad_medida   TYPE gewei,
+        packing_list    TYPE ihrez,
+        total_cajas     TYPE i,
+        materialcliente TYPE string, "+SLS - Agregar material cliente
+        valor_producto  TYPE string, "+SLS - valor producto
+      END OF g_tp_detalle .
+    TYPES:
+      BEGIN OF g_tp_datos,
+        cabecera TYPE g_tp_cabecera,
+        detalle  TYPE STANDARD TABLE OF g_tp_detalle WITH DEFAULT KEY,
+      END OF g_tp_datos .
+
+    DATA: ges_parametros   TYPE g_tp_parametros,
+          ges_info_mensaje TYPE ztcxr1001_1,     "Adicion 26Abr2022 Sebastian Restrepo Villa
+
+*  data G_ES_CABECERA type G_TP_CABECERA .
+          g_ti_datos       TYPE STANDARD TABLE OF g_tp_datos,
+          g_ti_idocdata    TYPE STANDARD TABLE OF edi_dd40,
+          go_parametros    TYPE REF TO zclcxr1000_parametros.
+
+    METHODS constructor
+      IMPORTING
+        !i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL .
+    METHODS procesar_idoc
+      EXPORTING
+        !e_ti_return   TYPE tt_bapiret2
+      CHANGING
+        !i_datos_proxy TYPE REF TO data OPTIONAL .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS:
+      get_parametros,
+      get_data
+        IMPORTING
+          i_es_input TYPE zpxpedido_catalogo,
+      set_data
+        EXPORTING
+          e_ti_return TYPE tt_bapiret2,
+      ajustar_valores_entrada
+        CHANGING
+          c_es_datos_msg TYPE zpxpedido_catalogo.
+
+ENDCLASS.
+
+
+
+CLASS zclsdi1172_pedido_colhilados IMPLEMENTATION.
+
+
+  METHOD constructor.
+    ges_info_mensaje = i_es_info_mensaje.
+  ENDMETHOD.
+
+
+  METHOD get_data.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador:I1172
+* Método       : GET_DATA
+* Descripción  : Get Data
+* Autor Prog.  : Mauricio García
+* Fecha Creac. : 28 Jun. 2022
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 28 Jun. 2022    S4DK910590      Mauricio García  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*                       Definiciòn estructuras
+*----------------------------------------------------------------------*
+    DATA:
+      es_datos TYPE g_tp_datos.
+
+
+    LOOP AT i_es_input-pedido_venta INTO DATA(es_pedidos).
+
+*----------------------------------------------------------------------*
+*               CABECERA
+*----------------------------------------------------------------------*
+      DATA(es_cabecera) = VALUE g_tp_cabecera(
+        ordernumber   = es_pedidos-cabecera-num_pedido_clnte
+        fecha_pref    = es_pedidos-cabecera-fecha_preferente
+        fecha_cancel  = es_pedidos-cabecera-fecha_cancelacion
+        kunnr         = es_pedidos-cabecera-codigo_cliente
+        observaciones = es_pedidos-cabecera-observaciones
+        "+SLS 30.01.2023
+        peso_bruto_total = CONV #( condense( val = es_pedidos-cabecera-peso_bruto_total ) )
+        peso_neto_total  = CONV #( condense( val = es_pedidos-cabecera-peso_neto_total ) )
+        centro           = es_pedidos-cabecera-centro ).
+
+      es_datos-cabecera = es_cabecera.
+
+*----------------------------------------------------------------------*
+*               DETALLE
+*----------------------------------------------------------------------*
+      LOOP AT es_pedidos-detalle INTO DATA(es_detalle).
+
+        CONDENSE es_detalle-precio_neto NO-GAPS.
+        CONDENSE es_detalle-precio_sugerido NO-GAPS.
+        CONDENSE es_detalle-valor_descuento NO-GAPS.
+
+        APPEND VALUE #(
+            codigo       = es_detalle-codigo
+            total_cajas =  es_detalle-total_cajas
+            peso_bruto  = es_detalle-peso_bruto
+            peso_neto   = es_detalle-peso_neto
+            unidad_medida    = es_detalle-unidad_medida
+            packing_list     = es_detalle-packing_list
+            "+SLS 30.01.2023
+            materialcliente  = condense( val = es_detalle-material_cliente )
+            valor_producto   = condense( val = es_detalle-valor_producto )
+
+        ) TO es_datos-detalle.
+
+      ENDLOOP.
+
+      APPEND es_datos TO g_ti_datos.
+
+      CLEAR:
+       es_datos,
+       es_cabecera.
+
+    ENDLOOP.
+
+
+  ENDMETHOD.
+
+
+  METHOD get_parametros.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador:I1172
+* Método       : GET_PARAMETROS
+* Descripción  : Obtener Parámetros Configurados
+* Autor Prog.  : Mauricio García
+* Fecha Creac. : 28 Jun. 2022
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 28 Jun. 2022    S4DK910590      Mauricio García  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+* Definición de constantes
+*----------------------------------------------------------------------*
+    CONSTANTS:
+      l_cte_ricefw       TYPE ztcxr1000_1-ricefw  VALUE 'I1172',
+      l_cte_modulo       TYPE ztcxr1000_1-modulo  VALUE 'SD',
+***      l_cte_mediorecep   TYPE ztcxr1000_1-idparam VALUE 'MEDIORECEP',
+      c_id_catalogo      TYPE ztcxr1000_1-idparam VALUE 'CLPED_COLH',
+      c_tipo_id_material TYPE ztcxr1000_1-idparam VALUE 'TIPOID_MAT',
+      c_nrintedi_e       TYPE ztcxr1000_1-idparam VALUE 'NRINTEDI_E'.
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Variables
+*----------------------------------------------------------------------*
+    DATA:
+      ti_comodin TYPE RANGE OF char100,
+      c_comodin  TYPE ztcxr1000_1-idcomo.
+
+    ".Instancia Constructor
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = l_cte_modulo
+                                                    i_ricefw  = l_cte_ricefw ).
+
+    "-SLS 10012023 - Se comenta dado que no se utiliza
+    "Medio Pago Pedido
+***    l_o_parametros->get_parametro( EXPORTING i_idparam     = l_cte_mediorecep
+***                                             i_comodin     = l_c_comodin
+***                                   IMPORTING e_ti_valrango = l_ti_comodin
+***                                   EXCEPTIONS
+***                                    parametro_no_encontrado = 1 ).
+
+***    IF line_exists( l_ti_comodin[ 1 ] ).
+***      g_es_parametros-mediorecep = l_ti_comodin[ 1 ]-low.
+***    ENDIF.
+
+    CLEAR: ti_comodin.
+
+    "Id catalogo
+    go_parametros->get_parametro( EXPORTING i_idparam       = c_id_catalogo
+                                             i_comodin     = c_comodin
+                                   IMPORTING e_ti_valrango = ti_comodin
+                                   EXCEPTIONS
+                                    parametro_no_encontrado = 1 ).
+
+    IF line_exists( ti_comodin[ 1 ] ).
+      ges_parametros-id_catalogo = ti_comodin[ 1 ]-low.
+    ENDIF.
+
+    CLEAR:
+     ti_comodin.
+
+    "+SLS 10012023 - Agragar parametro para tipo id material{
+    go_parametros->get_parametro( EXPORTING  i_idparam     = c_tipo_id_material
+                                             i_comodin     = c_comodin
+                                   IMPORTING e_ti_valrango = ti_comodin
+                                   EXCEPTIONS
+                                    parametro_no_encontrado = 1 ).
+
+    IF line_exists( ti_comodin[ 1 ] ).
+      ges_parametros-tipo_id_material = ti_comodin[ 1 ]-low.
+    ENDIF.
+    "}
+
+*Inicio Adicion 26Abr2022 Sebastian Restrepo Villa
+    "Interlocutor EDI para Ecommerce
+    CLEAR:
+     c_comodin,
+     ti_comodin.
+    go_parametros->get_parametro( EXPORTING  i_idparam     = c_nrintedi_e
+                                             i_comodin     = c_comodin
+                                   IMPORTING e_ti_valrango = ti_comodin
+                                   EXCEPTIONS
+                                    parametro_no_encontrado = 1 ).
+
+    IF line_exists( ti_comodin[ 1 ] ).
+      ges_parametros-nrintedi_e = ti_comodin[ 1 ]-low.
+    ENDIF.
+*Fin Adicion 26Abr2022 Sebastian Restrepo Villa
+
+  ENDMETHOD.
+
+
+  METHOD procesar_idoc.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador:I1172
+* Método       : PROCESAR_IDOC
+* Descripción  : Procesar IDOC
+* Autor Prog.  : Mauricio García
+* Fecha Creac. : 28 Jun. 2022
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 28 Jun. 2022    S4DK910590      Mauricio García  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Estructuras
+*----------------------------------------------------------------------*
+    DATA: es_datos_entrada_proxy                 TYPE zpxpedido_catalogo.
+
+    FIELD-SYMBOLS: <fs_dato_proxy> TYPE zpxpedido_catalogo.
+
+    ASSIGN i_datos_proxy->* TO <fs_dato_proxy>.
+
+    es_datos_entrada_proxy  = <fs_dato_proxy>.
+
+    IF es_datos_entrada_proxy  IS INITIAL.
+      RETURN.
+    ENDIF.
+    "+SLS 09.01.2023 -Ajustar valores {
+    me->ajustar_valores_entrada( CHANGING c_es_datos_msg = es_datos_entrada_proxy ).
+    "}
+
+    me->get_parametros( ).
+
+    me->get_data( es_datos_entrada_proxy ).
+
+    me->set_data( IMPORTING e_ti_return = e_ti_return ).
+
+
+  ENDMETHOD.
+
+
+  METHOD set_data.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador:I1172
+* Método       : SET_DATA
+* Descripción  : Set data
+* Autor Prog.  : Mauricio García
+* Fecha Creac. : 28 Jun. 2022
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha 28 | CR#| Autor| Modificación
+*----------------------------------------------------------------------*
+* 28 Jun. 2022    S4DK910590      Mauricio García  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Variables
+*----------------------------------------------------------------------*
+    DATA:
+      l_i_pos          TYPE i,
+      v_nrintedi       TYPE edi4sndprn,
+      total_peso_neto  TYPE ntgew,
+      total_peso_bruto TYPE brgew.
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Estructuras
+*----------------------------------------------------------------------*
+    DATA:
+      es_e1edk01 TYPE e1edk01,
+      es_e1edk03 TYPE e1edk03,
+      es_e1edk14 TYPE e1edk14,
+      es_e1edk37 TYPE e1edk37,
+      es_e1edka1 TYPE e1edka1,
+      es_e1edk02 TYPE e1edk02,
+      es_e1edp01 TYPE e1edp01,
+      es_e1edp02 TYPE e1edp02,
+      es_e1edp05 TYPE e1edp05,
+      es_e1edkt1 TYPE e1edkt1,
+      es_e1edkt2 TYPE e1edkt2,
+      es_e1edp19 TYPE e1edp19,
+      es_e1edp20 TYPE e1edp20,
+      es_e1edpt1 TYPE e1edpt1,
+      es_e1edpt2 TYPE e1edpt2,
+      es_idoc    TYPE edi_dd40.
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Estructuras
+*----------------------------------------------------------------------*
+    DATA:
+      ti_idoc       TYPE STANDARD TABLE OF edi_dd40,
+      l_ti_bapiret2 TYPE tt_bapiret2.
+
+    LOOP AT g_ti_datos INTO DATA(es_datos).
+      CLEAR:
+       l_i_pos.
+
+      "Segmento Obligatorio
+      es_idoc-segnam = 'E1EDK01'.
+      es_idoc-sdata  = es_e1edk01.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+
+
+*----------------------------------------------------------------------*
+*          PEDIDO COLHILADOS
+*----------------------------------------------------------------------*
+      es_e1edk14-orgid = ges_parametros-id_catalogo.
+      es_e1edk14-qualf = '019'.
+      es_idoc-segnam = 'E1EDK14'.
+      es_idoc-sdata = es_e1edk14.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+
+
+*----------------------------------------------------------------------*
+*          FECHA PREFERENTE ENTREGA
+*----------------------------------------------------------------------*
+      es_e1edk03-iddat = '003'.
+      es_e1edk03-datum = es_datos-cabecera-fecha_pref.
+      es_idoc-segnam = 'E1EDK03'.
+      es_idoc-sdata = es_e1edk03.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+
+
+*----------------------------------------------------------------------*
+*          INTERLOCUTOR
+*----------------------------------------------------------------------*
+      es_e1edka1-parvw = 'AG'.
+      es_e1edka1-lifnr = es_datos-cabecera-kunnr.
+      es_idoc-segnam = 'E1EDKA1'.
+      es_idoc-sdata = es_e1edka1.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc,
+       es_e1edka1.
+
+
+*Inicio Modificaicon 26Abr2022 Sebastian Restrepo Villa
+      es_e1edka1-parvw = 'LF'.
+      "Si se lanza desde ecommerce colocar la puerta de ecommerce
+*      if ges_info_mensaje-ob_system(5) eq 'ECOMM'.
+      es_e1edka1-partn = es_datos-cabecera-kunnr.
+*      else.
+*        es_e1edka1-partn = '7703260000010|220'. "Adicion 21Abr2022 Sebastian Restrepo Villa
+*      endif.
+      es_idoc-segnam = 'E1EDKA1'.
+      es_idoc-sdata = es_e1edka1.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+*Fin Modificaicon 26Abr2022 Sebastian Restrepo Villa
+
+*----------------------------------------------------------------------*
+*          PEDIDO CLIENTE
+*----------------------------------------------------------------------*
+      es_e1edk02-qualf = '001'.
+***      es_e1edk02-belnr = es_datos-cabecera-ordernumber. "-SLS
+      es_idoc-segnam = 'E1EDK02'.
+      es_idoc-sdata = es_e1edk02.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+
+*----------------------------------------------------------------------*
+*          OBSERVCCIONES
+*----------------------------------------------------------------------*
+*      es_e1edkt1-tdid = 'Z011'.
+*      es_e1edkt1-tsspras_iso = sy-langu.
+*      es_e1edkt1-tdobname = 'VBBK'.
+*      es_idoc-segnam = 'E1EDKT1'.
+*      es_idoc-sdata = es_e1edkt1.
+*      append es_idoc to l_ti_idoc.
+*      clear:
+*       es_idoc.
+
+*      es_e1edkt2-tdline = es_datos-cabecera-observaciones.
+*      es_idoc-segnam = 'E1EDKT2'.
+*      es_idoc-sdata = es_e1edkt2.
+*      APPEND es_idoc TO l_ti_idoc.
+*      CLEAR:
+*       es_idoc.
+
+***      total_peso_neto  = es_datos-cabecera-peso_neto_total.
+***      total_peso_bruto = es_datos-cabecera-peso_bruto_total.
+      total_peso_neto = REDUCE #( INIT _total_peso_neto TYPE ntgew
+                                  FOR es_detalle IN es_datos-detalle
+                                  NEXT _total_peso_neto = _total_peso_neto + es_detalle-peso_neto
+                                ).
+      total_peso_bruto = REDUCE #( INIT _total_peso_bruto TYPE brgew
+                                   FOR es_detalle IN es_datos-detalle
+                                   NEXT _total_peso_bruto = _total_peso_bruto + es_detalle-peso_bruto
+                                 ).
+
+      LOOP AT es_datos-detalle ASSIGNING FIELD-SYMBOL(<fs_es_detalle>).
+
+*----------------------------------------------------------------------*
+*          DETALLE
+*----------------------------------------------------------------------*
+        ADD 1 TO l_i_pos.
+
+        "+SLS 30012023 - Solo una linea de detalle con el total del peso bruto y peso neto{
+        AT FIRST.
+          APPEND INITIAL LINE TO  ti_idoc ASSIGNING FIELD-SYMBOL(<fs_es_e1edp01>).
+          <fs_es_e1edp01>-segnam = 'E1EDP01'.
+        ENDAT.
+
+        AT LAST.
+          es_e1edp01-posex = 1."l_i_pos.
+          es_e1edp01-ntgew = total_peso_bruto.
+          es_e1edp01-brgew = total_peso_neto.
+          es_e1edp01-gewei = <fs_es_detalle>-unidad_medida.
+
+          "Equivalencia Centro
+          es_e1edp01-werks = VALUE #( go_parametros->gti_parametros[ idparam = 'EQV_CENTRO' idcomo = es_datos-cabecera-centro ]-low OPTIONAL ).
+
+*          es_idoc-segnam = 'E1EDP01'.
+          <fs_es_e1edp01>-sdata = es_e1edp01.
+*          APPEND es_idoc TO l_ti_idoc.
+
+          CLEAR: es_idoc.
+
+          es_e1edp02-qualf = '044'.
+          es_e1edp02-ihrez = <fs_es_detalle>-packing_list.
+          "-SLS
+***          es_e1edp02-zeile = <fs_es_detalle>-total_cajas.
+***          IF es_e1edp02-zeile IS INITIAL.
+***            es_e1edp02-zeile = es_e1edp02-zeile + 1.
+***          ENDIF.
+          es_idoc-segnam = 'E1EDP02'.
+          es_idoc-sdata = es_e1edp02.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          "+SLS 05022022
+          es_e1edp05-kschl = 'ZPRB'.
+          es_e1edp05-betrg = <fs_es_detalle>-valor_producto * 100.
+          es_e1edp05-krate = condense( val = es_e1edp05-betrg ).
+          clear: es_e1edp05-betrg.
+          es_e1edp05-uprbs = 100.
+          es_idoc-segnam = 'E1EDP05'.
+          es_idoc-sdata = es_e1edp05.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          es_e1edp20-wmeng = total_peso_bruto.
+          es_idoc-segnam = 'E1EDP20'.
+          es_idoc-sdata = es_e1edp20.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          es_e1edp19-qualf = ges_parametros-tipo_id_material.
+          "-SLS 26.01.2023 - Asignar Material Cliente{
+***        es_e1edp19-idtnr = <fs_es_detalle>-codigo.}
+          es_e1edp19-idtnr = |PC{ <fs_es_detalle>-materialcliente }|.
+          "}
+          es_idoc-segnam = 'E1EDP19'.
+          es_idoc-sdata = es_e1edp19.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          "+SLS 05022022
+          es_e1edpt1-tdid = 'Z003'.
+          es_e1edpt1-tsspras = 'S'.
+          es_idoc-segnam = 'E1EDPT1'.
+          es_idoc-sdata = es_e1edpt1.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          es_e1edpt2-tdline = <fs_es_detalle>-total_cajas.
+          es_e1edpt2-tdline = condense( val = es_e1edpt2-tdline ).
+          es_idoc-segnam    = 'E1EDPT2'.
+          es_idoc-sdata = es_e1edpt2.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+          "}
+
+        ENDAT.
+
+      ENDLOOP.
+
+***----------------------------------------------------------------------*
+***          FECHA CANCELACIÓN
+***----------------------------------------------------------------------*
+*      es_e1edk37-fsh_candate = es_datos-cabecera-fecha_cancel.
+**      es_e1edk37-
+*      es_idoc-segnam = 'E1EDK37'.
+*      es_idoc-sdata = es_e1edk37.
+*      APPEND es_idoc TO l_ti_idoc.
+*      CLEAR:
+*       es_idoc.
+
+*--------------------------------------------------------------------*
+*             CREACIÓN IDOC
+*--------------------------------------------------------------------*
+
+      v_nrintedi = ges_parametros-nrintedi_e.
+
+      DATA(l_o_pedidos) = NEW zclsdi1072_pedidos_ecommerce(  ).
+
+      l_o_pedidos->crear_idoc(
+       EXPORTING
+       i_c_sndprn = v_nrintedi
+       i_ti_idoc  = ti_idoc
+      IMPORTING
+       e_ti_return = e_ti_return
+       ).
+
+      CLEAR:
+       ti_idoc.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD ajustar_valores_entrada.
+
+    LOOP AT c_es_datos_msg-pedido_venta ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclsdi1172_pedido_colhilados DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF g_tp_parametros,
+        mediorecep       TYPE char20,
+        id_catalogo      TYPE char20,
+        sndprn           TYPE edi_sndprn,
+        tipo_id_material TYPE edi_qualfi,
+        nrintedi_e       TYPE edi_sndprn,  "Adicion 26Abr2022 Sebastian Restrepo Villa
+      END OF g_tp_parametros .
+    TYPES:
+      BEGIN OF g_tp_cabecera,
+        ordernumber      TYPE vbak-bstnk,
+        fecha_cancel     TYPE datum,
+        fecha_pref       TYPE datum,
+        kunnr            TYPE ean11, "kunnr,
+        observaciones    TYPE char250,
+        peso_bruto_total TYPE netwr,
+        peso_neto_total  TYPE netwr,
+        centro           TYPE t001w-werks,
+      END OF g_tp_cabecera .
+    TYPES:
+      BEGIN OF g_tp_detalle,
+        codigo          TYPE ean11,
+        cantidad        TYPE menge_d,
+        importe         TYPE netwr,
+        peso_bruto      TYPE brgew,
+        peso_neto       TYPE ntgew,
+        unidad_medida   TYPE gewei,
+        packing_list    TYPE ihrez,
+        total_cajas     TYPE i,
+        materialcliente TYPE string, "+SLS - Agregar material cliente
+        valor_producto  TYPE string, "+SLS - valor producto
+      END OF g_tp_detalle .
+    TYPES:
+      BEGIN OF g_tp_datos,
+        cabecera TYPE g_tp_cabecera,
+        detalle  TYPE STANDARD TABLE OF g_tp_detalle WITH DEFAULT KEY,
+      END OF g_tp_datos .
+
+    DATA: ges_parametros   TYPE g_tp_parametros,
+          ges_info_mensaje TYPE ztcxr1001_1,     "Adicion 26Abr2022 Sebastian Restrepo Villa
+
+*  data G_ES_CABECERA type G_TP_CABECERA .
+          g_ti_datos       TYPE STANDARD TABLE OF g_tp_datos,
+          g_ti_idocdata    TYPE STANDARD TABLE OF edi_dd40,
+          go_parametros    TYPE REF TO zclcxr1000_parametros.
+
+    METHODS constructor
+      IMPORTING
+        !i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL .
+    METHODS procesar_idoc
+      EXPORTING
+        !e_ti_return   TYPE tt_bapiret2
+      CHANGING
+        !i_datos_proxy TYPE REF TO data OPTIONAL .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    METHODS:
+      get_parametros,
+      get_data
+        IMPORTING
+          i_es_input TYPE zpxpedido_catalogo,
+      set_data
+        EXPORTING
+          e_ti_return TYPE tt_bapiret2,
+      ajustar_valores_entrada
+        CHANGING
+          c_es_datos_msg TYPE zpxpedido_catalogo.
+
+ENDCLASS.
+
+
+
+CLASS zclsdi1172_pedido_colhilados IMPLEMENTATION.
+
+
+  METHOD constructor.
+    ges_info_mensaje = i_es_info_mensaje.
+  ENDMETHOD.
+
+
+  METHOD get_data.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador:I1172
+* Método       : GET_DATA
+* Descripción  : Get Data
+* Autor Prog.  : Mauricio García
+* Fecha Creac. : 28 Jun. 2022
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 28 Jun. 2022    S4DK910590      Mauricio García  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*                       Definiciòn estructuras
+*----------------------------------------------------------------------*
+    DATA:
+      es_datos TYPE g_tp_datos.
+
+
+    LOOP AT i_es_input-pedido_venta INTO DATA(es_pedidos).
+
+*----------------------------------------------------------------------*
+*               CABECERA
+*----------------------------------------------------------------------*
+      DATA(es_cabecera) = VALUE g_tp_cabecera(
+        ordernumber   = es_pedidos-cabecera-num_pedido_clnte
+        fecha_pref    = es_pedidos-cabecera-fecha_preferente
+        fecha_cancel  = es_pedidos-cabecera-fecha_cancelacion
+        kunnr         = es_pedidos-cabecera-codigo_cliente
+        observaciones = es_pedidos-cabecera-observaciones
+        "+SLS 30.01.2023
+        peso_bruto_total = CONV #( condense( val = es_pedidos-cabecera-peso_bruto_total ) )
+        peso_neto_total  = CONV #( condense( val = es_pedidos-cabecera-peso_neto_total ) )
+        centro           = es_pedidos-cabecera-centro ).
+
+      es_datos-cabecera = es_cabecera.
+
+*----------------------------------------------------------------------*
+*               DETALLE
+*----------------------------------------------------------------------*
+      LOOP AT es_pedidos-detalle INTO DATA(es_detalle).
+
+        CONDENSE es_detalle-precio_neto NO-GAPS.
+        CONDENSE es_detalle-precio_sugerido NO-GAPS.
+        CONDENSE es_detalle-valor_descuento NO-GAPS.
+
+        APPEND VALUE #(
+            codigo       = es_detalle-codigo
+            total_cajas =  es_detalle-total_cajas
+            peso_bruto  = es_detalle-peso_bruto
+            peso_neto   = es_detalle-peso_neto
+            unidad_medida    = es_detalle-unidad_medida
+            packing_list     = es_detalle-packing_list
+            "+SLS 30.01.2023
+            materialcliente  = condense( val = es_detalle-material_cliente )
+            valor_producto   = condense( val = es_detalle-valor_producto )
+
+        ) TO es_datos-detalle.
+
+      ENDLOOP.
+
+      APPEND es_datos TO g_ti_datos.
+
+      CLEAR:
+       es_datos,
+       es_cabecera.
+
+    ENDLOOP.
+
+
+  ENDMETHOD.
+
+
+  METHOD get_parametros.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador:I1172
+* Método       : GET_PARAMETROS
+* Descripción  : Obtener Parámetros Configurados
+* Autor Prog.  : Mauricio García
+* Fecha Creac. : 28 Jun. 2022
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 28 Jun. 2022    S4DK910590      Mauricio García  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+* Definición de constantes
+*----------------------------------------------------------------------*
+    CONSTANTS:
+      l_cte_ricefw       TYPE ztcxr1000_1-ricefw  VALUE 'I1172',
+      l_cte_modulo       TYPE ztcxr1000_1-modulo  VALUE 'SD',
+***      l_cte_mediorecep   TYPE ztcxr1000_1-idparam VALUE 'MEDIORECEP',
+      c_id_catalogo      TYPE ztcxr1000_1-idparam VALUE 'CLPED_COLH',
+      c_tipo_id_material TYPE ztcxr1000_1-idparam VALUE 'TIPOID_MAT',
+      c_nrintedi_e       TYPE ztcxr1000_1-idparam VALUE 'NRINTEDI_E'.
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Variables
+*----------------------------------------------------------------------*
+    DATA:
+      ti_comodin TYPE RANGE OF char100,
+      c_comodin  TYPE ztcxr1000_1-idcomo.
+
+    ".Instancia Constructor
+    go_parametros = NEW zclcxr1000_parametros( i_modulo = l_cte_modulo
+                                                    i_ricefw  = l_cte_ricefw ).
+
+    "-SLS 10012023 - Se comenta dado que no se utiliza
+    "Medio Pago Pedido
+***    l_o_parametros->get_parametro( EXPORTING i_idparam     = l_cte_mediorecep
+***                                             i_comodin     = l_c_comodin
+***                                   IMPORTING e_ti_valrango = l_ti_comodin
+***                                   EXCEPTIONS
+***                                    parametro_no_encontrado = 1 ).
+
+***    IF line_exists( l_ti_comodin[ 1 ] ).
+***      g_es_parametros-mediorecep = l_ti_comodin[ 1 ]-low.
+***    ENDIF.
+
+    CLEAR: ti_comodin.
+
+    "Id catalogo
+    go_parametros->get_parametro( EXPORTING i_idparam       = c_id_catalogo
+                                             i_comodin     = c_comodin
+                                   IMPORTING e_ti_valrango = ti_comodin
+                                   EXCEPTIONS
+                                    parametro_no_encontrado = 1 ).
+
+    IF line_exists( ti_comodin[ 1 ] ).
+      ges_parametros-id_catalogo = ti_comodin[ 1 ]-low.
+    ENDIF.
+
+    CLEAR:
+     ti_comodin.
+
+    "+SLS 10012023 - Agragar parametro para tipo id material{
+    go_parametros->get_parametro( EXPORTING  i_idparam     = c_tipo_id_material
+                                             i_comodin     = c_comodin
+                                   IMPORTING e_ti_valrango = ti_comodin
+                                   EXCEPTIONS
+                                    parametro_no_encontrado = 1 ).
+
+    IF line_exists( ti_comodin[ 1 ] ).
+      ges_parametros-tipo_id_material = ti_comodin[ 1 ]-low.
+    ENDIF.
+    "}
+
+*Inicio Adicion 26Abr2022 Sebastian Restrepo Villa
+    "Interlocutor EDI para Ecommerce
+    CLEAR:
+     c_comodin,
+     ti_comodin.
+    go_parametros->get_parametro( EXPORTING  i_idparam     = c_nrintedi_e
+                                             i_comodin     = c_comodin
+                                   IMPORTING e_ti_valrango = ti_comodin
+                                   EXCEPTIONS
+                                    parametro_no_encontrado = 1 ).
+
+    IF line_exists( ti_comodin[ 1 ] ).
+      ges_parametros-nrintedi_e = ti_comodin[ 1 ]-low.
+    ENDIF.
+*Fin Adicion 26Abr2022 Sebastian Restrepo Villa
+
+  ENDMETHOD.
+
+
+  METHOD procesar_idoc.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador:I1172
+* Método       : PROCESAR_IDOC
+* Descripción  : Procesar IDOC
+* Autor Prog.  : Mauricio García
+* Fecha Creac. : 28 Jun. 2022
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha       | CR#         | Autor           | Modificación
+*----------------------------------------------------------------------*
+* 28 Jun. 2022    S4DK910590      Mauricio García  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Estructuras
+*----------------------------------------------------------------------*
+    DATA: es_datos_entrada_proxy                 TYPE zpxpedido_catalogo.
+
+    FIELD-SYMBOLS: <fs_dato_proxy> TYPE zpxpedido_catalogo.
+
+    ASSIGN i_datos_proxy->* TO <fs_dato_proxy>.
+
+    es_datos_entrada_proxy  = <fs_dato_proxy>.
+
+    IF es_datos_entrada_proxy  IS INITIAL.
+      RETURN.
+    ENDIF.
+    "+SLS 09.01.2023 -Ajustar valores {
+    me->ajustar_valores_entrada( CHANGING c_es_datos_msg = es_datos_entrada_proxy ).
+    "}
+
+    me->get_parametros( ).
+
+    me->get_data( es_datos_entrada_proxy ).
+
+    me->set_data( IMPORTING e_ti_return = e_ti_return ).
+
+
+  ENDMETHOD.
+
+
+  METHOD set_data.
+*&---------------------------------------------------------------------*
+*& Información General
+*&---------------------------------------------------------------------*
+* Identificador:I1172
+* Método       : SET_DATA
+* Descripción  : Set data
+* Autor Prog.  : Mauricio García
+* Fecha Creac. : 28 Jun. 2022
+*----------------------------------------------------------------------*
+* Ordenes de Transporte
+*----------------------------------------------------------------------*
+* Fecha 28 | CR#| Autor| Modificación
+*----------------------------------------------------------------------*
+* 28 Jun. 2022    S4DK910590      Mauricio García  Version Inicial
+*----------------------------------------------------------------------*
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Variables
+*----------------------------------------------------------------------*
+    DATA:
+      l_i_pos          TYPE i,
+      v_nrintedi       TYPE edi4sndprn,
+      total_peso_neto  TYPE ntgew,
+      total_peso_bruto TYPE brgew.
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Estructuras
+*----------------------------------------------------------------------*
+    DATA:
+      es_e1edk01 TYPE e1edk01,
+      es_e1edk03 TYPE e1edk03,
+      es_e1edk14 TYPE e1edk14,
+      es_e1edk37 TYPE e1edk37,
+      es_e1edka1 TYPE e1edka1,
+      es_e1edk02 TYPE e1edk02,
+      es_e1edp01 TYPE e1edp01,
+      es_e1edp02 TYPE e1edp02,
+      es_e1edp05 TYPE e1edp05,
+      es_e1edkt1 TYPE e1edkt1,
+      es_e1edkt2 TYPE e1edkt2,
+      es_e1edp19 TYPE e1edp19,
+      es_e1edp20 TYPE e1edp20,
+      es_e1edpt1 TYPE e1edpt1,
+      es_e1edpt2 TYPE e1edpt2,
+      es_idoc    TYPE edi_dd40.
+
+*----------------------------------------------------------------------*
+*                       Definiciòn Estructuras
+*----------------------------------------------------------------------*
+    DATA:
+      ti_idoc       TYPE STANDARD TABLE OF edi_dd40,
+      l_ti_bapiret2 TYPE tt_bapiret2.
+
+    LOOP AT g_ti_datos INTO DATA(es_datos).
+      CLEAR:
+       l_i_pos.
+
+      "Segmento Obligatorio
+      es_idoc-segnam = 'E1EDK01'.
+      es_idoc-sdata  = es_e1edk01.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+
+
+*----------------------------------------------------------------------*
+*          PEDIDO COLHILADOS
+*----------------------------------------------------------------------*
+      es_e1edk14-orgid = ges_parametros-id_catalogo.
+      es_e1edk14-qualf = '019'.
+      es_idoc-segnam = 'E1EDK14'.
+      es_idoc-sdata = es_e1edk14.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+
+
+*----------------------------------------------------------------------*
+*          FECHA PREFERENTE ENTREGA
+*----------------------------------------------------------------------*
+      es_e1edk03-iddat = '003'.
+      es_e1edk03-datum = es_datos-cabecera-fecha_pref.
+      es_idoc-segnam = 'E1EDK03'.
+      es_idoc-sdata = es_e1edk03.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+
+
+*----------------------------------------------------------------------*
+*          INTERLOCUTOR
+*----------------------------------------------------------------------*
+      es_e1edka1-parvw = 'AG'.
+      es_e1edka1-lifnr = es_datos-cabecera-kunnr.
+      es_idoc-segnam = 'E1EDKA1'.
+      es_idoc-sdata = es_e1edka1.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc,
+       es_e1edka1.
+
+
+*Inicio Modificaicon 26Abr2022 Sebastian Restrepo Villa
+      es_e1edka1-parvw = 'LF'.
+      "Si se lanza desde ecommerce colocar la puerta de ecommerce
+*      if ges_info_mensaje-ob_system(5) eq 'ECOMM'.
+      es_e1edka1-partn = es_datos-cabecera-kunnr.
+*      else.
+*        es_e1edka1-partn = '7703260000010|220'. "Adicion 21Abr2022 Sebastian Restrepo Villa
+*      endif.
+      es_idoc-segnam = 'E1EDKA1'.
+      es_idoc-sdata = es_e1edka1.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+*Fin Modificaicon 26Abr2022 Sebastian Restrepo Villa
+
+*----------------------------------------------------------------------*
+*          PEDIDO CLIENTE
+*----------------------------------------------------------------------*
+      es_e1edk02-qualf = '001'.
+***      es_e1edk02-belnr = es_datos-cabecera-ordernumber. "-SLS
+      es_idoc-segnam = 'E1EDK02'.
+      es_idoc-sdata = es_e1edk02.
+      APPEND es_idoc TO ti_idoc.
+      CLEAR:
+       es_idoc.
+
+*----------------------------------------------------------------------*
+*          OBSERVCCIONES
+*----------------------------------------------------------------------*
+*      es_e1edkt1-tdid = 'Z011'.
+*      es_e1edkt1-tsspras_iso = sy-langu.
+*      es_e1edkt1-tdobname = 'VBBK'.
+*      es_idoc-segnam = 'E1EDKT1'.
+*      es_idoc-sdata = es_e1edkt1.
+*      append es_idoc to l_ti_idoc.
+*      clear:
+*       es_idoc.
+
+*      es_e1edkt2-tdline = es_datos-cabecera-observaciones.
+*      es_idoc-segnam = 'E1EDKT2'.
+*      es_idoc-sdata = es_e1edkt2.
+*      APPEND es_idoc TO l_ti_idoc.
+*      CLEAR:
+*       es_idoc.
+
+***      total_peso_neto  = es_datos-cabecera-peso_neto_total.
+***      total_peso_bruto = es_datos-cabecera-peso_bruto_total.
+      total_peso_neto = REDUCE #( INIT _total_peso_neto TYPE ntgew
+                                  FOR es_detalle IN es_datos-detalle
+                                  NEXT _total_peso_neto = _total_peso_neto + es_detalle-peso_neto
+                                ).
+      total_peso_bruto = REDUCE #( INIT _total_peso_bruto TYPE brgew
+                                   FOR es_detalle IN es_datos-detalle
+                                   NEXT _total_peso_bruto = _total_peso_bruto + es_detalle-peso_bruto
+                                 ).
+
+      LOOP AT es_datos-detalle ASSIGNING FIELD-SYMBOL(<fs_es_detalle>).
+
+*----------------------------------------------------------------------*
+*          DETALLE
+*----------------------------------------------------------------------*
+        ADD 1 TO l_i_pos.
+
+        "+SLS 30012023 - Solo una linea de detalle con el total del peso bruto y peso neto{
+        AT FIRST.
+          APPEND INITIAL LINE TO  ti_idoc ASSIGNING FIELD-SYMBOL(<fs_es_e1edp01>).
+          <fs_es_e1edp01>-segnam = 'E1EDP01'.
+        ENDAT.
+
+        AT LAST.
+          es_e1edp01-posex = 1."l_i_pos.
+          es_e1edp01-ntgew = total_peso_bruto.
+          es_e1edp01-brgew = total_peso_neto.
+          es_e1edp01-gewei = <fs_es_detalle>-unidad_medida.
+
+          "Equivalencia Centro
+          es_e1edp01-werks = VALUE #( go_parametros->gti_parametros[ idparam = 'EQV_CENTRO' idcomo = es_datos-cabecera-centro ]-low OPTIONAL ).
+
+*          es_idoc-segnam = 'E1EDP01'.
+          <fs_es_e1edp01>-sdata = es_e1edp01.
+*          APPEND es_idoc TO l_ti_idoc.
+
+          CLEAR: es_idoc.
+
+          es_e1edp02-qualf = '044'.
+          es_e1edp02-ihrez = <fs_es_detalle>-packing_list.
+          "-SLS
+***          es_e1edp02-zeile = <fs_es_detalle>-total_cajas.
+***          IF es_e1edp02-zeile IS INITIAL.
+***            es_e1edp02-zeile = es_e1edp02-zeile + 1.
+***          ENDIF.
+          es_idoc-segnam = 'E1EDP02'.
+          es_idoc-sdata = es_e1edp02.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          "+SLS 05022022
+          es_e1edp05-kschl = 'ZPRB'.
+          es_e1edp05-betrg = <fs_es_detalle>-valor_producto * 100.
+          es_e1edp05-krate = condense( val = es_e1edp05-betrg ).
+          clear: es_e1edp05-betrg.
+          es_e1edp05-uprbs = 100.
+          es_idoc-segnam = 'E1EDP05'.
+          es_idoc-sdata = es_e1edp05.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          es_e1edp20-wmeng = total_peso_bruto.
+          es_idoc-segnam = 'E1EDP20'.
+          es_idoc-sdata = es_e1edp20.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          es_e1edp19-qualf = ges_parametros-tipo_id_material.
+          "-SLS 26.01.2023 - Asignar Material Cliente{
+***        es_e1edp19-idtnr = <fs_es_detalle>-codigo.}
+          es_e1edp19-idtnr = |PC{ <fs_es_detalle>-materialcliente }|.
+          "}
+          es_idoc-segnam = 'E1EDP19'.
+          es_idoc-sdata = es_e1edp19.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          "+SLS 05022022
+          es_e1edpt1-tdid = 'Z003'.
+          es_e1edpt1-tsspras = 'S'.
+          es_idoc-segnam = 'E1EDPT1'.
+          es_idoc-sdata = es_e1edpt1.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+
+          es_e1edpt2-tdline = <fs_es_detalle>-total_cajas.
+          es_e1edpt2-tdline = condense( val = es_e1edpt2-tdline ).
+          es_idoc-segnam    = 'E1EDPT2'.
+          es_idoc-sdata = es_e1edpt2.
+          APPEND es_idoc TO ti_idoc.
+          CLEAR: es_idoc.
+          "}
+
+        ENDAT.
+
+      ENDLOOP.
+
+***----------------------------------------------------------------------*
+***          FECHA CANCELACIÓN
+***----------------------------------------------------------------------*
+*      es_e1edk37-fsh_candate = es_datos-cabecera-fecha_cancel.
+**      es_e1edk37-
+*      es_idoc-segnam = 'E1EDK37'.
+*      es_idoc-sdata = es_e1edk37.
+*      APPEND es_idoc TO l_ti_idoc.
+*      CLEAR:
+*       es_idoc.
+
+*--------------------------------------------------------------------*
+*             CREACIÓN IDOC
+*--------------------------------------------------------------------*
+
+      v_nrintedi = ges_parametros-nrintedi_e.
+
+      DATA(l_o_pedidos) = NEW zclsdi1072_pedidos_ecommerce(  ).
+
+      l_o_pedidos->crear_idoc(
+       EXPORTING
+       i_c_sndprn = v_nrintedi
+       i_ti_idoc  = ti_idoc
+      IMPORTING
+       e_ti_return = e_ti_return
+       ).
+
+      CLEAR:
+       ti_idoc.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD ajustar_valores_entrada.
+
+    LOOP AT c_es_datos_msg-pedido_venta ASSIGNING FIELD-SYMBOL(<fs_es_mensaje>).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.

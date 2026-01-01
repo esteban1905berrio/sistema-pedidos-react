@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZFIF1001_1",
+  "header" : {
+    "enhancementName" : "ZFIF1001_1",
+    "description" : "Ajuste variante avisos de pago Bancos virtuales",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZF1001",
+    "author" : "SEBLONDO",
+    "createdOn" : "2021-10-07",
+    "changedBy" : "SEBLONDO",
+    "changedOn" : "2021-10-11"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "RFFOAVIS_FPAYM",
+    "fullName" : "\\PR:RFFOAVIS_FPAYM\\FO:VORBEREITUNG\\SE:BEGIN\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "  zclfi_exits_medios_de_pago=>modifica_avisopago_bcvirtual(\n    EXPORTING\n      i_laufd = zw_laufd\n      i_laufi = zw_laufi\n    CHANGING\n      c_r_zbukr = zw_zbukr[]\n      c_r_absbu = zw_absbu[]\n      c_r_hbki  = sel_hbki[]\n      c_r_hkti  = sel_hkti[] )."
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

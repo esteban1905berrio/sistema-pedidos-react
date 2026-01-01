@@ -1,0 +1,336 @@
+CLASS zclppr1156_log_ztppr1156_1 DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    CLASS-DATA:
+      gc_i TYPE char1 VALUE 'I', ".Insert
+      gc_n TYPE char1 VALUE 'N', ".Nuevo
+      gc_d TYPE char1 VALUE 'D'. ".Delete
+
+    CLASS-METHODS:
+      "! Manejo de Log CDHDR-CDPOS
+      "! @parameter i_es_data | Informacion para ser registrada
+      "! @parameter i_accion | Action (I,U,D)
+      registrar_log
+        IMPORTING i_es_data TYPE any
+                  i_accion  TYPE comt_boolean,
+      registrar_log_ztppr1156_2
+        IMPORTING
+          VALUE(i_es_datos) TYPE ztppr1156_2
+          i_acction         TYPE comt_boolean.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclppr1156_log_ztppr1156_1 IMPLEMENTATION.
+
+
+  METHOD registrar_log.
+*&----------------------------------------------------------------------*
+*& Definicion de Estructuras
+*&----------------------------------------------------------------------*
+    DATA:
+      es_new        TYPE ztppr1156_1.
+
+*&----------------------------------------------------------------------*
+*& Definicion de Tablas internas
+*&----------------------------------------------------------------------*
+    DATA:
+      ti_changes TYPE STANDARD TABLE OF cdtxt.
+
+*&----------------------------------------------------------------------*
+*& Definicion de Variables
+*&----------------------------------------------------------------------*
+    DATA:
+      clave              TYPE cdhdr-objectid,
+      accion             TYPE cdchngindh,
+      ti_zcx_ztppr1156_1 TYPE STANDARD TABLE OF cdtxt.
+
+    ".Asignamos el action
+    accion = i_accion.
+
+    DATA(es_data) = CORRESPONDING ztppr1156_1( i_es_data ).
+
+    "Obtenemos la informacion de tabla
+    SELECT SINGLE *
+      FROM ztppr1156_1
+     WHERE centro   EQ @es_data-centro
+       AND mat_generico EQ @es_data-mat_generico
+       AND version_fabr EQ @es_data-version_fabr
+      INTO @DATA(es_old).
+
+    IF sy-subrc EQ 0.
+      ".Clave del log
+      clave = es_old-centro &&  es_old-mat_generico && es_old-version_fabr.
+
+      CLEAR: es_new.
+      MOVE-CORRESPONDING es_old TO es_new.
+      es_new-ran_inicial = es_data-ran_inicial.
+      es_new-ran_final = es_data-ran_final.
+
+      ".Si la accion es de Delete
+      IF accion EQ gc_d.
+        CLEAR es_new.
+      ENDIF.
+
+      ".Registro de la Modificacion
+
+      IF accion = 'U'.
+        CLEAR: es_new-centro, es_new-mandt, es_new-mat_generico,
+               es_new-version_fabr.
+      ENDIF.
+
+      CALL FUNCTION 'ZPP_ZTPPR1156_1_WRITE_DOCUMENT'
+        EXPORTING
+          objectid                = clave
+          tcode                   = sy-tcode
+          utime                   = sy-uzeit
+          udate                   = sy-datum
+          username                = sy-uname
+          object_change_indicator = COND #( WHEN accion = 'U' THEN accion ELSE space )
+          n_ztppr1156_1           = es_new
+          o_ztppr1156_1           = es_old
+          upd_ztppr1156_1         = accion.
+
+    ELSE.
+      CLEAR: es_old.
+      MOVE-CORRESPONDING es_data TO es_new.
+      clave = es_new-centro &&  es_new-mat_generico && es_new-version_fabr.
+      accion = 'I'.
+
+      ".Registro de la Modificacion
+      CALL FUNCTION 'ZPP_ZTPPR1156_1_WRITE_DOCUMENT'
+        EXPORTING
+          objectid                   = clave
+          tcode                      = sy-tcode
+          utime                      = sy-uzeit
+          udate                      = sy-datum
+          username                   = sy-uname
+          object_change_indicator    = accion
+          n_ztppr1156_1              = es_new
+          o_ztppr1156_1              = es_old
+          upd_ztppr1156_1            = accion.
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
+
+  METHOD registrar_log_ztppr1156_2.
+
+    DATA: clave_objeto       TYPE cdobjectv,
+          accion             TYPE cdchngindh,
+          es_datos_iniciales TYPE ztppr1156_2,
+          es_datos_finales   TYPE ztppr1156_2.
+
+    clave_objeto = i_es_datos-centro && i_es_datos-version_fabr.
+
+    accion = SWITCH #( i_acction
+                        WHEN 'N' THEN
+                           'I'
+                        ELSE
+                           i_acction ).
+
+    es_datos_finales =  CORRESPONDING #( i_es_datos ).
+
+    "Validar si el objeto ya existe
+    SELECT SINGLE *
+    FROM ztppr1156_2
+    WHERE centro = @i_es_datos-centro
+    AND version_fabr = @i_es_datos-version_fabr
+    INTO @DATA(es_ztppr1156_2).
+
+    IF es_ztppr1156_2 IS NOT INITIAL.
+      es_datos_iniciales = CORRESPONDING #( es_ztppr1156_2 ).
+    ENDIF.
+
+    CALL FUNCTION 'ZPP_ZTPPR1156_2_WRITE_DOCUMENT'
+      EXPORTING
+        objectid                = clave_objeto
+        tcode                   = sy-tcode
+        utime                   = sy-uzeit
+        udate                   = sy-datum
+        username                = sy-uname
+        object_change_indicator = accion
+        n_ztppr1156_2           = es_datos_finales
+        o_ztppr1156_2           = es_datos_iniciales
+        upd_ztppr1156_2         = accion.
+
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclppr1156_log_ztppr1156_1 DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    CLASS-DATA:
+      gc_i TYPE char1 VALUE 'I', ".Insert
+      gc_n TYPE char1 VALUE 'N', ".Nuevo
+      gc_d TYPE char1 VALUE 'D'. ".Delete
+
+    CLASS-METHODS:
+      "! Manejo de Log CDHDR-CDPOS
+      "! @parameter i_es_data | Informacion para ser registrada
+      "! @parameter i_accion | Action (I,U,D)
+      registrar_log
+        IMPORTING i_es_data TYPE any
+                  i_accion  TYPE comt_boolean,
+      registrar_log_ztppr1156_2
+        IMPORTING
+          VALUE(i_es_datos) TYPE ztppr1156_2
+          i_acction         TYPE comt_boolean.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclppr1156_log_ztppr1156_1 IMPLEMENTATION.
+
+
+  METHOD registrar_log.
+*&----------------------------------------------------------------------*
+*& Definicion de Estructuras
+*&----------------------------------------------------------------------*
+    DATA:
+      es_new        TYPE ztppr1156_1.
+
+*&----------------------------------------------------------------------*
+*& Definicion de Tablas internas
+*&----------------------------------------------------------------------*
+    DATA:
+      ti_changes TYPE STANDARD TABLE OF cdtxt.
+
+*&----------------------------------------------------------------------*
+*& Definicion de Variables
+*&----------------------------------------------------------------------*
+    DATA:
+      clave              TYPE cdhdr-objectid,
+      accion             TYPE cdchngindh,
+      ti_zcx_ztppr1156_1 TYPE STANDARD TABLE OF cdtxt.
+
+    ".Asignamos el action
+    accion = i_accion.
+
+    DATA(es_data) = CORRESPONDING ztppr1156_1( i_es_data ).
+
+    "Obtenemos la informacion de tabla
+    SELECT SINGLE *
+      FROM ztppr1156_1
+     WHERE centro   EQ @es_data-centro
+       AND mat_generico EQ @es_data-mat_generico
+       AND version_fabr EQ @es_data-version_fabr
+      INTO @DATA(es_old).
+
+    IF sy-subrc EQ 0.
+      ".Clave del log
+      clave = es_old-centro &&  es_old-mat_generico && es_old-version_fabr.
+
+      CLEAR: es_new.
+      MOVE-CORRESPONDING es_old TO es_new.
+      es_new-ran_inicial = es_data-ran_inicial.
+      es_new-ran_final = es_data-ran_final.
+
+      ".Si la accion es de Delete
+      IF accion EQ gc_d.
+        CLEAR es_new.
+      ENDIF.
+
+      ".Registro de la Modificacion
+
+      IF accion = 'U'.
+        CLEAR: es_new-centro, es_new-mandt, es_new-mat_generico,
+               es_new-version_fabr.
+      ENDIF.
+
+      CALL FUNCTION 'ZPP_ZTPPR1156_1_WRITE_DOCUMENT'
+        EXPORTING
+          objectid                = clave
+          tcode                   = sy-tcode
+          utime                   = sy-uzeit
+          udate                   = sy-datum
+          username                = sy-uname
+          object_change_indicator = COND #( WHEN accion = 'U' THEN accion ELSE space )
+          n_ztppr1156_1           = es_new
+          o_ztppr1156_1           = es_old
+          upd_ztppr1156_1         = accion.
+
+    ELSE.
+      CLEAR: es_old.
+      MOVE-CORRESPONDING es_data TO es_new.
+      clave = es_new-centro &&  es_new-mat_generico && es_new-version_fabr.
+      accion = 'I'.
+
+      ".Registro de la Modificacion
+      CALL FUNCTION 'ZPP_ZTPPR1156_1_WRITE_DOCUMENT'
+        EXPORTING
+          objectid                   = clave
+          tcode                      = sy-tcode
+          utime                      = sy-uzeit
+          udate                      = sy-datum
+          username                   = sy-uname
+          object_change_indicator    = accion
+          n_ztppr1156_1              = es_new
+          o_ztppr1156_1              = es_old
+          upd_ztppr1156_1            = accion.
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
+
+  METHOD registrar_log_ztppr1156_2.
+
+    DATA: clave_objeto       TYPE cdobjectv,
+          accion             TYPE cdchngindh,
+          es_datos_iniciales TYPE ztppr1156_2,
+          es_datos_finales   TYPE ztppr1156_2.
+
+    clave_objeto = i_es_datos-centro && i_es_datos-version_fabr.
+
+    accion = SWITCH #( i_acction
+                        WHEN 'N' THEN
+                           'I'
+                        ELSE
+                           i_acction ).
+
+    es_datos_finales =  CORRESPONDING #( i_es_datos ).
+
+    "Validar si el objeto ya existe
+    SELECT SINGLE *
+    FROM ztppr1156_2
+    WHERE centro = @i_es_datos-centro
+    AND version_fabr = @i_es_datos-version_fabr
+    INTO @DATA(es_ztppr1156_2).
+
+    IF es_ztppr1156_2 IS NOT INITIAL.
+      es_datos_iniciales = CORRESPONDING #( es_ztppr1156_2 ).
+    ENDIF.
+
+    CALL FUNCTION 'ZPP_ZTPPR1156_2_WRITE_DOCUMENT'
+      EXPORTING
+        objectid                = clave_objeto
+        tcode                   = sy-tcode
+        utime                   = sy-uzeit
+        udate                   = sy-datum
+        username                = sy-uname
+        object_change_indicator = accion
+        n_ztppr1156_2           = es_datos_finales
+        o_ztppr1156_2           = es_datos_iniciales
+        upd_ztppr1156_2         = accion.
+
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
+
+ENDCLASS.

@@ -1,0 +1,255 @@
+FUNCTION zcx_get_transport_log
+  IMPORTING
+    VALUE(it_transports) TYPE string
+    VALUE(iv_user) TYPE syuname OPTIONAL
+  EXPORTING
+    VALUE(ev_result_json) TYPE string
+    VALUE(ev_has_problems) TYPE char1.
+
+
+
+  TYPES: BEGIN OF ty_log_detail,
+           severity TYPE char1,
+           message  TYPE string,
+         END OF ty_log_detail,
+         tt_log_details TYPE STANDARD TABLE OF ty_log_detail WITH DEFAULT KEY.
+
+  TYPES: BEGIN OF ty_problem,
+           severity    TYPE char1,
+           message     TYPE string,
+           system      TYPE string,
+           timestamp   TYPE string,
+           step        TYPE char4,
+           step_text   TYPE string,
+           log_details TYPE tt_log_details,
+         END OF ty_problem,
+         tt_problems TYPE STANDARD TABLE OF ty_problem WITH DEFAULT KEY.
+
+  TYPES: BEGIN OF ty_transport_result,
+           trkorr        TYPE trkorr,
+           owner         TYPE syuname,
+           type          TYPE char1,
+           type_text     TYPE string,
+           description   TYPE string,
+           has_log       TYPE abap_bool,
+           has_problems  TYPE abap_bool,
+           error_count   TYPE i,
+           warning_count TYPE i,
+           problems      TYPE tt_problems,
+           message       TYPE string,
+         END OF ty_transport_result,
+         tt_transport_results TYPE STANDARD TABLE OF ty_transport_result WITH DEFAULT KEY.
+
+  DATA: lt_transports   TYPE RANGE OF trkorr,
+        lt_results      TYPE tt_transport_results,
+        ls_result       TYPE ty_transport_result,
+        ls_problem      TYPE ty_problem,
+        ls_log_detail   TYPE ty_log_detail,
+        lt_e070         TYPE STANDARD TABLE OF e070,
+        ls_e070         TYPE e070,
+        lv_as4text      TYPE e07t-as4text,
+        ls_cofi_header  TYPE tstrfcofih,
+        lt_cofi_lines   TYPE STANDARD TABLE OF tstrfcofil,
+        ls_cofi_line    TYPE tstrfcofil,
+        lv_transport    TYPE string,
+        lv_timestamp    TYPE string,
+        lv_log_file     TYPE tstrf01-file,
+        lv_log_filename TYPE tstrf01-filename,
+        lt_log_lines    TYPE STANDARD TABLE OF trlog,
+        ls_log_line     TYPE trlog.
+
+  " Parse input transports (comma-separated or JSON array)
+  SPLIT it_transports AT ',' INTO TABLE DATA(lt_transport_list).
+
+  " Build range for E070 query
+  LOOP AT lt_transport_list INTO lv_transport.
+    lv_transport = to_upper( condense( lv_transport ) ).
+    REPLACE ALL OCCURRENCES OF '"' IN lv_transport WITH ''.
+    REPLACE ALL OCCURRENCES OF '[' IN lv_transport WITH ''.
+    REPLACE ALL OCCURRENCES OF ']' IN lv_transport WITH ''.
+    IF lv_transport IS NOT INITIAL.
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = lv_transport ) TO lt_transports.
+    ENDIF.
+  ENDLOOP.
+
+  " Get transport metadata from E070
+  SELECT * FROM e070
+    INTO TABLE lt_e070
+    WHERE trkorr IN lt_transports.
+
+  " Filter by user if specified
+  IF iv_user IS NOT INITIAL.
+    DELETE lt_e070 WHERE as4user <> iv_user.
+  ENDIF.
+
+  " Process each transport
+  LOOP AT lt_e070 INTO ls_e070.
+    CLEAR: ls_result, lt_cofi_lines, ls_cofi_header, lv_as4text.
+
+    ls_result-trkorr = ls_e070-trkorr.
+    ls_result-owner = ls_e070-as4user.
+    ls_result-type = ls_e070-trfunction.
+
+    " Get description from E07T
+    SELECT SINGLE as4text FROM e07t
+      INTO lv_as4text
+      WHERE trkorr = ls_e070-trkorr
+        AND langu  = sy-langu.
+    IF sy-subrc <> 0.
+      SELECT SINGLE as4text FROM e07t
+        INTO lv_as4text
+        WHERE trkorr = ls_e070-trkorr
+          AND langu  = 'E'.
+    ENDIF.
+    ls_result-description = lv_as4text.
+
+    " Map transport type
+    CASE ls_e070-trfunction.
+      WHEN 'K'. ls_result-type_text = 'Workbench'.
+      WHEN 'W'. ls_result-type_text = 'Customizing'.
+      WHEN 'T'. ls_result-type_text = 'Transport of Copies'.
+      WHEN 'S'. ls_result-type_text = 'Development/Correction'.
+      WHEN 'R'. ls_result-type_text = 'Repair'.
+      WHEN 'X'. ls_result-type_text = 'Unclassified'.
+      WHEN 'C'. ls_result-type_text = 'Relocation'.
+      WHEN 'O'. ls_result-type_text = 'Delivery'.
+      WHEN 'G'. ls_result-type_text = 'CTS Project'.
+      WHEN 'M'. ls_result-type_text = 'Client Transport'.
+      WHEN 'P'. ls_result-type_text = 'Piece List'.
+      WHEN 'Q'. ls_result-type_text = 'Customizing Task'.
+      WHEN 'L'. ls_result-type_text = 'Deleted'.
+      WHEN OTHERS. ls_result-type_text = 'Unknown'.
+    ENDCASE.
+
+    " Read transport cofile (log)
+    CALL FUNCTION 'STRF_READ_COFILE'
+      EXPORTING
+        iv_dirtype     = 'T'
+        iv_trkorr      = ls_e070-trkorr
+        iv_read_header = 'X'
+      IMPORTING
+        ev_cofi_header = ls_cofi_header
+      TABLES
+        tt_cofi_lines  = lt_cofi_lines
+      EXCEPTIONS
+        wrong_call     = 1
+        no_info_found  = 2
+        OTHERS         = 3.
+
+    IF sy-subrc = 0.
+      ls_result-has_log = abap_true.
+
+      " Parse cofile lines for errors (retcode >= 8) and warnings (retcode >= 4)
+      LOOP AT lt_cofi_lines INTO ls_cofi_line.
+        CLEAR: ls_problem, lt_log_lines, lv_log_file, lv_log_filename.
+
+        " Check return code: 8+ = Error, 4 = Warning
+        IF ls_cofi_line-retcode >= 8.
+          ls_problem-severity = 'E'.
+          ls_result-error_count = ls_result-error_count + 1.
+        ELSEIF ls_cofi_line-retcode >= 4.
+          ls_problem-severity = 'W'.
+          ls_result-warning_count = ls_result-warning_count + 1.
+        ELSE.
+          CONTINUE. " Skip successful steps
+        ENDIF.
+
+        " Build timestamp
+        lv_timestamp = ls_cofi_line-trdate && ls_cofi_line-trtime.
+        ls_problem-timestamp = lv_timestamp.
+        ls_problem-system = ls_cofi_line-tarsystem.
+
+        " Map step type based on function
+        ls_problem-step = ls_cofi_line-function.
+        CASE ls_cofi_line-function.
+          WHEN 'I'. ls_problem-step_text = 'Import'.
+          WHEN 'J'. ls_problem-step_text = 'Import (J)'.
+          WHEN 'A'. ls_problem-step_text = 'Activation'.
+          WHEN 'E'. ls_problem-step_text = 'Export'.
+          WHEN 'G'. ls_problem-step_text = 'Generation'.
+          WHEN 'V'. ls_problem-step_text = 'Versioning'.
+          WHEN 'R'. ls_problem-step_text = 'Release'.
+          WHEN 'D'. ls_problem-step_text = 'Distribution'.
+          WHEN 'M'. ls_problem-step_text = 'Method Execution'.
+          WHEN 'X'. ls_problem-step_text = 'Export Check'.
+          WHEN OTHERS. ls_problem-step_text = 'Step ' && ls_cofi_line-function.
+        ENDCASE.
+
+        " Build summary message
+        ls_problem-message = |RC={ ls_cofi_line-retcode } in { ls_problem-step_text }| &&
+                             | on { ls_cofi_line-tarsystem }| &&
+                             | ({ ls_cofi_line-trdate DATE = USER })|.
+
+        " Get detailed log file path
+        CALL FUNCTION 'STRF_SETNAME_PROT'
+          EXPORTING
+            acttype    = ls_cofi_line-function
+            dirtype    = 'T'
+            sysname    = ls_cofi_line-tarsystem
+            trkorr     = ls_e070-trkorr
+          IMPORTING
+            file       = lv_log_file
+            filename   = lv_log_filename
+          EXCEPTIONS
+            wrong_call = 1
+            OTHERS     = 2.
+
+        IF sy-subrc = 0 AND lv_log_file IS NOT INITIAL.
+          " Read detailed log
+          CALL FUNCTION 'TRINT_READ_LOG'
+            EXPORTING
+              iv_log_type       = 'FILE'
+              iv_logname_file   = lv_log_file
+              iv_language       = sy-langu
+            TABLES
+              et_lines          = lt_log_lines
+            EXCEPTIONS
+              invalid_input     = 1
+              file_access_error = 2
+              db_access_error   = 3
+              OTHERS            = 4.
+
+          IF sy-subrc = 0.
+            " Extract error and warning messages from log
+            LOOP AT lt_log_lines INTO ls_log_line
+              WHERE severity = 'E' OR severity = 'W' OR severity = 'A'.
+              CLEAR ls_log_detail.
+              ls_log_detail-severity = ls_log_line-severity.
+              " Use line or orig_line (whichever has content)
+              IF ls_log_line-line IS NOT INITIAL.
+                ls_log_detail-message = ls_log_line-line.
+              ELSEIF ls_log_line-orig_line IS NOT INITIAL.
+                ls_log_detail-message = ls_log_line-orig_line.
+              ENDIF.
+              IF ls_log_detail-message IS NOT INITIAL.
+                APPEND ls_log_detail TO ls_problem-log_details.
+              ENDIF.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+
+        APPEND ls_problem TO ls_result-problems.
+      ENDLOOP.
+
+      ls_result-has_problems = xsdbool( ls_result-error_count > 0 OR ls_result-warning_count > 0 ).
+
+    ELSE.
+      ls_result-has_log = abap_false.
+      ls_result-message = 'Transport not yet released - no log available'.
+    ENDIF.
+
+    APPEND ls_result TO lt_results.
+
+    " Update global flag
+    IF ls_result-has_problems = abap_true.
+      ev_has_problems = abap_true.
+    ENDIF.
+  ENDLOOP.
+
+  " Convert results to JSON
+  ev_result_json = /ui2/cl_json=>serialize(
+    data        = lt_results
+    compress    = abap_true
+    pretty_name = /ui2/cl_json=>pretty_mode-camel_case ).
+
+ENDFUNCTION.

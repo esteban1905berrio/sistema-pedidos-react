@@ -1,0 +1,348 @@
+FUNCTION zcx_create_transport_request
+  IMPORTING
+    VALUE(iv_request_type) TYPE char1
+    VALUE(iv_description) TYPE as4text OPTIONAL
+    VALUE(iv_target_system) TYPE tmscsys-sysnam OPTIONAL
+    VALUE(iv_reference_transport) TYPE trkorr OPTIONAL
+    VALUE(iv_auto_release) TYPE char1 DEFAULT space
+    VALUE(iv_objects_json) TYPE string OPTIONAL
+    VALUE(iv_inherit_description) TYPE char1 DEFAULT space
+  EXPORTING
+    VALUE(ev_transport_number) TYPE trkorr
+    VALUE(ev_task_number) TYPE trkorr
+    VALUE(ev_success) TYPE char1
+    VALUE(ev_message) TYPE string
+    VALUE(ev_objects_copied) TYPE i
+  EXCEPTIONS
+    invalid_request_type
+    creation_failed
+    reference_not_found
+    objects_copy_failed
+    release_failed
+    invalid_objects_json
+    object_not_found
+    task_creation_failed.
+
+
+
+* Local variables
+  DATA: lv_request_type   TYPE trfunction,
+        lt_e071           TYPE STANDARD TABLE OF e071,
+        lt_e071k          TYPE STANDARD TABLE OF e071k,
+        lt_fm_e071        TYPE tr_objects,
+        lt_fm_e071k       TYPE tr_keys,
+        lv_target         TYPE tmscsys-sysnam,
+        lv_description    TYPE as4text,
+        lv_ref_desc       TYPE as4text,
+        lv_pgmid          TYPE pgmid,
+        lv_object         TYPE trobjtype,
+        lv_default_target TYPE tcerele-consys,
+        lv_layer          TYPE tcetral-translayer,
+        lv_task_type      TYPE trfunction,
+        ls_task_e070      TYPE e070,
+        ls_task_e07t      TYPE e07t,
+        ls_task_e070c     TYPE e070c.
+
+* Types for JSON parsing
+  TYPES: BEGIN OF ty_object,
+           pgmid    TYPE pgmid,
+           object   TYPE trobjtype,
+           obj_name TYPE sobj_name,
+         END OF ty_object,
+         ty_t_objects TYPE STANDARD TABLE OF ty_object WITH EMPTY KEY.
+
+  DATA: lt_objects TYPE ty_t_objects.
+
+  FIELD-SYMBOLS: <ls_obj> TYPE ty_object.
+
+* Validate request type
+  CASE iv_request_type.
+    WHEN 'K'.
+      lv_request_type = 'K'.  " Workbench
+      lv_task_type = 'S'.     " Development/Correction task
+    WHEN 'W'.
+      lv_request_type = 'W'.  " Customizing
+      lv_task_type = 'Q'.     " Customizing task
+    WHEN 'T'.
+      lv_request_type = 'T'.  " Transport of Copies
+      lv_task_type = 'S'.     " Development/Correction task
+    WHEN OTHERS.
+      ev_success = space.
+      ev_message = |Invalid request type: { iv_request_type }. Use K (Workbench), W (Customizing), or T (Copy)|.
+      RAISE invalid_request_type.
+  ENDCASE.
+
+* Get target system: use provided, from reference, or default
+  lv_target = iv_target_system.
+
+  " Try to get from reference transport if not provided
+  IF lv_target IS INITIAL AND iv_reference_transport IS NOT INITIAL.
+    SELECT SINGLE tarsystem FROM e070
+      WHERE trkorr = @iv_reference_transport
+      INTO @lv_target.
+  ENDIF.
+
+  " Get default target system if still not set
+  IF lv_target IS INITIAL.
+    CALL FUNCTION 'TR_GET_TRANSPORT_TARGET'
+      EXPORTING
+        iv_use_default             = 'X'
+      IMPORTING
+        ev_target                  = lv_default_target
+        ev_layer                   = lv_layer
+      EXCEPTIONS
+        wrong_call                 = 1
+        invalid_input              = 2
+        cts_initialization_failure = 3
+        OTHERS                     = 4.
+    IF sy-subrc = 0 AND lv_default_target IS NOT INITIAL.
+      lv_target = lv_default_target.
+    ENDIF.
+  ENDIF.
+
+* Handle description: inherit from reference or use provided
+  lv_description = iv_description.
+  IF iv_reference_transport IS NOT INITIAL.
+    " Validate reference transport exists
+    SELECT SINGLE trkorr FROM e070
+      WHERE trkorr = @iv_reference_transport
+      INTO @DATA(lv_ref_exists).
+    IF sy-subrc <> 0.
+      ev_success = space.
+      ev_message = |Reference transport { iv_reference_transport } not found|.
+      RAISE reference_not_found.
+    ENDIF.
+
+    " Get description from E07T if we need to inherit
+    IF iv_inherit_description = 'X' OR lv_description IS INITIAL.
+      SELECT SINGLE as4text FROM e07t
+        WHERE trkorr = @iv_reference_transport
+          AND langu  = @sy-langu
+        INTO @lv_ref_desc.
+      IF sy-subrc = 0 AND lv_ref_desc IS NOT INITIAL.
+        lv_description = lv_ref_desc.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+* Validate description is available
+  IF lv_description IS INITIAL.
+    ev_success = space.
+    ev_message = |Description is required (provide IV_DESCRIPTION or use IV_INHERIT_DESCRIPTION with reference)|.
+    RAISE creation_failed.
+  ENDIF.
+
+* Parse objects JSON if provided
+  IF iv_objects_json IS NOT INITIAL.
+    TRY.
+        /ui2/cl_json=>deserialize(
+          EXPORTING
+            json = iv_objects_json
+          CHANGING
+            data = lt_objects
+        ).
+      CATCH cx_root INTO DATA(lx_json_error).
+        ev_success = space.
+        ev_message = |Invalid objects JSON format: { lx_json_error->get_text( ) }|.
+        RAISE invalid_objects_json.
+    ENDTRY.
+
+    " Auto-detect PGMID and OBJECT from TADIR if not provided
+    LOOP AT lt_objects ASSIGNING <ls_obj>.
+      IF <ls_obj>-pgmid IS INITIAL OR <ls_obj>-object IS INITIAL.
+        CLEAR: lv_pgmid, lv_object.
+        SELECT SINGLE pgmid, object FROM tadir
+          WHERE obj_name = @<ls_obj>-obj_name
+          INTO (@lv_pgmid, @lv_object).
+        IF sy-subrc <> 0.
+          ev_success = space.
+          ev_message = |Object { <ls_obj>-obj_name } not found in TADIR|.
+          DELETE lt_objects WHERE obj_name = <ls_obj>-obj_name.
+          CONTINUE.
+        ENDIF.
+        IF <ls_obj>-pgmid IS INITIAL.
+          <ls_obj>-pgmid = lv_pgmid.
+        ENDIF.
+        IF <ls_obj>-object IS INITIAL.
+          <ls_obj>-object = lv_object.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+* Create transport request
+  CALL FUNCTION 'TR_EXT_CREATE_REQUEST'
+    EXPORTING
+      iv_request_type = lv_request_type
+      iv_target       = lv_target
+      iv_author       = sy-uname
+      iv_text         = lv_description
+    IMPORTING
+      es_req_id       = ev_transport_number
+    EXCEPTIONS
+      OTHERS          = 1.
+
+  IF sy-subrc <> 0 OR ev_transport_number IS INITIAL.
+    ev_success = space.
+    ev_message = |Failed to create transport request: { sy-msgv1 } { sy-msgv2 }|.
+    RAISE creation_failed.
+  ENDIF.
+
+* Create task for the current user (Development/Correction or Customizing)
+  CALL FUNCTION 'TRINT_INSERT_NEW_COMM'
+    EXPORTING
+      wi_kurztext   = lv_description
+      wi_trfunction = lv_task_type
+      iv_username   = sy-uname
+      wi_strkorr    = ev_transport_number
+    IMPORTING
+      we_trkorr     = ev_task_number
+      we_e070       = ls_task_e070
+      we_e07t       = ls_task_e07t
+      we_e070c      = ls_task_e070c
+    EXCEPTIONS
+      OTHERS        = 1.
+
+  IF sy-subrc <> 0 OR ev_task_number IS INITIAL.
+    " Delete the created transport on task creation error
+    CALL FUNCTION 'TRINT_DELETE_COMM'
+      EXPORTING
+        wi_dialog = space
+        wi_trkorr = ev_transport_number
+      EXCEPTIONS
+        OTHERS    = 0.
+
+    ev_success = space.
+    ev_message = |Transport created but task creation failed: { sy-msgv1 } { sy-msgv2 }|.
+    CLEAR ev_transport_number.
+    RAISE task_creation_failed.
+  ENDIF.
+
+* Add objects from JSON if provided - NOW USING TASK instead of OT
+  IF lt_objects IS NOT INITIAL.
+    LOOP AT lt_objects INTO DATA(ls_object).
+      APPEND VALUE #(
+        pgmid    = ls_object-pgmid
+        object   = ls_object-object
+        obj_name = ls_object-obj_name
+      ) TO lt_fm_e071.
+    ENDLOOP.
+
+    ev_objects_copied = lines( lt_fm_e071 ).
+
+    " Add objects to TASK (ev_task_number) instead of OT (ev_transport_number)
+    CALL FUNCTION 'TR_REQUEST_CHOICE'
+      EXPORTING
+        iv_suppress_dialog   = abap_true
+        iv_request           = ev_transport_number
+        it_e071              = lt_fm_e071
+        it_e071k             = lt_fm_e071k
+      EXCEPTIONS
+        invalid_request      = 1
+        invalid_request_type = 2
+        user_not_owner       = 3
+        no_objects_appended  = 4
+        enqueue_error        = 5
+        cancelled_by_user    = 6
+        recursive_call       = 7
+        OTHERS               = 8.
+
+    IF sy-subrc <> 0.
+      " Delete the created transport on error
+      CALL FUNCTION 'TRINT_DELETE_COMM'
+        EXPORTING
+          wi_dialog = space
+          wi_trkorr = ev_transport_number
+        EXCEPTIONS
+          OTHERS    = 0.
+
+      ev_success = space.
+      ev_message = |Failed to add objects to task: { sy-msgv1 } { sy-msgv2 }|.
+      CLEAR: ev_transport_number, ev_task_number.
+      RAISE objects_copy_failed.
+    ENDIF.
+
+* Copy objects from reference transport if provided (and no JSON objects)
+  ELSEIF iv_reference_transport IS NOT INITIAL.
+    " Get objects from reference transport and its tasks
+    SELECT * FROM e071
+      WHERE trkorr = @iv_reference_transport
+         OR trkorr IN ( SELECT trkorr FROM e070 WHERE strkorr = @iv_reference_transport )
+      INTO TABLE @lt_e071.
+
+    SELECT * FROM e071k
+      WHERE trkorr = @iv_reference_transport
+         OR trkorr IN ( SELECT trkorr FROM e070 WHERE strkorr = @iv_reference_transport )
+      INTO TABLE @lt_e071k.
+
+    IF lt_e071 IS NOT INITIAL.
+      lt_fm_e071 = CORRESPONDING #( lt_e071 ).
+      lt_fm_e071k = CORRESPONDING #( lt_e071k ).
+
+      " Remove CORR entries (task references)
+      DELETE lt_fm_e071 WHERE pgmid = 'CORR'.
+
+      ev_objects_copied = lines( lt_fm_e071 ).
+
+      " Add objects to TASK (ev_task_number) instead of OT (ev_transport_number)
+      CALL FUNCTION 'TR_REQUEST_CHOICE'
+        EXPORTING
+          iv_suppress_dialog   = abap_true
+          iv_request           = ev_task_number
+          it_e071              = lt_fm_e071
+          it_e071k             = lt_fm_e071k
+        EXCEPTIONS
+          invalid_request      = 1
+          invalid_request_type = 2
+          user_not_owner       = 3
+          no_objects_appended  = 4
+          enqueue_error        = 5
+          cancelled_by_user    = 6
+          recursive_call       = 7
+          OTHERS               = 8.
+
+      IF sy-subrc <> 0.
+        " Delete the created transport on error
+        CALL FUNCTION 'TRINT_DELETE_COMM'
+          EXPORTING
+            wi_dialog = space
+            wi_trkorr = ev_transport_number
+          EXCEPTIONS
+            OTHERS    = 0.
+
+        ev_success = space.
+        ev_message = |Failed to copy objects to task: { sy-msgv1 } { sy-msgv2 }|.
+        CLEAR: ev_transport_number, ev_task_number.
+        RAISE objects_copy_failed.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+* Auto-release if requested
+  IF iv_auto_release = 'X' OR iv_auto_release = abap_true.
+    CALL FUNCTION 'TR_RELEASE_REQUEST'
+      EXPORTING
+        iv_trkorr             = ev_transport_number
+        iv_dialog             = space
+        iv_display_export_log = space
+        iv_simulation         = space
+        iv_without_locking    = 'X'
+      EXCEPTIONS
+        OTHERS                = 1.
+
+    IF sy-subrc <> 0.
+      ev_success = 'W'.  " Warning - created but not released
+      ev_message = |Transport { ev_transport_number } (task { ev_task_number }) created but release failed: { sy-msgv1 }|.
+      RETURN.
+    ENDIF.
+  ENDIF.
+
+* Success
+  ev_success = 'X'.
+  IF iv_auto_release = 'X'.
+    ev_message = |Transport { ev_transport_number } with task { ev_task_number } created and released successfully|.
+  ELSE.
+    ev_message = |Transport { ev_transport_number } with task { ev_task_number } created successfully|.
+  ENDIF.
+
+ENDFUNCTION.

@@ -147,14 +147,20 @@
       "WebFetch(domain:www.leanx.eu)",
       "WebFetch(domain:stackoverflow.com)",
       "mcp__gdcmcp__getPackageHierarchy",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:piotrminkowski.com)",
+      "mcp__github__search_code",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(grep:*)",
+      "mcp__sap-docs__sap_help_get"
     ],
     "deny": [],
     "ask": []
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "sap-java-server"
+    "giralmcp",
+    "gdcmcp"
   ],
   "disabledMcpjsonServers": [
     "CRY",

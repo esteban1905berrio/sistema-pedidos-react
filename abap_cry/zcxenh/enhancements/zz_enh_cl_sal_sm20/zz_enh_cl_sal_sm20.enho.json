@@ -1,0 +1,30 @@
+{
+  "enhancementName" : "ZZ_ENH_CL_SAL_SM20",
+  "header" : {
+    "enhancementName" : "ZZ_ENH_CL_SAL_SM20",
+    "description" : "Ampliación para Reporte de Auditoría SAP",
+    "toolType" : "HOOK_IMPL",
+    "toolTypeText" : "Source Code Plug-In",
+    "devclass" : "ZCXENH",
+    "author" : "JGVALEND",
+    "createdOn" : "2022-05-23",
+    "changedBy" : "JGVALEND",
+    "changedOn" : "2022-05-23"
+  },
+  "elements" : [ {
+    "elementType" : "HOOK_IMPL",
+    "spotName" : "",
+    "programName" : "CL_SAL_SM20===================CP",
+    "fullName" : "\\TY:CL_SAL_SM20\\ME:MERGE_BUFFER_TO_OUTPUT_LIST\\SE:END\\EI",
+    "badiName" : "",
+    "badiImpl" : "",
+    "implClass" : "",
+    "interfaceName" : "",
+    "active" : false,
+    "sourceCode" : "\n*{ JGVALEND - 20220523\n  \".Guardar reporte de auditoría en memoria.\n  zclcxi1148_rep_auditoria=>enh_set_audit_list(\n    EXPORTING i_ti_audit_list = gt_out\n    CHANGING  c_v_list_mode   = gs_env-list_mode ).\n*} JGVALEND - 20220523\n"
+  } ],
+  "metadata" : {
+    "functionModule" : "ZCX_GET_ENHANCEMENT_SOURCE",
+    "version" : "00000"
+  }
+}

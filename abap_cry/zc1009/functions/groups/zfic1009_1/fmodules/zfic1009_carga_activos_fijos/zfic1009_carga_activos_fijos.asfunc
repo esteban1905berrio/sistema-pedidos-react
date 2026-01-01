@@ -1,0 +1,27 @@
+FUNCTION zfic1009_carga_activos_fijos
+  IMPORTING
+    VALUE(i_test) TYPE testrun
+    VALUE(i_ti_dat_activofijo) TYPE zttfic1009_2
+    VALUE(i_debug) TYPE flag DEFAULT space
+  EXPORTING
+    VALUE(e_ti_returnmessages) TYPE zttfic1009_1.
+
+
+
+
+
+
+
+  DATA(o_cargamas_activofijo) = NEW zclfic1009_carga_activos_fijos( ).
+
+  e_ti_returnmessages = o_cargamas_activofijo->crear_modificar_activo_fijo( i_ti_dat_actf  = i_ti_dat_activofijo
+                                                                            i_test         = i_test
+                                                                            i_debug        = i_debug ).
+
+
+
+
+
+
+
+ENDFUNCTION.

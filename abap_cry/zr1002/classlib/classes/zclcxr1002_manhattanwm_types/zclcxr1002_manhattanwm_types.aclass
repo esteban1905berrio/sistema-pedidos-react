@@ -1,0 +1,298 @@
+class ZCLCXR1002_MANHATTANWM_TYPES definition
+  public
+  final
+  create public .
+
+public section.
+
+  types:
+    BEGIN OF gtp_extended,
+        _Personalizacion     TYPE abap_bool,
+        _Tipo_Pedido         TYPE string,
+        _r_f_i_d             TYPE abap_bool,
+        _Entrega_Amigable    TYPE abap_bool,
+        _Pack_And_Hold       TYPE abap_bool,
+        _Pedido_SAP_Cabecera TYPE string,
+        _Orden_De_Compra     TYPE string,
+        _Medio_De_Pago       TYPE string,
+        _Valor_Pedido        TYPE string,
+        _Marcacion_Ola       TYPE string,
+      END OF gtp_extended .
+  types:
+    BEGIN OF gtp_original_order_notes,
+        _Note_Text     TYPE string,
+        _Note_Sequence TYPE string,
+        _Note_Code_Id  TYPE string,
+        _Visibility_Id TYPE string,
+        _Note_Type_Id  TYPE string,
+      END OF gtp_original_order_notes .
+  types:
+    gtp_ti_original_order_notes TYPE STANDARD TABLE OF gtp_original_order_notes WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_destination_address,
+        _First_Name  TYPE string,
+        _Last_Name   TYPE string,
+        _Address1    TYPE string,
+        _Address2    TYPE string,
+        _Address3    TYPE string,
+        _City        TYPE string,
+        _State       TYPE string,
+        _Postal_Code TYPE string,
+        _County      TYPE string,
+        _Country     TYPE string,
+        _Phone       TYPE string,
+        _Email       TYPE string,
+      END OF gtp_destination_address .
+  types:
+    BEGIN OF gtp_bill_to_address,
+        _First_Name  TYPE string,
+        _Last_Name   TYPE string,
+        _Address1    TYPE string,
+        _Address2    TYPE string,
+        _Address3    TYPE string,
+        _City        TYPE string,
+        _State       TYPE string,
+        _Postal_Code TYPE string,
+        _County      TYPE string,
+        _Country     TYPE string,
+        _Phone       TYPE string,
+        _Email       TYPE string,
+      END OF gtp_bill_to_address .
+  types:
+    BEGIN OF gtp_extended_original_order,
+        _Cambio_Precio   TYPE abap_bool,
+        _Personalizacion TYPE string,
+        _Mark_Down       TYPE abap_bool,
+      END OF gtp_extended_original_order .
+  types:
+    BEGIN OF gtp_original_order_instruction,
+        _Instruction_Id   TYPE string,
+        _Instruction_Type TYPE string,
+        _Sequence         TYPE string,
+        _Instruction_Text TYPE string,
+      END OF gtp_original_order_instruction .
+  types:
+    gtp_ti_order_instruction TYPE STANDARD TABLE OF gtp_original_order_instruction WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_original_order_request,
+*        _Original_Order_Line_Id TYPE string, ": {}, es una Estructura
+        _Service_Uom_Id               TYPE string,
+        _Sequence                     TYPE string,
+        _Service_Type_Id              TYPE string,
+        _Provided_Service_Id          TYPE string,
+        _Provided_Service_Instruction TYPE string,
+      END OF gtp_original_order_request .
+  types:
+    gtp_ti_order_request TYPE STANDARD TABLE OF gtp_original_order_request WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_original_order_line,
+        _Extended                      TYPE gtp_extended_original_order,
+        _Quantity_Uom_Id               TYPE string,
+        _Ordered_Quantity              TYPE string,
+        _Item_Id                       TYPE string,
+        _Priority                      TYPE string,
+        _Unit_Price                    TYPE string,
+        _Reference_Order               TYPE string,
+        _Reference_Order_Line          TYPE string,
+        _Original_Order_Line_Id        TYPE string,
+        _Allocation_Source_Id          TYPE string,
+        _Allocation_Source_Type_Id     TYPE string,
+        _Facility_Id                   TYPE string,
+        _Inventory_Type_Id             TYPE string,
+        _Item_Attributte1              TYPE string,
+        _Delivery_Start_Date_Time      TYPE string,
+        _Pickup_End_Date_Time          TYPE string,
+        _Pickup_Start_Date_Time        TYPE string,
+        _Original_Order_Line_Instructi TYPE gtp_ti_order_instruction, "_Original_Order_Line_Instruction
+        _Original_Order_Line_Requested TYPE gtp_ti_order_request, "_Original_Order_Line_Requested_Services
+      END OF gtp_original_order_line .
+  types:
+    gtp_ti_original_order_line TYPE STANDARD TABLE OF gtp_original_order_line WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_original_order,
+        _Cancelled                  TYPE abap_bool, "
+        _Origin_Facility_Id         TYPE string,    "
+        _Destination_Facility_Id    TYPE string,    "
+        _Original_Order_Id          TYPE string,    "
+        _Pickup_End_Date_Time       TYPE string,    "
+        _Pickup_Start_Date_Time     TYPE string,    "
+        _Pre_Ship_Confirm_Required  TYPE abap_bool, "
+        _Delivery_End_Date_Time     TYPE string,    "
+        _Delivery_Start_Date_Time   TYPE string,    "
+        _Designated_Ship_Via_Id     TYPE string,
+        _Designated_Static_Route_Id TYPE string,
+        _Designated_Carrier_Id      TYPE string,    "
+        _Priority                   TYPE string,    "
+        _Facility_Id                TYPE string,    "
+        _Order_Type                 TYPE string,    "
+        _Order_Placed_Date_Time     TYPE string,    "
+        _Customer_Id                TYPE string,    "
+        _Extended                   TYPE gtp_extended,                "
+        _Original_Order_Notes       TYPE gtp_ti_original_order_notes,
+        _Destination_Address        TYPE gtp_destination_address,     "
+        _Bill_To_Address            TYPE gtp_bill_to_address,         "
+        _Original_Order_Line        TYPE gtp_ti_original_order_line,           "
+      END OF gtp_original_order .
+  types:
+    gtp_ti_original_order TYPE STANDARD TABLE OF gtp_original_order WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_data_original_order,
+        _Data TYPE gtp_ti_original_order,
+      END OF gtp_data_original_order .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCLCXR1002_MANHATTANWM_TYPES IMPLEMENTATION.
+ENDCLASS.
+class ZCLCXR1002_MANHATTANWM_TYPES definition
+  public
+  final
+  create public .
+
+public section.
+
+  types:
+    BEGIN OF gtp_extended,
+        _Personalizacion     TYPE abap_bool,
+        _Tipo_Pedido         TYPE string,
+        _r_f_i_d             TYPE abap_bool,
+        _Entrega_Amigable    TYPE abap_bool,
+        _Pack_And_Hold       TYPE abap_bool,
+        _Pedido_SAP_Cabecera TYPE string,
+        _Orden_De_Compra     TYPE string,
+        _Medio_De_Pago       TYPE string,
+        _Valor_Pedido        TYPE string,
+        _Marcacion_Ola       TYPE string,
+      END OF gtp_extended .
+  types:
+    BEGIN OF gtp_original_order_notes,
+        _Note_Text     TYPE string,
+        _Note_Sequence TYPE string,
+        _Note_Code_Id  TYPE string,
+        _Visibility_Id TYPE string,
+        _Note_Type_Id  TYPE string,
+      END OF gtp_original_order_notes .
+  types:
+    gtp_ti_original_order_notes TYPE STANDARD TABLE OF gtp_original_order_notes WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_destination_address,
+        _First_Name  TYPE string,
+        _Last_Name   TYPE string,
+        _Address1    TYPE string,
+        _Address2    TYPE string,
+        _Address3    TYPE string,
+        _City        TYPE string,
+        _State       TYPE string,
+        _Postal_Code TYPE string,
+        _County      TYPE string,
+        _Country     TYPE string,
+        _Phone       TYPE string,
+        _Email       TYPE string,
+      END OF gtp_destination_address .
+  types:
+    BEGIN OF gtp_bill_to_address,
+        _First_Name  TYPE string,
+        _Last_Name   TYPE string,
+        _Address1    TYPE string,
+        _Address2    TYPE string,
+        _Address3    TYPE string,
+        _City        TYPE string,
+        _State       TYPE string,
+        _Postal_Code TYPE string,
+        _County      TYPE string,
+        _Country     TYPE string,
+        _Phone       TYPE string,
+        _Email       TYPE string,
+      END OF gtp_bill_to_address .
+  types:
+    BEGIN OF gtp_extended_original_order,
+        _Cambio_Precio   TYPE abap_bool,
+        _Personalizacion TYPE string,
+        _Mark_Down       TYPE abap_bool,
+      END OF gtp_extended_original_order .
+  types:
+    BEGIN OF gtp_original_order_instruction,
+        _Instruction_Id   TYPE string,
+        _Instruction_Type TYPE string,
+        _Sequence         TYPE string,
+        _Instruction_Text TYPE string,
+      END OF gtp_original_order_instruction .
+  types:
+    gtp_ti_order_instruction TYPE STANDARD TABLE OF gtp_original_order_instruction WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_original_order_request,
+*        _Original_Order_Line_Id TYPE string, ": {}, es una Estructura
+        _Service_Uom_Id               TYPE string,
+        _Sequence                     TYPE string,
+        _Service_Type_Id              TYPE string,
+        _Provided_Service_Id          TYPE string,
+        _Provided_Service_Instruction TYPE string,
+      END OF gtp_original_order_request .
+  types:
+    gtp_ti_order_request TYPE STANDARD TABLE OF gtp_original_order_request WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_original_order_line,
+        _Extended                      TYPE gtp_extended_original_order,
+        _Quantity_Uom_Id               TYPE string,
+        _Ordered_Quantity              TYPE string,
+        _Item_Id                       TYPE string,
+        _Priority                      TYPE string,
+        _Unit_Price                    TYPE string,
+        _Reference_Order               TYPE string,
+        _Reference_Order_Line          TYPE string,
+        _Original_Order_Line_Id        TYPE string,
+        _Allocation_Source_Id          TYPE string,
+        _Allocation_Source_Type_Id     TYPE string,
+        _Facility_Id                   TYPE string,
+        _Inventory_Type_Id             TYPE string,
+        _Item_Attributte1              TYPE string,
+        _Delivery_Start_Date_Time      TYPE string,
+        _Pickup_End_Date_Time          TYPE string,
+        _Pickup_Start_Date_Time        TYPE string,
+        _Original_Order_Line_Instructi TYPE gtp_ti_order_instruction, "_Original_Order_Line_Instruction
+        _Original_Order_Line_Requested TYPE gtp_ti_order_request, "_Original_Order_Line_Requested_Services
+      END OF gtp_original_order_line .
+  types:
+    gtp_ti_original_order_line TYPE STANDARD TABLE OF gtp_original_order_line WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_original_order,
+        _Cancelled                  TYPE abap_bool, "
+        _Origin_Facility_Id         TYPE string,    "
+        _Destination_Facility_Id    TYPE string,    "
+        _Original_Order_Id          TYPE string,    "
+        _Pickup_End_Date_Time       TYPE string,    "
+        _Pickup_Start_Date_Time     TYPE string,    "
+        _Pre_Ship_Confirm_Required  TYPE abap_bool, "
+        _Delivery_End_Date_Time     TYPE string,    "
+        _Delivery_Start_Date_Time   TYPE string,    "
+        _Designated_Ship_Via_Id     TYPE string,
+        _Designated_Static_Route_Id TYPE string,
+        _Designated_Carrier_Id      TYPE string,    "
+        _Priority                   TYPE string,    "
+        _Facility_Id                TYPE string,    "
+        _Order_Type                 TYPE string,    "
+        _Order_Placed_Date_Time     TYPE string,    "
+        _Customer_Id                TYPE string,    "
+        _Extended                   TYPE gtp_extended,                "
+        _Original_Order_Notes       TYPE gtp_ti_original_order_notes,
+        _Destination_Address        TYPE gtp_destination_address,     "
+        _Bill_To_Address            TYPE gtp_bill_to_address,         "
+        _Original_Order_Line        TYPE gtp_ti_original_order_line,           "
+      END OF gtp_original_order .
+  types:
+    gtp_ti_original_order TYPE STANDARD TABLE OF gtp_original_order WITH EMPTY KEY .
+  types:
+    BEGIN OF gtp_data_original_order,
+        _Data TYPE gtp_ti_original_order,
+      END OF gtp_data_original_order .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCLCXR1002_MANHATTANWM_TYPES IMPLEMENTATION.
+ENDCLASS.

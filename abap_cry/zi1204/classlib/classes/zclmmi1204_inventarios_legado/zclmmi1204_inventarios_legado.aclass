@@ -1,0 +1,640 @@
+CLASS zclmmi1204_inventarios_legado DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    CLASS-METHODS:
+
+      consultar_inventario
+        FOR TABLE FUNCTION ztmmi1204_1,
+
+      consultar_inventario2
+        FOR TABLE FUNCTION ztmmi1204_2.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclmmi1204_inventarios_legado IMPLEMENTATION.
+  METHOD consultar_inventario
+            BY DATABASE FUNCTION FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING nsdm_e_mchb nsdm_e_mslb mara ztcxr1000_2.
+
+    declare client varchar(3) := session_context ('CLIENT');
+
+    --consultar parametro centro
+    ti_centros =
+    SELECT low as centro
+    FROM ztcxr1000_2
+    WHERE idparam = 'CENTROS_IN';
+
+    ti_stock_propio =
+        SELECT
+        _stock.mandt,
+        _stock.werks,
+        _stock.lgort as almacen,
+        _stock.matnr,
+        _stock.charg,
+        ( _stock.clabs  + _stock.cspem ) as stock,
+        _material.satnr,
+        _material.size1,
+        _material.color,
+        _material.meins,
+        _material.mtart
+        from mara as _material
+        inner join nsdm_e_mchb as _stock
+        on _material.mandt = _stock.mandt
+        and _material.matnr = _stock.matnr
+        where _material.mandt = :client
+        and _stock.lvorm = ''
+        and _stock.werks in ( select centro from :ti_centros )
+        WITH HINT ( ignore_plan_cache );
+
+    ti_stock_consignacionproveedor =
+        SELECT
+        _stock.mandt,
+        _stock.werks,
+        _stock.lifnr as almacen,
+        _stock.matnr,
+        _stock.charg,
+        ( _stock.lblab ) as stock,
+        _material.satnr,
+        _material.size1,
+        _material.color,
+        _material.meins,
+        _material.mtart
+        from mara as _material
+        inner join nsdm_e_mslb as _stock
+        on _material.mandt = _stock.mandt
+        and _material.matnr = _stock.matnr
+        where _material.mandt = :client
+        and _stock.werks in ( select centro from :ti_centros )
+        WITH HINT ( ignore_plan_cache );
+
+    ti_stock_consolidado =
+    SELECT
+    _stock_propio.mandt,
+    _stock_propio.werks as centro,
+    _stock_propio.almacen,
+    _stock_propio.matnr as material_variante,
+    _stock_propio.charg as lote,
+    substr( charg, 3, 10 ) as lote_reducido,
+    _stock_propio.stock as stock,
+    _stock_propio.satnr as material_generico,
+    _stock_propio.size1 as talla,
+    _stock_propio.color as color,
+    _stock_propio.meins as unidad_medida,
+    _stock_propio.mtart
+    FROM :ti_stock_propio as _stock_propio
+    UNION
+    SELECT
+    _stock_consignacionproveedor.mandt,
+    _stock_consignacionproveedor.werks as centro,
+    _stock_consignacionproveedor.almacen,
+    _stock_consignacionproveedor.matnr as material_variante,
+    _stock_consignacionproveedor.charg as lote,
+    substr( charg, 3, 10 ) as lote_reducido,
+    _stock_consignacionproveedor.stock,
+    _stock_consignacionproveedor.satnr as material_generico,
+    _stock_consignacionproveedor.size1 as talla,
+    _stock_consignacionproveedor.color as color,
+    _stock_consignacionproveedor.meins as unidad_medida,
+    _stock_consignacionproveedor.mtart
+    FROM :ti_stock_consignacionproveedor as _stock_consignacionproveedor
+    WITH HINT ( ignore_plan_cache );
+
+    --Agrupar ZROH
+    ti_stock_lote_acumulado_hilaza =
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    lote_reducido as lote,
+    SUM( stock ) as stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_consolidado
+    WHERE mtart = 'ZROH'
+    GROUP BY  mandt, centro, almacen, material_variante, lote_reducido,
+    material_generico, talla, color, unidad_medida;
+
+    --Resto de materiales
+    ti_stock_lote_tela =
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    lote,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_consolidado
+    WHERE mtart <> 'ZROH';
+
+    RETURN
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    lote,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_lote_acumulado_hilaza
+    UNION
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    lote,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_lote_tela;
+
+  ENDMETHOD.
+
+  METHOD consultar_inventario2
+            BY DATABASE FUNCTION FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING nsdm_e_mard nsdm_e_mslb mara ztcxr1000_2.
+
+    declare client varchar(3) := session_context ('CLIENT');
+
+    --consultar parametro centro
+    ti_centros =
+    SELECT low as centro
+    FROM ztcxr1000_2
+    WHERE idparam = 'CENTROS_IN';
+
+    ti_stock_propio =
+        SELECT
+        _stock.mandt,
+        _stock.werks,
+        _stock.lgort as almacen,
+        _stock.matnr,
+        _stock.labst as stock,
+        _material.satnr,
+        _material.size1,
+        _material.color,
+        _material.meins,
+        _material.mtart
+        from mara as _material
+        inner join nsdm_e_mard as _stock
+        on _material.mandt = _stock.mandt
+        and _material.matnr = _stock.matnr
+        where _material.mandt = :client
+        and _stock.lvorm = ''
+        and _stock.werks in ( select centro from :ti_centros )
+        WITH HINT ( ignore_plan_cache );
+
+    ti_stock_consignacionproveedor =
+        SELECT
+        _stock.mandt,
+        _stock.werks,
+        _stock.lifnr as almacen,
+        _stock.matnr,
+        _stock.charg,
+        ( _stock.lblab ) as stock,
+        _material.satnr,
+        _material.size1,
+        _material.color,
+        _material.meins,
+        _material.mtart
+        from mara as _material
+        inner join nsdm_e_mslb as _stock
+        on _material.mandt = _stock.mandt
+        and _material.matnr = _stock.matnr
+        where _material.mandt = :client
+        and _stock.werks in ( select centro from :ti_centros )
+        WITH HINT ( ignore_plan_cache );
+
+    ti_stock_consolidado =
+    SELECT
+    _stock_propio.mandt,
+    _stock_propio.werks as centro,
+    _stock_propio.almacen,
+    _stock_propio.matnr as material_variante,
+    _stock_propio.stock as stock,
+    _stock_propio.satnr as material_generico,
+    _stock_propio.size1 as talla,
+    _stock_propio.color as color,
+    _stock_propio.meins as unidad_medida,
+    _stock_propio.mtart
+    FROM :ti_stock_propio as _stock_propio
+    UNION
+    SELECT
+    _stock_consignacionproveedor.mandt,
+    _stock_consignacionproveedor.werks as centro,
+    _stock_consignacionproveedor.almacen,
+    _stock_consignacionproveedor.matnr as material_variante,
+    _stock_consignacionproveedor.stock,
+    _stock_consignacionproveedor.satnr as material_generico,
+    _stock_consignacionproveedor.size1 as talla,
+    _stock_consignacionproveedor.color as color,
+    _stock_consignacionproveedor.meins as unidad_medida,
+    _stock_consignacionproveedor.mtart
+    FROM :ti_stock_consignacionproveedor as _stock_consignacionproveedor
+    WITH HINT ( ignore_plan_cache );
+
+    --Agrupar ZROH
+    ti_stock_lote_acumulado_hilaza =
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    SUM( stock ) as stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_consolidado
+    WHERE mtart = 'ZROH'
+    GROUP BY  mandt, centro, almacen, material_variante,
+    material_generico, talla, color, unidad_medida;
+
+    --Resto de materiales
+    ti_stock_lote_tela =
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_consolidado
+    WHERE mtart <> 'ZROH';
+
+    RETURN
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_lote_acumulado_hilaza
+    UNION
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_lote_tela;
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclmmi1204_inventarios_legado DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    CLASS-METHODS:
+
+      consultar_inventario
+        FOR TABLE FUNCTION ztmmi1204_1,
+
+      consultar_inventario2
+        FOR TABLE FUNCTION ztmmi1204_2.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclmmi1204_inventarios_legado IMPLEMENTATION.
+  METHOD consultar_inventario
+            BY DATABASE FUNCTION FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING nsdm_e_mchb nsdm_e_mslb mara ztcxr1000_2.
+
+    declare client varchar(3) := session_context ('CLIENT');
+
+    --consultar parametro centro
+    ti_centros =
+    SELECT low as centro
+    FROM ztcxr1000_2
+    WHERE idparam = 'CENTROS_IN';
+
+    ti_stock_propio =
+        SELECT
+        _stock.mandt,
+        _stock.werks,
+        _stock.lgort as almacen,
+        _stock.matnr,
+        _stock.charg,
+        ( _stock.clabs  + _stock.cspem ) as stock,
+        _material.satnr,
+        _material.size1,
+        _material.color,
+        _material.meins,
+        _material.mtart
+        from mara as _material
+        inner join nsdm_e_mchb as _stock
+        on _material.mandt = _stock.mandt
+        and _material.matnr = _stock.matnr
+        where _material.mandt = :client
+        and _stock.lvorm = ''
+        and _stock.werks in ( select centro from :ti_centros )
+        WITH HINT ( ignore_plan_cache );
+
+    ti_stock_consignacionproveedor =
+        SELECT
+        _stock.mandt,
+        _stock.werks,
+        _stock.lifnr as almacen,
+        _stock.matnr,
+        _stock.charg,
+        ( _stock.lblab ) as stock,
+        _material.satnr,
+        _material.size1,
+        _material.color,
+        _material.meins,
+        _material.mtart
+        from mara as _material
+        inner join nsdm_e_mslb as _stock
+        on _material.mandt = _stock.mandt
+        and _material.matnr = _stock.matnr
+        where _material.mandt = :client
+        and _stock.werks in ( select centro from :ti_centros )
+        WITH HINT ( ignore_plan_cache );
+
+    ti_stock_consolidado =
+    SELECT
+    _stock_propio.mandt,
+    _stock_propio.werks as centro,
+    _stock_propio.almacen,
+    _stock_propio.matnr as material_variante,
+    _stock_propio.charg as lote,
+    substr( charg, 3, 10 ) as lote_reducido,
+    _stock_propio.stock as stock,
+    _stock_propio.satnr as material_generico,
+    _stock_propio.size1 as talla,
+    _stock_propio.color as color,
+    _stock_propio.meins as unidad_medida,
+    _stock_propio.mtart
+    FROM :ti_stock_propio as _stock_propio
+    UNION
+    SELECT
+    _stock_consignacionproveedor.mandt,
+    _stock_consignacionproveedor.werks as centro,
+    _stock_consignacionproveedor.almacen,
+    _stock_consignacionproveedor.matnr as material_variante,
+    _stock_consignacionproveedor.charg as lote,
+    substr( charg, 3, 10 ) as lote_reducido,
+    _stock_consignacionproveedor.stock,
+    _stock_consignacionproveedor.satnr as material_generico,
+    _stock_consignacionproveedor.size1 as talla,
+    _stock_consignacionproveedor.color as color,
+    _stock_consignacionproveedor.meins as unidad_medida,
+    _stock_consignacionproveedor.mtart
+    FROM :ti_stock_consignacionproveedor as _stock_consignacionproveedor
+    WITH HINT ( ignore_plan_cache );
+
+    --Agrupar ZROH
+    ti_stock_lote_acumulado_hilaza =
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    lote_reducido as lote,
+    SUM( stock ) as stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_consolidado
+    WHERE mtart = 'ZROH'
+    GROUP BY  mandt, centro, almacen, material_variante, lote_reducido,
+    material_generico, talla, color, unidad_medida;
+
+    --Resto de materiales
+    ti_stock_lote_tela =
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    lote,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_consolidado
+    WHERE mtart <> 'ZROH';
+
+    RETURN
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    lote,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_lote_acumulado_hilaza
+    UNION
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    lote,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_lote_tela;
+
+  ENDMETHOD.
+
+  METHOD consultar_inventario2
+            BY DATABASE FUNCTION FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING nsdm_e_mard nsdm_e_mslb mara ztcxr1000_2.
+
+    declare client varchar(3) := session_context ('CLIENT');
+
+    --consultar parametro centro
+    ti_centros =
+    SELECT low as centro
+    FROM ztcxr1000_2
+    WHERE idparam = 'CENTROS_IN';
+
+    ti_stock_propio =
+        SELECT
+        _stock.mandt,
+        _stock.werks,
+        _stock.lgort as almacen,
+        _stock.matnr,
+        _stock.labst as stock,
+        _material.satnr,
+        _material.size1,
+        _material.color,
+        _material.meins,
+        _material.mtart
+        from mara as _material
+        inner join nsdm_e_mard as _stock
+        on _material.mandt = _stock.mandt
+        and _material.matnr = _stock.matnr
+        where _material.mandt = :client
+        and _stock.lvorm = ''
+        and _stock.werks in ( select centro from :ti_centros )
+        WITH HINT ( ignore_plan_cache );
+
+    ti_stock_consignacionproveedor =
+        SELECT
+        _stock.mandt,
+        _stock.werks,
+        _stock.lifnr as almacen,
+        _stock.matnr,
+        _stock.charg,
+        ( _stock.lblab ) as stock,
+        _material.satnr,
+        _material.size1,
+        _material.color,
+        _material.meins,
+        _material.mtart
+        from mara as _material
+        inner join nsdm_e_mslb as _stock
+        on _material.mandt = _stock.mandt
+        and _material.matnr = _stock.matnr
+        where _material.mandt = :client
+        and _stock.werks in ( select centro from :ti_centros )
+        WITH HINT ( ignore_plan_cache );
+
+    ti_stock_consolidado =
+    SELECT
+    _stock_propio.mandt,
+    _stock_propio.werks as centro,
+    _stock_propio.almacen,
+    _stock_propio.matnr as material_variante,
+    _stock_propio.stock as stock,
+    _stock_propio.satnr as material_generico,
+    _stock_propio.size1 as talla,
+    _stock_propio.color as color,
+    _stock_propio.meins as unidad_medida,
+    _stock_propio.mtart
+    FROM :ti_stock_propio as _stock_propio
+    UNION
+    SELECT
+    _stock_consignacionproveedor.mandt,
+    _stock_consignacionproveedor.werks as centro,
+    _stock_consignacionproveedor.almacen,
+    _stock_consignacionproveedor.matnr as material_variante,
+    _stock_consignacionproveedor.stock,
+    _stock_consignacionproveedor.satnr as material_generico,
+    _stock_consignacionproveedor.size1 as talla,
+    _stock_consignacionproveedor.color as color,
+    _stock_consignacionproveedor.meins as unidad_medida,
+    _stock_consignacionproveedor.mtart
+    FROM :ti_stock_consignacionproveedor as _stock_consignacionproveedor
+    WITH HINT ( ignore_plan_cache );
+
+    --Agrupar ZROH
+    ti_stock_lote_acumulado_hilaza =
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    SUM( stock ) as stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_consolidado
+    WHERE mtart = 'ZROH'
+    GROUP BY  mandt, centro, almacen, material_variante,
+    material_generico, talla, color, unidad_medida;
+
+    --Resto de materiales
+    ti_stock_lote_tela =
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_consolidado
+    WHERE mtart <> 'ZROH';
+
+    RETURN
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_lote_acumulado_hilaza
+    UNION
+    SELECT
+    mandt,
+    centro,
+    almacen,
+    material_variante,
+    stock,
+    material_generico,
+    talla,
+    color,
+    unidad_medida
+    FROM :ti_stock_lote_tela;
+
+  ENDMETHOD.
+
+ENDCLASS.

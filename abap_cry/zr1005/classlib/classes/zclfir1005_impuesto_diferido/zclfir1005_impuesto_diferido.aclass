@@ -1,0 +1,3132 @@
+CLASS zclfir1005_impuesto_diferido DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_puco           TYPE  ska1-ktopl VALUE 'PUCO',
+               gc_pcgl           TYPE  ska1-ktopl VALUE 'PCGL',
+               gc_activo         TYPE c LENGTH 6 VALUE 'ACTIVO',
+               gc_pasivo         TYPE c LENGTH 6 VALUE 'PASIVO',
+               gc_ingreso        TYPE c LENGTH 7 VALUE 'INGRESO',
+               gc_gasto          TYPE c LENGTH 5 VALUE 'GASTO',
+               gc_estado_anulado TYPE c VALUE 'A'.
+
+    TYPES: BEGIN OF tp_es_ztfir1005_1.
+             INCLUDE TYPE ztfir1005_1.
+             INCLUDE TYPE vimflagtab.
+    TYPES: END OF tp_es_ztfir1005_1.
+
+    TYPES:BEGIN OF tp_es_ledger_comparacion,
+            logsys        TYPE glu1-logsys,
+            orgunit       TYPE char6,
+            curtp         TYPE t881-curt1,
+            racct         TYPE glu1-racct,
+            field1        TYPE comp_field,
+            field2        TYPE comp_field,
+            field3        TYPE comp_field ,                 "2995983
+            field4        TYPE comp_field ,                 "2995983
+            field5        TYPE comp_field ,                 "2995983
+            currency      TYPE glxcomp-currency,
+            runit         TYPE glu1-runit,
+            cumyear       TYPE gjahr,
+            cumpoper      TYPE poper,
+            b_amount      TYPE glu1-tsl,
+            c_amount      TYPE glu1-tsl,
+            diff_amount   TYPE glu1-tsl,
+            b_amount_abs  TYPE glu1-tsl,
+            c_amount_abs  TYPE glu1-tsl,
+            b_quantity    TYPE glu1-msl,
+            c_quantity    TYPE glu1-msl,
+            diff_quantity TYPE glu1-msl,
+            diff          TYPE char1,
+            remark        TYPE glxcomp-remark,
+          END OF tp_es_ledger_comparacion,
+
+          BEGIN OF tp_es_impuesto_diferido,
+            bukrs              TYPE t001-bukrs, "
+            clase_cta          TYPE char1,
+            grupo_ctas         TYPE t077z-txt30,
+            sort_tipo_impuesto TYPE ztfir1005_3-clase_cuenta,
+            cuenta             TYPE glu1-racct,
+            den_cuenta         TYPE skat-txt50,
+            ledger_basico      TYPE glu1-tsl,
+            ledger_comparativo TYPE glu1-tsl,
+            diferencia         TYPE glu1-tsl,
+            moneda             TYPE glu1-rtcur,
+            permanente         TYPE char1,
+            imponible          TYPE char4,
+            deducible          TYPE char4,
+            porcentaje         TYPE ztfir1005_1-porcentaje,
+            categoria          TYPE ztfir1005_1-categoria,
+            impuesto_diferido  TYPE glu1-tsl,
+            tipo_impuesto      TYPE ztfir1005_3-clase_cuenta,
+            line_color         TYPE char4,
+            prkey              TYPE rf011p-prkey,
+            stufe              TYPE rf011p-stufe,
+          END OF tp_es_impuesto_diferido,
+
+          BEGIN OF tp_es_impuesto_diferido_total,
+            bukrs             TYPE t001-bukrs,
+            imponible         TYPE char4,
+            deducible         TYPE char4,
+            moneda            TYPE glu1-rtcur,
+            categoria         TYPE ztfir1005_1-categoria,
+            impuesto_diferido TYPE glu1-tsl,
+          END OF tp_es_impuesto_diferido_total,
+
+          BEGIN OF tp_es_comparacion_total,
+            orgunit     TYPE char6,
+            racct       TYPE glu1-racct,
+            currency    TYPE glxcomp-currency,
+            cumyear     TYPE glu1-ryear,
+            b_amount    TYPE glu1-tsl,
+            c_amount    TYPE glu1-tsl,
+            diff_amount TYPE glu1-tsl,
+          END OF tp_es_comparacion_total,
+
+          BEGIN OF tp_es_ska1,
+            saknr TYPE ska1-saknr,
+            bilkt TYPE ska1-bilkt,
+            ktoks TYPE ska1-ktoks,
+            txt50 TYPE skat-txt50,
+            spras TYPE t077z-spras,
+            ktopl TYPE t077z-ktopl,
+            txt30 TYPE t077z-txt30,
+          END OF tp_es_ska1,
+
+          BEGIN OF tp_es_cuenta_x_sociedad,
+            bukrs TYPE bukrs,
+            saknr TYPE skb1-saknr,                                                " Cuenta para en el plan de cuenta Orginal
+            altkt TYPE skb1-altkt,                                                " Cuenta para en el plan de cuenta alternativo
+          END OF tp_es_cuenta_x_sociedad,
+
+          BEGIN OF tp_es_log,
+            semaforo(4)   TYPE c,
+            num_registro  TYPE i,
+            bukrs         TYPE t001-bukrs,
+            grupo_cuentas TYPE t077z-txt30,
+            clase_cta     TYPE ztfir1005_3-clase_cuenta,
+            cuenta        TYPE glu1-racct,
+            cuenta_gasto  TYPE glu1-racct,
+            impuesto      TYPE glu1-tsl,
+            moneda        TYPE glu1-rtcur,
+            documento     TYPE belnr_d,
+            mensaje(150)  TYPE c,
+          END OF tp_es_log.
+
+    TYPES: tp_ti_ledger_comparacion      TYPE STANDARD TABLE OF tp_es_ledger_comparacion WITH EMPTY KEY,
+           tp_ti_impuesto_diferido       TYPE STANDARD TABLE OF tp_es_impuesto_diferido WITH EMPTY KEY,
+           tp_ti_comparacion_total       TYPE STANDARD TABLE OF tp_es_comparacion_total WITH KEY orgunit racct currency cumyear,
+           tp_ti_cuentas_permanentes     TYPE STANDARD TABLE OF ztfir1005_4 WITH EMPTY KEY,
+           tp_ti_porcentaje_cuenta       TYPE STANDARD TABLE OF ztfir1005_1 WITH EMPTY KEY,
+           tp_ti_cuentas_contabilizacion TYPE STANDARD TABLE OF ztfir1005_3 WITH EMPTY KEY,
+           tp_ti_ska1                    TYPE STANDARD TABLE OF tp_es_ska1 WITH EMPTY KEY,
+           tp_ti_cuenta_x_sociedad       TYPE STANDARD TABLE OF tp_es_cuenta_x_sociedad WITH EMPTY KEY,
+           tp_ti_log                     TYPE STANDARD TABLE OF tp_es_log WITH EMPTY KEY,
+           tp_ti_impuesto_diferido_total TYPE STANDARD TABLE OF tp_es_impuesto_diferido_total
+                                         WITH NON-UNIQUE KEY bukrs imponible deducible moneda categoria,
+           tp_ti_historial_imp_diferido  TYPE STANDARD TABLE OF ztfir1005_5 WITH EMPTY KEY,
+           tp_ti_meses                   TYPE STANDARD TABLE OF  t247,
+           gtp_r_racct                   TYPE RANGE OF glu1-racct.
+
+    TYPES: tp_r_numero_cuenta TYPE RANGE OF glu1-racct,
+           tp_r_monat         TYPE RANGE OF ztfir1005_5-monat,
+           tp_r_estado        TYPE RANGE OF ztfir1005_5-estatus.
+
+    CONSTANTS: gc_a TYPE c VALUE 'A',
+               gc_i TYPE c VALUE 'I'.
+
+    DATA: gti_impuesto_diferido TYPE tp_ti_impuesto_diferido.
+
+    CLASS-DATA:
+      g_operacion                TYPE char1,
+      gti_ztfir1005_1            TYPE STANDARD TABLE OF tp_es_ztfir1005_1,
+      gti_historico_imp_diferido TYPE tp_ti_historial_imp_diferido.
+
+    METHODS:
+
+      contabilizar_impuesto_diferido
+        IMPORTING
+          i_test                  TYPE flag OPTIONAL
+          i_bukrs                 TYPE bukrs
+          i_ejercicio             TYPE glu1-ryear
+          i_mes_final             TYPE char3
+          i_ledger_base           TYPE glfunct-rldnr
+          i_ledger_comparacion    TYPE glfunct-rldnr
+          i_fecha_contabilizacion TYPE d
+          i_clase_documento       TYPE bkpf-blart
+          i_periodo               TYPE monat
+        CHANGING
+          c_ti_impuesto_diferido  TYPE tp_ti_impuesto_diferido,
+      procesar_cuentas_permanente
+        IMPORTING
+          i_bukrs                TYPE t001-bukrs
+        CHANGING
+          c_ti_impuesto_diferido TYPE zclfir1005_impuesto_diferido=>tp_ti_impuesto_diferido.
+
+    CLASS-METHODS:
+      guardar_categoria
+        CHANGING
+          c_ti_extract     TYPE ANY TABLE
+          c_ti_total       TYPE ANY TABLE
+          c_es_ztfir1005_2 TYPE ztfir1005_2,
+      datos_asignar_categoria
+        IMPORTING
+          i_ti_total       TYPE ANY TABLE
+        CHANGING
+          c_es_ztfir1005_2 TYPE ztfir1005_2,
+      val_pantalla_asignar_categoria
+        IMPORTING
+          VALUE(i_es_ztfir1005_2) TYPE ztfir1005_2
+        RETURNING
+          VALUE(r_es_mensajes)    TYPE bapiret2,
+      mod_pantalla_asignar_categoria
+        IMPORTING
+          VALUE(i_es_ztfir1005_2) TYPE ztfir1005_2,
+      cargar_historico_imp_diferido
+        IMPORTING
+          i_r_bukrs         TYPE cnv_pe_t_bukrs_range
+          i_r_gjahr         TYPE /accgo/cas_tt_gjahr_range
+          i_r_belnr         TYPE j_1gvl_rng_belnr_t
+          i_r_hkont         TYPE fkk_rt_hkont_kk
+          i_r_monat         TYPE tp_r_monat
+          i_r_doc_anulacion TYPE j_1gvl_rng_belnr_t
+          i_r_estado        TYPE tp_r_estado,
+      recupera_cuenta
+        CHANGING
+          c_r_numero_cuenta TYPE gtp_r_racct
+          c_ledger          TYPE rldnr,
+      expor_comparacion
+        CHANGING
+          c_ti_comparacion    TYPE ANY TABLE
+          c_dt_call_list_tool TYPE char1 OPTIONAL.
+
+
+
+  PROTECTED SECTION.
+
+    DATA: go_parametros TYPE REF TO zclcxr1000_parametros,
+          gti_log       TYPE tp_ti_log.
+
+    METHODS:
+      cargar_parametrizacion
+        IMPORTING
+          i_bukrs                      TYPE bukrs
+        EXPORTING
+          e_ti_cuentas_contabilizacion TYPE tp_ti_cuentas_contabilizacion
+          e_ti_cuenta_x_sociedad       TYPE tp_ti_cuenta_x_sociedad,
+      consultar_comparacion_ledger
+        IMPORTING
+          i_bukrs                      TYPE bukrs
+          i_ejercicio                  TYPE glu1-ryear
+          i_ledger_base                TYPE glfunct-rldnr
+          i_ledger_comparacion         TYPE glfunct-rldnr
+          i_version                    TYPE glu1-rvers
+          i_mes_inicio                 TYPE char3
+          i_mes_final                  TYPE char3
+          VALUE(i_r_numero_cuenta)     TYPE tp_r_numero_cuenta
+          i_ti_cuentas_contabilizacion TYPE tp_ti_cuentas_contabilizacion
+        RETURNING
+          VALUE(r_ti_diferencias)      TYPE tp_ti_comparacion_total,
+      consultar_cuentas
+        IMPORTING
+          i_bukrs                  TYPE bukrs
+        EXPORTING
+          e_ti_cuentas_permanentes TYPE tp_ti_cuentas_permanentes
+          e_ti_ska1                TYPE tp_ti_ska1
+          e_ti_porcentaje_cuenta   TYPE tp_ti_porcentaje_cuenta
+        CHANGING
+          c_ti_diferencias         TYPE tp_ti_comparacion_total OPTIONAL,
+      consolidar_impuesto_diferido
+        IMPORTING
+          i_bukrs                 TYPE bukrs
+          i_solo_diferencia       TYPE flag
+          i_fecha_contabilizacion TYPE d
+        CHANGING
+          c_ti_diferencias        TYPE tp_ti_comparacion_total
+          c_ti_impuesto_diferido  TYPE tp_ti_impuesto_diferido.
+
+  PRIVATE SECTION.
+    METHODS: consultar_meses
+      EXPORTING
+        e_ti_meses TYPE STANDARD TABLE,
+      consultar_norma_ledger
+        IMPORTING
+          i_ledger_base     TYPE glfunct-rldnr
+        EXPORTING
+          e_es_norma_ledger TYPE tacc_trgt_ldgr,
+
+      verificar_anulacion_documento
+        IMPORTING
+          i_bukrs                     TYPE bukrs
+          i_r_cuentas                 TYPE tp_r_numero_cuenta
+        EXPORTING
+          e_ti_historial_imp_diferido TYPE tp_ti_historial_imp_diferido
+        RETURNING
+          VALUE(r_anular)             TYPE flag,
+      anular_documento
+        IMPORTING
+          i_es_norma_ledger       TYPE tacc_trgt_ldgr
+          i_bukrs                 TYPE t001-bukrs
+          i_fecha_contabilizacion TYPE d
+          i_clase_documento       TYPE bkpf-blart
+          i_periodo               TYPE monat
+          i_mes_final             TYPE char3
+          i_ti_meses              TYPE tp_ti_meses
+          i_es_imp_diferido_total TYPE tp_es_impuesto_diferido_total
+          i_r_cuentas             TYPE tp_r_numero_cuenta,
+      contabilizar_subtotal
+        IMPORTING
+          i_test                       TYPE flag
+          i_bukrs                      TYPE t001-bukrs
+          i_ledger_base                TYPE glfunct-rldnr
+          i_ledger_comparacion         TYPE glfunct-rldnr
+          i_fecha_contabilizacion      TYPE d
+          i_clase_documento            TYPE bkpf-blart
+          i_periodo                    TYPE monat
+          i_mes_final                  TYPE char3
+          i_clase_cuenta               TYPE ztfir1005_3-clase_cuenta
+          i_cuenta_gasto               TYPE hkont
+          i_cuenta_contabilizar        TYPE hkont
+          i_ceco                       TYPE ztfir1005_3-kostl
+          i_centro_beneficio           TYPE prctr
+          i_division                   TYPE gsber
+          i_es_imp_diferido_total      TYPE tp_es_impuesto_diferido_total
+          i_ultimo                     TYPE char1
+          i_r_cuentas                  TYPE tp_r_numero_cuenta
+        CHANGING
+          c_ti_posiciones_cuenta_mayor TYPE  bapiacgl09_tab
+          c_ti_cantidades              TYPE  bapiaccr09_tab
+          c_ti_historial_imp_diferido  TYPE tp_ti_historial_imp_diferido,
+
+      determinar_clase_cuenta
+        IMPORTING
+          i_cuenta              TYPE glu1-racct
+        RETURNING
+          VALUE(r_clase_cuenta) TYPE char7,
+      construir_catalogo_log
+        IMPORTING
+          i_ti_log             TYPE zclfir1005_impuesto_diferido=>tp_ti_log
+        RETURNING
+          VALUE(r_ti_catalogo) TYPE lvc_t_fcat.
+
+ENDCLASS.
+
+
+
+CLASS zclfir1005_impuesto_diferido IMPLEMENTATION.
+
+  METHOD datos_asignar_categoria.
+
+    gti_ztfir1005_1 = i_ti_total[].
+    "verifica si existen registros marcados
+    DELETE gti_ztfir1005_1 WHERE mark IS INITIAL.
+    "Solo es permitido seleccionar un unico registro
+    IF lines( gti_ztfir1005_1 ) GT 1.
+      "Seleccione sólo un registro
+      MESSAGE s102(ag) DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        c_es_ztfir1005_2 = CORRESPONDING #( gti_ztfir1005_1[ 1 ] ).
+      CATCH cx_sy_itab_line_not_found.
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD mod_pantalla_asignar_categoria.
+
+    CLEAR: g_operacion.
+
+    "...Se valida si ya existe la Categoria
+    SELECT SINGLE categoria
+     FROM ztfir1005_2
+     WHERE bukrs     EQ @i_es_ztfir1005_2-bukrs
+     AND   categoria EQ @i_es_ztfir1005_2-categoria
+     INTO @i_es_ztfir1005_2-categoria.
+
+    IF sy-subrc EQ 0.
+      g_operacion = gc_a.
+    ELSE.
+      g_operacion = gc_i.
+    ENDIF.
+
+    IF g_operacion EQ gc_a.
+      LOOP AT SCREEN.
+        IF screen-group1 EQ 'MOD'.
+          screen-input = 0.
+          MODIFY SCREEN.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD val_pantalla_asignar_categoria.
+
+    IF i_es_ztfir1005_2-bukrs IS INITIAL OR
+       i_es_ztfir1005_2-categoria IS INITIAL OR
+       i_es_ztfir1005_2-endda IS INITIAL OR
+       i_es_ztfir1005_2-begda IS INITIAL.
+
+      r_es_mensajes = VALUE #( type = 'I' id = '/PLMU/UI_LBL' number = '001' ).
+      RETURN.
+
+    ENDIF.
+
+    "valida que la fecha Fin sea mayor que la fecha Inicio
+    IF i_es_ztfir1005_2-begda GT i_es_ztfir1005_2-endda.
+      r_es_mensajes = VALUE #( type = 'I'  id = 'CACSMD' number = '025'
+                               message_v1 = i_es_ztfir1005_2-begda message_v2 = i_es_ztfir1005_2-begda ).
+      RETURN.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD guardar_categoria.
+
+    DATA: es_ztfir1005_1 LIKE LINE OF gti_ztfir1005_1.
+
+    IF g_operacion = 'A'.
+      gti_ztfir1005_1 = c_ti_total[].
+
+      READ TABLE gti_ztfir1005_1 ASSIGNING FIELD-SYMBOL(<fs_es_ztfir1005_1>)
+                                 WITH KEY bukrs      = c_es_ztfir1005_2-bukrs
+                                          categoria  = c_es_ztfir1005_2-categoria.
+      IF sy-subrc IS INITIAL.
+        <fs_es_ztfir1005_1>-begda  = c_es_ztfir1005_2-begda.
+        <fs_es_ztfir1005_1>-endda  = c_es_ztfir1005_2-endda.
+
+        c_ti_extract[] = gti_ztfir1005_1[].
+
+        <fs_es_ztfir1005_1>-action = 'U'.
+
+        c_ti_total[] = gti_ztfir1005_1.
+
+      ENDIF.
+
+    ENDIF.
+
+    MODIFY ztfir1005_2 FROM c_es_ztfir1005_2.
+
+    IF sy-subrc IS INITIAL.
+      MESSAGE s091(zfi01) WITH c_es_ztfir1005_2-bukrs c_es_ztfir1005_2-categoria.
+      COMMIT WORK AND WAIT.
+    ELSE.
+      MESSAGE s218(/accgo/oe_msg).
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD cargar_parametrizacion.
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = 'R1005'  ).
+    ENDIF.
+
+    SELECT *
+    FROM ztfir1005_3
+    WHERE bukrs = @i_bukrs
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_cuentas_contabilizacion.
+
+*    SELECT bukrs, saknr, altkt
+*    FROM skb1
+*    WHERE bukrs = @i_bukrs
+*    INTO CORRESPONDING FIELDS OF TABLE @e_ti_cuenta_x_sociedad.
+
+  ENDMETHOD.
+
+  METHOD consultar_comparacion_ledger.
+
+    DATA: ti_bdcdata            TYPE TABLE OF bdcdata WITH EMPTY KEY,
+          ti_mensajes_retorno   TYPE STANDARD TABLE OF bdcmsgcoll,
+          ti_comparacion_ledger TYPE tp_ti_ledger_comparacion.
+
+    "Si no se ingresan cuentas se agregan las configuradas por defecto
+    IF i_r_numero_cuenta IS INITIAL.
+      i_r_numero_cuenta = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CUENTAS_DF' )
+                              ( CORRESPONDING #( es_parametro MAPPING option = opti )  )
+                         ).
+    ENDIF.
+
+    "Cuentas que se deben excluir
+    i_r_numero_cuenta = VALUE #( BASE i_r_numero_cuenta
+                                 FOR es_cuentas IN i_ti_cuentas_contabilizacion
+                                 ( sign = 'E' option = 'EQ' low = es_cuentas-cuenta )
+                               ).
+    "Configuracion de parametros para recuperar comparacion de ledger
+
+    ti_bdcdata = VALUE #( ( program  = 'RGUCOMP4' dynpro   = '1000' dynbegin = abap_true )
+                          ( fnam = 'BDC_OKCODE' fval = '=ONLI' )
+                          ( fnam = 'P_BRYEAR' fval = i_ejercicio )
+                        ).
+
+    DATA(opciones) = VALUE ctu_params( dismode  = 'N'
+                                       defsize  = abap_true
+                                       racommit = abap_true ).
+    "Se exportan las cuentas a memoria para que se puedan enviar a la tx GCAC
+    EXPORT: cuentas = i_r_numero_cuenta
+            TO DATABASE indx(sc) ID 'CUENTAS',
+            ledger_base = i_ledger_base
+            TO DATABASE indx(sc) ID 'P_BRLDNR'.
+
+    SET PARAMETER ID 'BUK' FIELD i_bukrs.
+    SET PARAMETER ID 'GJR' FIELD i_ejercicio.
+    SET PARAMETER ID 'VPE' FIELD i_mes_inicio.
+    SET PARAMETER ID 'BPE' FIELD i_mes_final.
+    SET PARAMETER ID 'GLN' FIELD i_ledger_comparacion.
+    SET PARAMETER ID 'GVS' FIELD i_version.
+
+    TRY.
+        CALL TRANSACTION 'GCAC' WITH AUTHORITY-CHECK
+                                USING ti_bdcdata
+                                OPTIONS FROM opciones
+                                MESSAGES INTO ti_mensajes_retorno.
+
+        IMPORT ti_comparacion_d = ti_comparacion_ledger
+        FROM DATABASE indx(sc) ID 'TI_COMPARACION_D'.
+*      CATCH cx_sy_import_mismatch_error ##NO_HANDLER.
+      CATCH cx_sy_authorization_error ##NO_HANDLER.
+    ENDTRY.
+    DELETE FROM DATABASE indx(sc) ID 'TI_COMPARACION_D'.
+    " se considera solo moneda de sociedad, CURTP = 10
+    DELETE ti_comparacion_ledger WHERE curtp NE '10'.
+
+    LOOP AT ti_comparacion_ledger INTO DATA(es_comparacion_ledger).
+      COLLECT CORRESPONDING tp_es_comparacion_total( es_comparacion_ledger )
+      INTO r_ti_diferencias.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD consultar_cuentas.
+
+    "Consulta cuentas y grupo de cuentas existentes.
+    IF c_ti_diferencias IS SUPPLIED AND c_ti_diferencias IS NOT INITIAL.
+      SELECT ska1~saknr, ska1~bilkt, ska1~ktoks, skat~txt50,
+             t~spras, t~ktopl, txt30
+        FROM ska1
+        INNER JOIN skat
+        ON ska1~saknr EQ skat~saknr
+        LEFT JOIN t077z AS t
+        ON t~spras EQ @sy-langu
+        AND t~ktopl = ska1~ktopl
+        AND t~ktoks = ska1~ktoks
+        FOR ALL ENTRIES IN @c_ti_diferencias
+            WHERE
+            (   ska1~ktopl EQ @gc_puco
+            AND ska1~saknr EQ @c_ti_diferencias-racct
+            AND skat~spras = @sy-langu
+            )
+            OR ska1~ktopl EQ @gc_pcgl
+       INTO TABLE @e_ti_ska1.
+    ENDIF.
+
+    "porcentaje cuentas
+    SELECT *
+    FROM ztfir1005_1
+    WHERE bukrs = @i_bukrs
+    INTO TABLE @e_ti_porcentaje_cuenta.
+
+    "cuentas que han sido marcadas como permanentes de acuerdo a la sociedad.
+    SELECT *
+      FROM ztfir1005_4
+      WHERE bukrs = @i_bukrs
+      INTO CORRESPONDING FIELDS OF TABLE @e_ti_cuentas_permanentes.
+
+  ENDMETHOD.
+
+  METHOD consolidar_impuesto_diferido.
+
+    DATA: ti_porcentaje_cuenta TYPE tp_ti_porcentaje_cuenta,
+          es_porcentaje_cuenta LIKE LINE OF ti_porcentaje_cuenta,
+          ti_ska1              TYPE tp_ti_ska1,
+          es_ska1              LIKE LINE OF ti_ska1,
+          clase_cuenta         TYPE char7.
+
+    FIELD-SYMBOLS: <fs_es_impuesto_diferido>   LIKE LINE OF  c_ti_impuesto_diferido,
+                   <fs_es_impuesto_diferido_d> LIKE LINE OF  c_ti_impuesto_diferido.
+
+    CHECK c_ti_diferencias IS NOT INITIAL.
+
+    consultar_cuentas(
+      EXPORTING
+        i_bukrs                  = i_bukrs
+      IMPORTING
+        e_ti_cuentas_permanentes = DATA(ti_cuentas_permanentes)
+        e_ti_ska1                = ti_ska1
+        e_ti_porcentaje_cuenta   = ti_porcentaje_cuenta
+      CHANGING
+        c_ti_diferencias         = c_ti_diferencias  ).
+
+    SORT c_ti_diferencias BY racct.
+
+    DELETE ti_porcentaje_cuenta WHERE nodo NOT IN VALUE fkk_rt_hkont_kk(  FOR es_diferencia IN c_ti_diferencias
+                                                                            ( sign = 'I' option = 'EQ' low = es_diferencia-racct ) )
+                                    OR ( endda IS INITIAL OR begda IS INITIAL ).
+
+    LOOP AT c_ti_diferencias ASSIGNING FIELD-SYMBOL(<fs_es_diferenia>).
+
+      CLEAR: es_porcentaje_cuenta, es_ska1, clase_cuenta.
+
+      READ TABLE ti_porcentaje_cuenta INTO es_porcentaje_cuenta
+                                      WITH KEY nodo = <fs_es_diferenia>-racct.
+
+      IF sy-subrc = 0 AND ( es_porcentaje_cuenta-endda < i_fecha_contabilizacion OR
+                            es_porcentaje_cuenta-begda > i_fecha_contabilizacion ).
+        CONTINUE.
+      ENDIF.
+
+      READ TABLE ti_ska1 INTO es_ska1 WITH KEY saknr = <fs_es_diferenia>-racct
+                                               ktopl = gc_puco.
+
+      APPEND INITIAL LINE TO c_ti_impuesto_diferido ASSIGNING <fs_es_impuesto_diferido>.
+
+      clase_cuenta = determinar_clase_cuenta( <fs_es_diferenia>-racct ).
+
+
+      <fs_es_impuesto_diferido> = VALUE #( bukrs      = <fs_es_diferenia>-orgunit
+                                           clase_cta  = <fs_es_diferenia>-racct(1)
+                                           grupo_ctas = es_ska1-txt30
+                                           den_cuenta = es_ska1-txt50
+                                           cuenta     = <fs_es_diferenia>-racct
+                                           ledger_basico = <fs_es_diferenia>-b_amount
+                                           ledger_comparativo = <fs_es_diferenia>-c_amount
+                                           diferencia = <fs_es_diferenia>-diff_amount
+                                           moneda = <fs_es_diferenia>-currency
+
+                                         ).
+
+      IF  ( <fs_es_diferenia>-b_amount > <fs_es_diferenia>-c_amount ).
+
+        IF ( clase_cuenta = gc_activo OR clase_cuenta = gc_ingreso ).
+
+          <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+          <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+        ELSEIF clase_cuenta = gc_pasivo OR clase_cuenta = gc_gasto.
+
+          <fs_es_impuesto_diferido>-deducible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+
+        ENDIF.
+
+      ELSEIF ( <fs_es_diferenia>-b_amount < <fs_es_diferenia>-c_amount ).
+
+        IF ( clase_cuenta = gc_pasivo OR clase_cuenta = gc_gasto ).
+
+          <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+          <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+        ELSEIF clase_cuenta = gc_activo OR clase_cuenta = gc_ingreso.
+
+          <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+          <fs_es_impuesto_diferido>-deducible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+
+        ENDIF.
+
+      ENDIF.
+
+      " De acuerdo a la naturaleza de las cuentas contables, se debe evaluar la comparación
+      " ya que si la cuenta pertenece al pasivo o egreso el tratamiento al momento de comparar
+      " cambia pues no siempre el valor mayor matemático es el mayor valor contable.
+      IF clase_cuenta = gc_pasivo OR clase_cuenta = gc_ingreso.
+        " 1er caso. si el valor (-) está en el Ledger tributario, se debe comptrtar como mayor valor.
+        IF <fs_es_diferenia>-b_amount LT 0 AND <fs_es_diferenia>-c_amount GE 0.
+          <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+          " Cuando me da que el impuesto es IMPONIBLE el tipo de este debe ser PASIVO
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+          " 2do. caso. Si el valor (-) está en el ledger comparatvo, se debe comportar como menor valor.
+        ELSEIF  <fs_es_diferenia>-b_amount GE 0 AND <fs_es_diferenia>-c_amount LT 0.
+          <fs_es_impuesto_diferido>-deducible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+          " Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+
+          " 3er caso. si ambos valores son (-) el tratamiento debe ser con los valores absolutos.
+        ELSEIF  <fs_es_diferenia>-b_amount LT 0 AND <fs_es_diferenia>-c_amount LT 0.
+          IF abs( <fs_es_diferenia>-b_amount ) GT abs( <fs_es_diferenia>-c_amount ).
+            <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+            <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+            " Cuando me da que el impuesto es IMPONIBLE el tipo de este debe ser PASIVO
+            <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+          ELSE.
+            <fs_es_impuesto_diferido>-deducible = icon_radiobutton.
+            <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+            " Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO
+            <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      "Valida si la cuenta esta marcada como permanente
+      IF line_exists( ti_cuentas_permanentes[ bukrs = <fs_es_diferenia>-orgunit hkont = <fs_es_diferenia>-racct ] ).
+        <fs_es_impuesto_diferido> = VALUE #( BASE <fs_es_impuesto_diferido>
+                                             permanente = abap_true
+                                             imponible  = icon_wd_radio_button_empty
+                                             deducible  = icon_wd_radio_button_empty
+                                             tipo_impuesto  = space
+                                           ).
+      ENDIF.
+
+      <fs_es_impuesto_diferido>-sort_tipo_impuesto = <fs_es_impuesto_diferido>-tipo_impuesto.
+
+      IF ( <fs_es_impuesto_diferido>-permanente EQ space AND <fs_es_impuesto_diferido>-imponible EQ space AND <fs_es_impuesto_diferido>-deducible EQ space ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true AND <fs_es_impuesto_diferido>-imponible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true AND <fs_es_impuesto_diferido>-deducible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-imponible EQ abap_true AND <fs_es_impuesto_diferido>-deducible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true ).
+
+        <fs_es_impuesto_diferido>-impuesto_diferido = 0.
+
+        "Signo del valor del impuesto diferido, dependiendo si es activo o pasivo
+        <fs_es_impuesto_diferido>-impuesto_diferido = COND #( WHEN ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_activo AND
+                                                                     <fs_es_impuesto_diferido>-impuesto_diferido LT 0 )
+                                                                   OR
+                                                                   ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_pasivo AND
+                                                                     <fs_es_impuesto_diferido>-impuesto_diferido GT 0 )
+                                                                     THEN
+                                                                <fs_es_impuesto_diferido>-impuesto_diferido * -1
+                                                             ).
+
+      ELSE.
+
+        IF line_exists( ti_porcentaje_cuenta[ nodo = <fs_es_diferenia>-racct ] ).
+
+          LOOP AT ti_porcentaje_cuenta INTO es_porcentaje_cuenta WHERE   nodo = <fs_es_diferenia>-racct
+                                                                   AND ( endda >= i_fecha_contabilizacion OR begda <= i_fecha_contabilizacion ).
+
+*            APPEND INITIAL LINE TO c_ti_impuesto_diferido ASSIGNING <fs_es_impuesto_diferido_d>.
+
+            <fs_es_impuesto_diferido> = VALUE #( BASE <fs_es_impuesto_diferido>
+                                                    impuesto_diferido = <fs_es_diferenia>-diff_amount * ( es_porcentaje_cuenta-porcentaje / 100 )
+                                                    porcentaje = es_porcentaje_cuenta-porcentaje
+                                                    categoria = es_porcentaje_cuenta-categoria ).
+
+            IF ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_activo AND <fs_es_impuesto_diferido>-impuesto_diferido LT 0 ) OR
+               ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_pasivo AND <fs_es_impuesto_diferido>-impuesto_diferido GT 0 ).
+
+              <fs_es_impuesto_diferido>-impuesto_diferido = <fs_es_impuesto_diferido>-impuesto_diferido * -1.
+
+            ENDIF.
+
+*            <fs_es_impuesto_diferido_d> = CORRESPONDING #( <fs_es_impuesto_diferido> ).
+
+          ENDLOOP.
+
+        ELSE.
+
+          IF ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_activo AND <fs_es_impuesto_diferido>-impuesto_diferido LT 0 ) OR
+               ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_pasivo AND <fs_es_impuesto_diferido>-impuesto_diferido GT 0 ).
+
+            <fs_es_impuesto_diferido>-impuesto_diferido = <fs_es_impuesto_diferido>-impuesto_diferido * -1.
+
+          ENDIF.
+
+        ENDIF.
+
+      ENDIF.
+
+    ENDLOOP.
+
+    IF i_solo_diferencia = abap_true.
+      DELETE c_ti_impuesto_diferido WHERE diferencia EQ 0.
+    ENDIF.
+
+    SORT c_ti_impuesto_diferido BY clase_cta grupo_ctas sort_tipo_impuesto cuenta ASCENDING.
+
+  ENDMETHOD.
+
+  METHOD contabilizar_impuesto_diferido.
+
+    CONSTANTS: c_txt_imponible TYPE string VALUE 'I',
+               c_txt_deducible TYPE string VALUE 'D',
+               c_shkzg_s       TYPE c VALUE 'S',
+               c_shkzg_h       TYPE c VALUE 'H'.
+
+    DATA: indicador_hs_contrapartida    TYPE shkzg,
+          indicador_hs_partida          TYPE shkzg,
+          ultima_posicion_tabla_interna TYPE char1,
+          s_mensaje                     TYPE string,
+          r_cuentas                     TYPE RANGE OF racct,
+          ti_historial_imp_diferido     TYPE tp_ti_historial_imp_diferido,
+          respuesta_confirma            TYPE string,
+          ti_impuesto_diferido_total    TYPE tp_ti_impuesto_diferido_total,
+          ti_cuentas_contabilizacion    TYPE tp_ti_cuentas_contabilizacion,
+          ti_posiciones_cuenta_mayor    TYPE bapiacgl09_tab,
+          ti_cantidades                 TYPE bapiaccr09_tab,
+          es_cuentas_contabilizacion    LIKE LINE OF ti_cuentas_contabilizacion,
+          total_imp_diferido            TYPE tp_es_impuesto_diferido-impuesto_diferido,
+          es_log                        TYPE tp_es_log,
+          cuenta_gasto                  TYPE hkont,
+          cuenta_contabilizar           TYPE hkont,
+          ceco                          TYPE ztfir1005_3-kostl,
+          centro_beneficio              TYPE prctr,
+          division                      TYPE gsber.
+    BREAK seblondo.
+
+    CLEAR: gti_log.
+
+    cargar_parametrizacion(
+      EXPORTING
+        i_bukrs                      = i_bukrs
+      IMPORTING
+        e_ti_cuentas_contabilizacion = ti_cuentas_contabilizacion ).
+
+    procesar_cuentas_permanente( EXPORTING i_bukrs = i_bukrs CHANGING c_ti_impuesto_diferido = c_ti_impuesto_diferido ).
+
+    IF i_test NE abap_true.
+      CALL FUNCTION 'POPUP_TO_CONFIRM'
+        EXPORTING
+          titlebar       = TEXT-t01 "'Impuesto Diferido '
+          text_question  = TEXT-m03 "'¿Esta seguro de Contabilizar los subtotales del impuesto Diferido?'
+        IMPORTING
+          answer         = respuesta_confirma
+        EXCEPTIONS
+          text_not_found = 1
+          OTHERS         = 2.
+
+      CHECK respuesta_confirma EQ '1'.
+
+    ENDIF.
+
+    total_imp_diferido = REDUCE #( INIT l_total_imp_diferido TYPE glu1-tsl
+                                   FOR es_imp_diferido IN c_ti_impuesto_diferido
+                                   NEXT l_total_imp_diferido += es_imp_diferido-impuesto_diferido ).
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                         = c_ti_impuesto_diferido
+        i_nombre_columna             = 'CUENTA'
+      CHANGING
+        c_ti_rango                   = r_cuentas ).
+
+    LOOP AT c_ti_impuesto_diferido ASSIGNING FIELD-SYMBOL(<fs_es_impuesto_diferido>).
+
+      COLLECT VALUE tp_es_impuesto_diferido_total(
+                          bukrs   = <fs_es_impuesto_diferido>-bukrs
+                          imponible = <fs_es_impuesto_diferido>-imponible
+                          deducible = <fs_es_impuesto_diferido>-deducible
+                          impuesto_diferido = <fs_es_impuesto_diferido>-impuesto_diferido
+                          moneda = <fs_es_impuesto_diferido>-moneda
+                          categoria = <fs_es_impuesto_diferido>-categoria )
+      INTO   ti_impuesto_diferido_total.
+
+      "Registrar hisorial
+      APPEND VALUE ztfir1005_5( bukrs = <fs_es_impuesto_diferido>-bukrs
+                                gjahr = i_ejercicio
+                                hkont = <fs_es_impuesto_diferido>-cuenta
+                                monat = i_mes_final
+                                val_lgr_basico = <fs_es_impuesto_diferido>-ledger_basico
+                                val_lgr_comp = <fs_es_impuesto_diferido>-ledger_comparativo
+                                diferencia = <fs_es_impuesto_diferido>-diferencia
+                                permanente = <fs_es_impuesto_diferido>-permanente
+                                val_impuesto = <fs_es_impuesto_diferido>-impuesto_diferido
+                                porcentaje = <fs_es_impuesto_diferido>-porcentaje
+                                waers = <fs_es_impuesto_diferido>-moneda
+                                categoria = <fs_es_impuesto_diferido>-categoria
+                                imponible = COND #( WHEN <fs_es_impuesto_diferido>-imponible EQ icon_radiobutton THEN
+                                                       abap_true
+                                                  )
+                                deducible = COND #( WHEN <fs_es_impuesto_diferido>-deducible EQ icon_radiobutton THEN
+                                                       abap_true
+                                                  )
+                              )
+      TO ti_historial_imp_diferido.
+
+    ENDLOOP.
+
+    " Verificar que hay valores a contabilizar
+    IF total_imp_diferido IS INITIAL.
+      MESSAGE i252(/scwm/gm).
+      EXIT.
+    ENDIF.
+
+    SORT ti_impuesto_diferido_total DESCENDING.
+    DELETE ti_impuesto_diferido_total WHERE impuesto_diferido IS  INITIAL.
+
+    LOOP AT ti_impuesto_diferido_total ASSIGNING FIELD-SYMBOL(<fs_es_imp_diferido_total>).
+
+      CLEAR: es_cuentas_contabilizacion.
+
+      IF sy-tabix EQ 1 AND sy-tabix < lines( ti_impuesto_diferido_total ).
+        ultima_posicion_tabla_interna = 1.
+      ELSEIF sy-tabix EQ lines( ti_impuesto_diferido_total ).
+        ultima_posicion_tabla_interna = abap_true.
+      ENDIF.
+
+      es_log = VALUE #( num_registro = sy-tabix
+                        bukrs = <fs_es_imp_diferido_total>-bukrs ).
+
+      " Colocar clase de cuenta: imponible o deducible
+      es_log-clase_cta = COND #( WHEN <fs_es_imp_diferido_total>-imponible EQ icon_radiobutton THEN
+                                    c_txt_imponible
+                                 WHEN <fs_es_imp_diferido_total>-deducible EQ icon_radiobutton THEN
+                                    c_txt_deducible ).
+
+      es_log-impuesto = <fs_es_imp_diferido_total>-impuesto_diferido.
+      es_log-moneda = <fs_es_imp_diferido_total>-moneda.
+
+      " Indicador debe/haber para las posiciones de contabilización
+      IF es_log-impuesto GT 0.
+        indicador_hs_contrapartida = c_shkzg_h.
+        indicador_hs_partida = c_shkzg_s.
+      ELSE.
+        indicador_hs_contrapartida = c_shkzg_s.
+        indicador_hs_partida = c_shkzg_h.
+      ENDIF.
+
+      " Consulto por la cuenta de contrapartida para contabilizar
+      READ TABLE ti_cuentas_contabilizacion INTO es_cuentas_contabilizacion
+                                            WITH KEY bukrs = <fs_es_imp_diferido_total>-bukrs
+                                                     clase_cuenta = es_log-clase_cta
+                                                     shkzg = indicador_hs_contrapartida
+                                                     categoria = <fs_es_imp_diferido_total>-categoria.
+
+      es_log-cuenta_gasto = cuenta_gasto = es_cuentas_contabilizacion-cuenta.
+      ceco = es_cuentas_contabilizacion-kostl.
+      division = es_cuentas_contabilizacion-division.
+      centro_beneficio = es_cuentas_contabilizacion-prctr.
+
+      " Siempre debe estar ingresado un registro de tipo GASTO para hacer la contrapartida de la contabilización
+      IF ti_cuentas_contabilizacion IS NOT INITIAL.
+        " Consulto la cuenta a la que se contabilizara la clase de cuenta y el grupo de cuentas
+        CLEAR es_cuentas_contabilizacion.
+        READ TABLE ti_cuentas_contabilizacion INTO es_cuentas_contabilizacion
+                                              WITH KEY bukrs = <fs_es_imp_diferido_total>-bukrs
+                                                       clase_cuenta = es_log-clase_cta
+                                                       shkzg = indicador_hs_partida
+                                                       categoria = <fs_es_imp_diferido_total>-categoria.
+        IF sy-subrc EQ 0.
+          " Como se hallo la cuenta a la cual se va a contabilizar se ingresa a los mensajes y se lanza la rutina de contabilizar
+          es_log-cuenta = cuenta_contabilizar = es_cuentas_contabilizacion-cuenta.
+          "Contabilizacion del subtotal
+          contabilizar_subtotal( EXPORTING
+                                     i_test                  = i_test
+                                     i_bukrs                 = <fs_es_imp_diferido_total>-bukrs
+                                     i_ledger_base           = i_ledger_base
+                                     i_ledger_comparacion    = i_ledger_comparacion
+                                     i_clase_cuenta          = es_log-clase_cta
+                                     i_fecha_contabilizacion = i_fecha_contabilizacion
+                                     i_clase_documento       = i_clase_documento
+                                     i_periodo               = i_periodo
+                                     i_mes_final             = i_mes_final
+                                     i_cuenta_gasto          = cuenta_gasto
+                                     i_cuenta_contabilizar   = cuenta_contabilizar
+                                     i_ceco                  = ceco
+                                     i_centro_beneficio      = centro_beneficio
+                                     i_division              = division
+                                     i_es_imp_diferido_total = <fs_es_imp_diferido_total>
+                                     i_ultimo                = ultima_posicion_tabla_interna
+                                     i_r_cuentas             = r_cuentas
+                                 CHANGING
+                                    c_ti_cantidades              = ti_cantidades
+                                    c_ti_posiciones_cuenta_mayor = ti_posiciones_cuenta_mayor
+                                    c_ti_historial_imp_diferido  = ti_historial_imp_diferido ).
+
+        ELSE.
+          " La Clase de Cuenta y grupo de cuentas No existe en Ztfir1005_3 y no es posible determinar la cuenta a contabilizar
+          es_log-semaforo = icon_red_light.
+          MESSAGE s002(zfi01) WITH <fs_es_imp_diferido_total>-bukrs <fs_es_imp_diferido_total>-categoria
+          INTO es_log-mensaje.
+
+          APPEND es_log TO gti_log.
+        ENDIF.
+      ELSE.
+        " No hay cuenta de GASTO para contrapartida y se ingresa el error
+        es_log-semaforo = icon_red_light.
+        MESSAGE s002(zfi01) WITH <fs_es_imp_diferido_total>-bukrs es_log-clase_cta indicador_hs_partida <fs_es_imp_diferido_total>-categoria
+        INTO es_log-mensaje.
+
+        APPEND es_log TO gti_log.
+      ENDIF.
+    ENDLOOP.
+
+    IF i_test = abap_false.
+
+      DELETE ti_historial_imp_diferido WHERE belnr IS INITIAL.
+      DELETE ADJACENT DUPLICATES FROM ti_historial_imp_diferido COMPARING bukrs gjahr belnr hkont monat.
+
+      INSERT ztfir1005_5 FROM TABLE ti_historial_imp_diferido.
+    ENDIF.
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos    = REF #( gti_log )
+        i_ti_catalogo = construir_catalogo_log( gti_log )
+*       i_status_gui  =
+*       i_statusgui_programa =
+*       i_titulo      =
+*       i_o_ctr_alvgrid      =
+*       i_id_reporte  = SY-REPID
+*       i_es_layout   =
+*       i_es_variante =
+*       i_nombreusuario      = SY-UNAME
+*       i_conservar_catalogo = space
+*       i_persistir_dynpro   = space
+*       i_ti_sort     =
+      .
+
+  ENDMETHOD.
+
+
+  METHOD consultar_meses.
+
+    SELECT * FROM t247
+    WHERE spras = @sy-langu
+     INTO TABLE @e_ti_meses.
+
+  ENDMETHOD.
+
+
+  METHOD consultar_norma_ledger.
+
+    SELECT SINGLE *
+    FROM tacc_trgt_ldgr
+    WHERE ldgrp_gl = @i_ledger_base
+    INTO @e_es_norma_ledger.
+
+  ENDMETHOD.
+
+
+  METHOD verificar_anulacion_documento.
+
+    DATA: respuesta_confirmacion       TYPE c.
+
+    CHECK i_r_cuentas IS NOT INITIAL.
+
+    "Hallar registros anteriores
+    SELECT *
+    FROM ztfir1005_5
+    WHERE bukrs    EQ @i_bukrs
+    AND hkont    IN @i_r_cuentas
+    INTO TABLE @e_ti_historial_imp_diferido.
+
+    "Eliminamos los registros con estatus = A (Anulados)
+    DELETE e_ti_historial_imp_diferido WHERE estatus EQ gc_estado_anulado.
+
+    SORT e_ti_historial_imp_diferido DESCENDING BY bukrs gjahr belnr hkont.
+    READ TABLE e_ti_historial_imp_diferido INTO DATA(es_historial_imp_diferido) INDEX 1.
+    DELETE e_ti_historial_imp_diferido WHERE belnr <> es_historial_imp_diferido-belnr.
+
+    IF NOT e_ti_historial_imp_diferido[] IS INITIAL.
+
+      CALL FUNCTION 'SWO_POPUP_TO_CONFIRM'
+        EXPORTING
+          text   = TEXT-tc1
+          title  = TEXT-tt3
+        IMPORTING
+          answer = respuesta_confirmacion.
+
+      IF respuesta_confirmacion EQ 'J'.
+        r_anular = abap_true.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD anular_documento.
+    CONSTANTS: c_msg_rw   TYPE c LENGTH 2 VALUE 'RW', " Clase de mensaje RW
+               c_msg_numb TYPE c LENGTH 3 VALUE '614'. " Numero de mensaje 614
+
+    DATA: valor_impuesto             TYPE char15,
+          es_header                  TYPE bapiache09, "Cabecera del Documento Contable
+          ti_historial_imp_diferido  TYPE tp_ti_historial_imp_diferido,
+          ti_posiciones_cuenta_mayor TYPE TABLE OF bapiacgl09,
+          ti_cantidades              TYPE STANDARD TABLE OF bapiaccr09,
+          ti_msg_retorno             TYPE bapiret2_t,
+          es_log                     TYPE tp_es_log,
+          obj_type                   TYPE
+          bapiache09-obj_type,
+          obj_key                    TYPE  bapiache09-obj_key,
+          obj_sys                    TYPE  bapiache09-obj_sys.
+
+    CHECK verificar_anulacion_documento( EXPORTING i_bukrs = i_bukrs i_r_cuentas = i_r_cuentas
+                                         IMPORTING e_ti_historial_imp_diferido = ti_historial_imp_diferido ) = abap_true.
+
+    " cabecera de la BAPI
+    es_header = VALUE #(
+                            acc_principle = i_es_norma_ledger-acc_principle
+                            comp_code = i_bukrs
+                            doc_date = |{ i_fecha_contabilizacion(6) }01|
+                            pstng_date = |{ i_fecha_contabilizacion(6) }01|
+                            trans_date = i_fecha_contabilizacion
+                            doc_type = i_clase_documento
+                            fisc_year = i_fecha_contabilizacion(4)
+                            fis_period = i_periodo
+                            header_txt = COND #( WHEN i_ti_meses IS NOT INITIAL THEN
+                                                 |Anul.Imp.Dif. { i_ti_meses[ spras = sy-langu mnr = i_mes_final ]-ltx }|
+                                               )
+                            username = sy-uname
+                            bus_act = 'RFBU'
+                       ).
+
+    es_header-ref_doc_no = es_header-header_txt.
+    " Obtener documento anterior
+    READ TABLE ti_historial_imp_diferido INDEX 1 ASSIGNING FIELD-SYMBOL(<fs_es_historial_imp_diferido>).
+
+    SELECT bukrs, gjahr, belnr,  buzei, shkzg, wrbtr, prctr, hkont, kostl
+    FROM bseg
+    WHERE gjahr EQ @<fs_es_historial_imp_diferido>-gjahr
+    AND belnr EQ @<fs_es_historial_imp_diferido>-belnr
+    AND bukrs EQ @<fs_es_historial_imp_diferido>-bukrs
+    INTO TABLE @DATA(ti_bseg).
+
+    IF sy-subrc IS INITIAL.
+
+      " Por cada posicion encontrada, crear una posicion de anulación
+      LOOP AT ti_bseg INTO DATA(es_bseg).
+
+        " Registro de cuenta de mayor
+        ti_posiciones_cuenta_mayor = VALUE #( BASE ti_posiciones_cuenta_mayor
+                                              ( itemno_acc = sy-tabix
+                                                gl_account = es_bseg-hkont
+                                                doc_type   = i_clase_documento
+                                                comp_code  = es_bseg-bukrs
+                                                fisc_year  = es_bseg-gjahr
+                                                fis_period = i_periodo
+                                                pstng_date = es_header-doc_date
+                                                profit_ctr = es_bseg-prctr
+                                                costcenter = es_bseg-kostl
+                                                item_text  = es_header-header_txt )
+                                            ).
+
+
+
+        " Registro de valor de la posición, con signo opuesto
+        WRITE es_bseg-wrbtr TO valor_impuesto
+        CURRENCY i_es_imp_diferido_total-moneda NO-GROUPING DECIMALS 0.
+
+        valor_impuesto = COND #( WHEN es_bseg-shkzg EQ 'S' THEN
+                                    valor_impuesto * -1
+                                 ELSE
+                                    valor_impuesto
+                                ).
+
+        ti_cantidades = VALUE #( BASE ti_cantidades
+                                 (  itemno_acc = sy-tabix
+                                    amt_doccur = valor_impuesto
+                                    amt_base   = valor_impuesto
+                                    currency   = i_es_imp_diferido_total-moneda )
+                               ).
+
+      ENDLOOP.
+    ENDIF.
+
+    "verificación de contabilización
+    CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+      EXPORTING
+        documentheader = es_header
+      TABLES
+        accountgl      = ti_posiciones_cuenta_mayor
+        currencyamount = ti_cantidades
+        return         = ti_msg_retorno.
+
+    "Hallar mensaje de confirmación de documento OK
+
+    IF line_exists( ti_msg_retorno[ id = c_msg_rw number = c_msg_numb ] ).
+
+      CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+        EXPORTING
+          documentheader = es_header
+        IMPORTING
+          obj_type       = obj_type
+          obj_key        = obj_key
+          obj_sys        = obj_sys
+        TABLES
+          accountgl      = ti_posiciones_cuenta_mayor
+          currencyamount = ti_cantidades
+          return         = ti_msg_retorno.
+
+
+      IF line_exists( ti_msg_retorno[ number = '605' ] ).
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        es_log = VALUE #( documento = obj_key(10)
+                          semaforo = icon_green_light
+                          mensaje = |Anulación: { ti_msg_retorno[ number = '605' ]-message }|
+                         ).
+        APPEND es_log TO gti_log.
+
+        " Guardar registro en tabla de historial
+        MODIFY ti_historial_imp_diferido FROM VALUE #( estatus  = gc_estado_anulado belnr_an =  es_log-documento )
+        TRANSPORTING estatus belnr_an
+        WHERE  belnr = space OR belnr NE space.
+
+        UPDATE ztfir1005_5 FROM TABLE ti_historial_imp_diferido.
+
+      ENDIF.
+    ELSE.
+
+      gti_log = VALUE #( BASE gti_log
+                         FOR es_msg_retorno IN ti_msg_retorno
+                         ( impuesto = 0 semaforo = icon_red_light mensaje = |Anulación: { es_msg_retorno-message }| )
+                       ).
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD contabilizar_subtotal.
+
+    DATA: s_mensaje       TYPE string,
+          valor_impuesto  TYPE char15,
+
+          ti_meses        TYPE STANDARD TABLE OF  t247,
+          es_norma_ledger TYPE tacc_trgt_ldgr,
+          es_header       TYPE bapiache09, "Cabecera del Documento Contable
+          ti_msg_retorno  TYPE bapiret2_t,
+          es_log          TYPE tp_es_log,
+          obj_type        TYPE  bapiache09-obj_type,
+          obj_key         TYPE  bapiache09-obj_key,
+          obj_sys         TYPE  bapiache09-obj_sys.
+
+    consultar_meses( IMPORTING e_ti_meses = ti_meses ).
+    consultar_norma_ledger( EXPORTING i_ledger_base = i_ledger_base
+                            IMPORTING e_es_norma_ledger = es_norma_ledger ).
+
+
+    IF es_norma_ledger-ldgrp_gl EQ i_ledger_base.
+      " Se llena el registro de cabecera de la BAPI
+      es_header = VALUE #(
+                          acc_principle = es_norma_ledger-acc_principle
+                          comp_code = i_bukrs
+                          doc_date = i_fecha_contabilizacion
+                          pstng_date = i_fecha_contabilizacion
+                          trans_date = i_fecha_contabilizacion
+                          doc_type = i_clase_documento
+                          fisc_year = i_fecha_contabilizacion(4)
+                          fis_period = i_periodo
+                         ).
+      READ TABLE ti_meses INTO DATA(es_mes)
+                          WITH KEY spras = sy-langu mnr = i_mes_final.
+      CONCATENATE  'Reg.Imp.Dif.' es_mes-ltx INTO es_header-header_txt SEPARATED BY space.
+
+      es_header-ref_doc_no = es_header-header_txt.
+      es_header-username = sy-uname.
+      es_header-bus_act = 'RFBU'.
+
+      APPEND  VALUE #(
+                      itemno_acc = lines( c_ti_posiciones_cuenta_mayor ) + 1
+                      gl_account = i_cuenta_contabilizar
+                      doc_type = i_clase_documento
+                      comp_code = i_bukrs
+                      fisc_year =  i_fecha_contabilizacion(4)
+                      fis_period = i_periodo
+                      pstng_date = i_fecha_contabilizacion
+                      alloc_nmbr = i_fecha_contabilizacion
+                      profit_ctr = i_centro_beneficio
+                      costcenter = i_ceco
+                      bus_area = i_division
+                      item_text = es_header-header_txt
+                     )
+      TO c_ti_posiciones_cuenta_mayor.
+
+      " Ingreso el monto en la primera posicion
+      WRITE i_es_imp_diferido_total-impuesto_diferido TO valor_impuesto
+      CURRENCY i_es_imp_diferido_total-moneda NO-GROUPING DECIMALS 0.
+
+      APPEND VALUE #(
+                      itemno_acc = lines( c_ti_cantidades ) + 1
+                      amt_doccur = valor_impuesto
+                      amt_base = valor_impuesto
+                      currency = i_es_imp_diferido_total-moneda
+                     )
+      TO c_ti_cantidades.
+
+      " Se llena el segundo registro de posicion de la BAPI
+      APPEND  VALUE #(
+                      itemno_acc = lines( c_ti_posiciones_cuenta_mayor ) + 1
+                      gl_account = i_cuenta_gasto
+                      doc_type = i_clase_documento
+                      comp_code = i_bukrs
+                      fisc_year =  i_fecha_contabilizacion(4)
+                      fis_period = i_periodo
+                      pstng_date = i_fecha_contabilizacion
+                      alloc_nmbr = i_fecha_contabilizacion
+                      profit_ctr = i_centro_beneficio
+                      costcenter = i_ceco
+                      bus_area = i_division
+                      item_text = es_header-header_txt
+                     )
+      TO c_ti_posiciones_cuenta_mayor.
+
+      " Ingreso el monto en la segunda posicion
+      APPEND VALUE #(
+                      itemno_acc = lines( c_ti_cantidades ) + 1
+                      amt_doccur = valor_impuesto * -1
+                      amt_base = valor_impuesto * -1
+                      currency = i_es_imp_diferido_total-moneda
+                     )
+      TO c_ti_cantidades.
+
+      " Proceso de contabilización solo en ultimo registro de subtotal
+      IF i_ultimo EQ abap_true.
+
+        IF i_test = abap_true.
+          CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+            EXPORTING
+              documentheader = es_header
+            TABLES
+              accountgl      = c_ti_posiciones_cuenta_mayor
+              currencyamount = c_ti_cantidades
+              return         = ti_msg_retorno.
+
+          LOOP AT ti_msg_retorno INTO DATA(es_msg_retorno).
+            "Para el segundo mensaje del registro en adelante no debe salir valor para que el total cuadre
+            IF sy-tabix NE 1.
+              es_log-impuesto = 0.
+            ENDIF.
+            IF es_msg_retorno-type = 'S'.
+              es_log-semaforo = icon_green_light.
+            ELSEIF es_msg_retorno-type = 'W'.
+              es_log-semaforo = icon_yellow_light.
+            ELSE.
+              es_log-semaforo = icon_red_light.
+            ENDIF.
+            es_log-documento = 'MODO TEST'  .
+            es_log-mensaje = es_msg_retorno-message.
+            APPEND es_log TO gti_log.
+          ENDLOOP.
+        ELSE.
+
+          anular_documento(
+            EXPORTING
+              i_es_norma_ledger           = es_norma_ledger
+              i_bukrs                     = i_bukrs
+              i_fecha_contabilizacion     = i_fecha_contabilizacion
+              i_clase_documento           = i_clase_documento
+              i_periodo                   = i_periodo
+              i_mes_final                 = i_mes_final
+              i_ti_meses                  = ti_meses
+              i_es_imp_diferido_total     = i_es_imp_diferido_total
+              i_r_cuentas                 = i_r_cuentas ).
+
+          CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+            EXPORTING
+              documentheader = es_header
+            IMPORTING
+              obj_type       = obj_type
+              obj_key        = obj_key
+              obj_sys        = obj_sys
+            TABLES
+              accountgl      = c_ti_posiciones_cuenta_mayor
+              currencyamount = c_ti_cantidades
+              return         = ti_msg_retorno.
+
+*      Type ID Number Message
+*      S RW 605 Document posted successfully
+*      S RW 614 Document check without errors
+*      A RW 609 Error in document
+
+          READ TABLE ti_msg_retorno INTO es_msg_retorno WITH KEY number = '605'.
+
+          IF sy-subrc = 0.
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+
+            APPEND VALUE #(  documento = obj_key(10)
+                             semaforo = icon_green_light
+                             mensaje = es_msg_retorno-message
+                          )
+            TO gti_log.
+
+            MODIFY c_ti_historial_imp_diferido FROM VALUE #( belnr = es_log-documento )
+            TRANSPORTING belnr
+            WHERE belnr = space OR belnr NE space .
+
+          ELSE.
+
+            LOOP AT ti_msg_retorno INTO es_msg_retorno.
+
+              IF sy-tabix NE 1.
+                es_log-impuesto = 0.
+              ENDIF.
+              es_log-semaforo = icon_red_light.
+              es_log-mensaje = es_msg_retorno-message.
+              APPEND es_log TO gti_log.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+
+    ELSE.
+      es_log-semaforo = icon_red_light.
+      CONCATENATE TEXT-m09 i_ledger_comparacion TEXT-m10
+        INTO s_mensaje SEPARATED BY space.
+      es_log-mensaje = s_mensaje.
+      APPEND es_log TO gti_log.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD procesar_cuentas_permanente.
+
+    DATA: indicador_de_cambio,
+          impuesto_diferido   TYPE p LENGTH 15 DECIMALS 2.
+
+    consultar_cuentas(
+      EXPORTING
+        i_bukrs                  = i_bukrs
+      IMPORTING
+        e_ti_cuentas_permanentes = DATA(ti_cuentas_permanentes)
+        e_ti_porcentaje_cuenta   = DATA(ti_porcentaje_cuenta) ).
+
+
+
+    "Actualizar las cuentas marcadas como permanentes y borrando el impuesto diferido cuando no aplique
+    LOOP AT c_ti_impuesto_diferido ASSIGNING FIELD-SYMBOL(<fs_es_impuesto_diferido>).
+
+      CLEAR indicador_de_cambio.
+
+* Hallar cuentas que sean permanentes
+      READ TABLE ti_cuentas_permanentes INTO DATA(es_cuentas_permanentes) WITH KEY bukrs = <fs_es_impuesto_diferido>-bukrs
+                                                                                   hkont = <fs_es_impuesto_diferido>-cuenta.
+      IF sy-subrc EQ 0.
+        IF <fs_es_impuesto_diferido>-permanente IS INITIAL.
+          indicador_de_cambio = abap_true.
+        ENDIF.
+        <fs_es_impuesto_diferido>-permanente = abap_true.
+      ELSE.
+        IF <fs_es_impuesto_diferido>-permanente EQ abap_true.
+          indicador_de_cambio = abap_true.
+        ENDIF.
+        <fs_es_impuesto_diferido>-permanente = space.
+      ENDIF.
+
+      " Tomar las validaciones de definidas para saber que no se calcula impuesto
+      IF ( <fs_es_impuesto_diferido>-permanente EQ space AND <fs_es_impuesto_diferido>-imponible EQ space AND <fs_es_impuesto_diferido>-deducible EQ space ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true AND <fs_es_impuesto_diferido>-imponible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true AND <fs_es_impuesto_diferido>-deducible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-imponible EQ abap_true AND <fs_es_impuesto_diferido>-deducible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true ).
+        <fs_es_impuesto_diferido>-impuesto_diferido = 0.
+        <fs_es_impuesto_diferido>-imponible         = icon_wd_radio_button_empty.
+        <fs_es_impuesto_diferido>-deducible         = icon_wd_radio_button_empty.
+        <fs_es_impuesto_diferido>-tipo_impuesto     = space.
+
+      ELSEIF <fs_es_impuesto_diferido>-permanente EQ space AND indicador_de_cambio IS NOT INITIAL.
+
+        IF <fs_es_impuesto_diferido>-deducible EQ icon_wd_radio_button_empty AND <fs_es_impuesto_diferido>-imponible EQ icon_wd_radio_button_empty  .
+
+          DATA(clase_cuenta) = determinar_clase_cuenta( <fs_es_impuesto_diferido>-cuenta ).
+
+          IF <fs_es_impuesto_diferido>-ledger_basico GT <fs_es_impuesto_diferido>-ledger_comparativo.
+            IF clase_cuenta = gc_activo OR clase_cuenta = gc_ingreso.
+              <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+              <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+              "     Cuando me da que el impuesto es IMPONIBLE el tipo de este debe ser PASIVO
+              <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+            ELSEIF clase_cuenta = gc_pasivo OR clase_cuenta = gc_gasto.
+              <fs_es_impuesto_diferido>-deducible = icon_radiobutton. "abap_true.
+              <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+              "     Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO
+              <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+            ENDIF.
+          ELSEIF <fs_es_impuesto_diferido>-ledger_basico LT <fs_es_impuesto_diferido>-ledger_comparativo.
+            IF clase_cuenta = gc_activo OR clase_cuenta = gc_ingreso.
+              <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+              <fs_es_impuesto_diferido>-deducible = icon_radiobutton. "abap_true.
+              "     Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO
+              <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+            ELSEIF clase_cuenta = gc_pasivo OR clase_cuenta = gc_gasto.
+              <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+              <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+              "     Cuando me da que el impuesto es IMPONIBLE el tipo de este debe ser PASIVO
+              <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+            ENDIF.
+          ENDIF.
+        ENDIF.
+
+        " Calculo el valor del impuesto diferido
+        READ TABLE ti_porcentaje_cuenta INTO DATA(es_porcentaje_cuenta) WITH KEY nodo = <fs_es_impuesto_diferido>-cuenta.
+
+        IF sy-subrc EQ 0.
+
+          impuesto_diferido = <fs_es_impuesto_diferido>-diferencia * ( es_porcentaje_cuenta-porcentaje / 100 ).
+          <fs_es_impuesto_diferido>-impuesto_diferido = impuesto_diferido.
+          <fs_es_impuesto_diferido>-impuesto_diferido = impuesto_diferido.
+
+          " Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO, caso contrario PASIVO
+          IF <fs_es_impuesto_diferido>-deducible EQ abap_true.
+            <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+            <fs_es_impuesto_diferido>-sort_tipo_impuesto = gc_activo.
+          ELSE.
+            <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+            <fs_es_impuesto_diferido>-sort_tipo_impuesto = gc_pasivo.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+    "Ordeno la tabla del impuesto diferido segun la salida necesaria para subtotalizar
+    SORT c_ti_impuesto_diferido BY clase_cta grupo_ctas sort_tipo_impuesto cuenta ASCENDING.
+
+  ENDMETHOD.
+
+
+  METHOD determinar_clase_cuenta.
+
+    r_clase_cuenta = SWITCH #( i_cuenta(1)
+                                WHEN '1' OR '8' THEN
+                                    gc_activo
+                                WHEN '2' THEN
+                                    gc_pasivo
+                                WHEN '4' THEN
+                                    gc_ingreso
+                                WHEN '5' OR '7' THEN
+                                    gc_gasto
+                               ).
+
+  ENDMETHOD.
+
+
+  METHOD construir_catalogo_log.
+
+    r_ti_catalogo = zclcxr1002_util=>construir_catalogo( i_ti  = i_ti_log i_optimizar_columnas = abap_true ).
+
+    LOOP AT r_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'SEMAFORO'.
+          <fs_es_catalogo>-coltext = 'Status'.
+          <fs_es_catalogo>-outputlen = 12.
+          <fs_es_catalogo>-fix_column = abap_true.
+        WHEN 'NUM_REGISTRO'.
+          <fs_es_catalogo>-coltext = 'Num. Registro'.
+          <fs_es_catalogo>-outputlen = 13.
+          <fs_es_catalogo>-fix_column = abap_true.
+          <fs_es_catalogo>-no_out = abap_true.
+        WHEN 'DOCUMENTO' OR  'BUKRS'.
+          "No elimina la columna
+        WHEN 'MENSAJE'.
+          <fs_es_catalogo>-coltext = 'Mensaje'.
+        WHEN OTHERS.
+          <fs_es_catalogo>-no_out = abap_true.
+      ENDCASE.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD cargar_historico_imp_diferido.
+
+    SELECT *
+    FROM ztfir1005_5
+    WHERE bukrs IN @i_r_bukrs
+    AND gjahr IN @i_r_gjahr
+    AND belnr IN @i_r_belnr
+    AND hkont IN @i_r_hkont
+    AND monat IN @i_r_monat
+    AND estatus IN @i_r_estado
+    AND belnr_an IN @i_r_doc_anulacion
+    INTO CORRESPONDING FIELDS OF TABLE @gti_historico_imp_diferido.
+
+  ENDMETHOD.
+
+  METHOD expor_comparacion.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'R1005' ) = abap_true.
+
+    IF sy-binpt = abap_true.
+      EXPORT ti_comparacion_d = c_ti_comparacion
+      TO DATABASE indx(sc) ID 'TI_COMPARACION_D'.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD recupera_cuenta.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'R1005' ) = abap_true.
+
+    IMPORT: cuentas = c_r_numero_cuenta FROM DATABASE indx(sc)
+          ID 'CUENTAS',
+          ledger_base = c_ledger FROM DATABASE indx(sc)
+          ID 'P_BRLDNR'.
+
+    DELETE FROM DATABASE indx(sc) ID 'CUENTAS'.
+    DELETE FROM DATABASE indx(sc) ID 'P_BRLDNR'.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfir1005_impuesto_diferido DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS: gc_puco           TYPE  ska1-ktopl VALUE 'PUCO',
+               gc_pcgl           TYPE  ska1-ktopl VALUE 'PCGL',
+               gc_activo         TYPE c LENGTH 6 VALUE 'ACTIVO',
+               gc_pasivo         TYPE c LENGTH 6 VALUE 'PASIVO',
+               gc_ingreso        TYPE c LENGTH 7 VALUE 'INGRESO',
+               gc_gasto          TYPE c LENGTH 5 VALUE 'GASTO',
+               gc_estado_anulado TYPE c VALUE 'A'.
+
+    TYPES: BEGIN OF tp_es_ztfir1005_1.
+             INCLUDE TYPE ztfir1005_1.
+             INCLUDE TYPE vimflagtab.
+    TYPES: END OF tp_es_ztfir1005_1.
+
+    TYPES:BEGIN OF tp_es_ledger_comparacion,
+            logsys        TYPE glu1-logsys,
+            orgunit       TYPE char6,
+            curtp         TYPE t881-curt1,
+            racct         TYPE glu1-racct,
+            field1        TYPE comp_field,
+            field2        TYPE comp_field,
+            field3        TYPE comp_field ,                 "2995983
+            field4        TYPE comp_field ,                 "2995983
+            field5        TYPE comp_field ,                 "2995983
+            currency      TYPE glxcomp-currency,
+            runit         TYPE glu1-runit,
+            cumyear       TYPE gjahr,
+            cumpoper      TYPE poper,
+            b_amount      TYPE glu1-tsl,
+            c_amount      TYPE glu1-tsl,
+            diff_amount   TYPE glu1-tsl,
+            b_amount_abs  TYPE glu1-tsl,
+            c_amount_abs  TYPE glu1-tsl,
+            b_quantity    TYPE glu1-msl,
+            c_quantity    TYPE glu1-msl,
+            diff_quantity TYPE glu1-msl,
+            diff          TYPE char1,
+            remark        TYPE glxcomp-remark,
+          END OF tp_es_ledger_comparacion,
+
+          BEGIN OF tp_es_impuesto_diferido,
+            bukrs              TYPE t001-bukrs, "
+            clase_cta          TYPE char1,
+            grupo_ctas         TYPE t077z-txt30,
+            sort_tipo_impuesto TYPE ztfir1005_3-clase_cuenta,
+            cuenta             TYPE glu1-racct,
+            den_cuenta         TYPE skat-txt50,
+            ledger_basico      TYPE glu1-tsl,
+            ledger_comparativo TYPE glu1-tsl,
+            diferencia         TYPE glu1-tsl,
+            moneda             TYPE glu1-rtcur,
+            permanente         TYPE char1,
+            imponible          TYPE char4,
+            deducible          TYPE char4,
+            porcentaje         TYPE ztfir1005_1-porcentaje,
+            categoria          TYPE ztfir1005_1-categoria,
+            impuesto_diferido  TYPE glu1-tsl,
+            tipo_impuesto      TYPE ztfir1005_3-clase_cuenta,
+            line_color         TYPE char4,
+            prkey              TYPE rf011p-prkey,
+            stufe              TYPE rf011p-stufe,
+          END OF tp_es_impuesto_diferido,
+
+          BEGIN OF tp_es_impuesto_diferido_total,
+            bukrs             TYPE t001-bukrs,
+            imponible         TYPE char4,
+            deducible         TYPE char4,
+            moneda            TYPE glu1-rtcur,
+            categoria         TYPE ztfir1005_1-categoria,
+            impuesto_diferido TYPE glu1-tsl,
+          END OF tp_es_impuesto_diferido_total,
+
+          BEGIN OF tp_es_comparacion_total,
+            orgunit     TYPE char6,
+            racct       TYPE glu1-racct,
+            currency    TYPE glxcomp-currency,
+            cumyear     TYPE glu1-ryear,
+            b_amount    TYPE glu1-tsl,
+            c_amount    TYPE glu1-tsl,
+            diff_amount TYPE glu1-tsl,
+          END OF tp_es_comparacion_total,
+
+          BEGIN OF tp_es_ska1,
+            saknr TYPE ska1-saknr,
+            bilkt TYPE ska1-bilkt,
+            ktoks TYPE ska1-ktoks,
+            txt50 TYPE skat-txt50,
+            spras TYPE t077z-spras,
+            ktopl TYPE t077z-ktopl,
+            txt30 TYPE t077z-txt30,
+          END OF tp_es_ska1,
+
+          BEGIN OF tp_es_cuenta_x_sociedad,
+            bukrs TYPE bukrs,
+            saknr TYPE skb1-saknr,                                                " Cuenta para en el plan de cuenta Orginal
+            altkt TYPE skb1-altkt,                                                " Cuenta para en el plan de cuenta alternativo
+          END OF tp_es_cuenta_x_sociedad,
+
+          BEGIN OF tp_es_log,
+            semaforo(4)   TYPE c,
+            num_registro  TYPE i,
+            bukrs         TYPE t001-bukrs,
+            grupo_cuentas TYPE t077z-txt30,
+            clase_cta     TYPE ztfir1005_3-clase_cuenta,
+            cuenta        TYPE glu1-racct,
+            cuenta_gasto  TYPE glu1-racct,
+            impuesto      TYPE glu1-tsl,
+            moneda        TYPE glu1-rtcur,
+            documento     TYPE belnr_d,
+            mensaje(150)  TYPE c,
+          END OF tp_es_log.
+
+    TYPES: tp_ti_ledger_comparacion      TYPE STANDARD TABLE OF tp_es_ledger_comparacion WITH EMPTY KEY,
+           tp_ti_impuesto_diferido       TYPE STANDARD TABLE OF tp_es_impuesto_diferido WITH EMPTY KEY,
+           tp_ti_comparacion_total       TYPE STANDARD TABLE OF tp_es_comparacion_total WITH KEY orgunit racct currency cumyear,
+           tp_ti_cuentas_permanentes     TYPE STANDARD TABLE OF ztfir1005_4 WITH EMPTY KEY,
+           tp_ti_porcentaje_cuenta       TYPE STANDARD TABLE OF ztfir1005_1 WITH EMPTY KEY,
+           tp_ti_cuentas_contabilizacion TYPE STANDARD TABLE OF ztfir1005_3 WITH EMPTY KEY,
+           tp_ti_ska1                    TYPE STANDARD TABLE OF tp_es_ska1 WITH EMPTY KEY,
+           tp_ti_cuenta_x_sociedad       TYPE STANDARD TABLE OF tp_es_cuenta_x_sociedad WITH EMPTY KEY,
+           tp_ti_log                     TYPE STANDARD TABLE OF tp_es_log WITH EMPTY KEY,
+           tp_ti_impuesto_diferido_total TYPE STANDARD TABLE OF tp_es_impuesto_diferido_total
+                                         WITH NON-UNIQUE KEY bukrs imponible deducible moneda categoria,
+           tp_ti_historial_imp_diferido  TYPE STANDARD TABLE OF ztfir1005_5 WITH EMPTY KEY,
+           tp_ti_meses                   TYPE STANDARD TABLE OF  t247,
+           gtp_r_racct                   TYPE RANGE OF glu1-racct.
+
+    TYPES: tp_r_numero_cuenta TYPE RANGE OF glu1-racct,
+           tp_r_monat         TYPE RANGE OF ztfir1005_5-monat,
+           tp_r_estado        TYPE RANGE OF ztfir1005_5-estatus.
+
+    CONSTANTS: gc_a TYPE c VALUE 'A',
+               gc_i TYPE c VALUE 'I'.
+
+    DATA: gti_impuesto_diferido TYPE tp_ti_impuesto_diferido.
+
+    CLASS-DATA:
+      g_operacion                TYPE char1,
+      gti_ztfir1005_1            TYPE STANDARD TABLE OF tp_es_ztfir1005_1,
+      gti_historico_imp_diferido TYPE tp_ti_historial_imp_diferido.
+
+    METHODS:
+
+      contabilizar_impuesto_diferido
+        IMPORTING
+          i_test                  TYPE flag OPTIONAL
+          i_bukrs                 TYPE bukrs
+          i_ejercicio             TYPE glu1-ryear
+          i_mes_final             TYPE char3
+          i_ledger_base           TYPE glfunct-rldnr
+          i_ledger_comparacion    TYPE glfunct-rldnr
+          i_fecha_contabilizacion TYPE d
+          i_clase_documento       TYPE bkpf-blart
+          i_periodo               TYPE monat
+        CHANGING
+          c_ti_impuesto_diferido  TYPE tp_ti_impuesto_diferido,
+      procesar_cuentas_permanente
+        IMPORTING
+          i_bukrs                TYPE t001-bukrs
+        CHANGING
+          c_ti_impuesto_diferido TYPE zclfir1005_impuesto_diferido=>tp_ti_impuesto_diferido.
+
+    CLASS-METHODS:
+      guardar_categoria
+        CHANGING
+          c_ti_extract     TYPE ANY TABLE
+          c_ti_total       TYPE ANY TABLE
+          c_es_ztfir1005_2 TYPE ztfir1005_2,
+      datos_asignar_categoria
+        IMPORTING
+          i_ti_total       TYPE ANY TABLE
+        CHANGING
+          c_es_ztfir1005_2 TYPE ztfir1005_2,
+      val_pantalla_asignar_categoria
+        IMPORTING
+          VALUE(i_es_ztfir1005_2) TYPE ztfir1005_2
+        RETURNING
+          VALUE(r_es_mensajes)    TYPE bapiret2,
+      mod_pantalla_asignar_categoria
+        IMPORTING
+          VALUE(i_es_ztfir1005_2) TYPE ztfir1005_2,
+      cargar_historico_imp_diferido
+        IMPORTING
+          i_r_bukrs         TYPE cnv_pe_t_bukrs_range
+          i_r_gjahr         TYPE /accgo/cas_tt_gjahr_range
+          i_r_belnr         TYPE j_1gvl_rng_belnr_t
+          i_r_hkont         TYPE fkk_rt_hkont_kk
+          i_r_monat         TYPE tp_r_monat
+          i_r_doc_anulacion TYPE j_1gvl_rng_belnr_t
+          i_r_estado        TYPE tp_r_estado,
+      recupera_cuenta
+        CHANGING
+          c_r_numero_cuenta TYPE gtp_r_racct
+          c_ledger          TYPE rldnr,
+      expor_comparacion
+        CHANGING
+          c_ti_comparacion    TYPE ANY TABLE
+          c_dt_call_list_tool TYPE char1 OPTIONAL.
+
+
+
+  PROTECTED SECTION.
+
+    DATA: go_parametros TYPE REF TO zclcxr1000_parametros,
+          gti_log       TYPE tp_ti_log.
+
+    METHODS:
+      cargar_parametrizacion
+        IMPORTING
+          i_bukrs                      TYPE bukrs
+        EXPORTING
+          e_ti_cuentas_contabilizacion TYPE tp_ti_cuentas_contabilizacion
+          e_ti_cuenta_x_sociedad       TYPE tp_ti_cuenta_x_sociedad,
+      consultar_comparacion_ledger
+        IMPORTING
+          i_bukrs                      TYPE bukrs
+          i_ejercicio                  TYPE glu1-ryear
+          i_ledger_base                TYPE glfunct-rldnr
+          i_ledger_comparacion         TYPE glfunct-rldnr
+          i_version                    TYPE glu1-rvers
+          i_mes_inicio                 TYPE char3
+          i_mes_final                  TYPE char3
+          VALUE(i_r_numero_cuenta)     TYPE tp_r_numero_cuenta
+          i_ti_cuentas_contabilizacion TYPE tp_ti_cuentas_contabilizacion
+        RETURNING
+          VALUE(r_ti_diferencias)      TYPE tp_ti_comparacion_total,
+      consultar_cuentas
+        IMPORTING
+          i_bukrs                  TYPE bukrs
+        EXPORTING
+          e_ti_cuentas_permanentes TYPE tp_ti_cuentas_permanentes
+          e_ti_ska1                TYPE tp_ti_ska1
+          e_ti_porcentaje_cuenta   TYPE tp_ti_porcentaje_cuenta
+        CHANGING
+          c_ti_diferencias         TYPE tp_ti_comparacion_total OPTIONAL,
+      consolidar_impuesto_diferido
+        IMPORTING
+          i_bukrs                 TYPE bukrs
+          i_solo_diferencia       TYPE flag
+          i_fecha_contabilizacion TYPE d
+        CHANGING
+          c_ti_diferencias        TYPE tp_ti_comparacion_total
+          c_ti_impuesto_diferido  TYPE tp_ti_impuesto_diferido.
+
+  PRIVATE SECTION.
+    METHODS: consultar_meses
+      EXPORTING
+        e_ti_meses TYPE STANDARD TABLE,
+      consultar_norma_ledger
+        IMPORTING
+          i_ledger_base     TYPE glfunct-rldnr
+        EXPORTING
+          e_es_norma_ledger TYPE tacc_trgt_ldgr,
+
+      verificar_anulacion_documento
+        IMPORTING
+          i_bukrs                     TYPE bukrs
+          i_r_cuentas                 TYPE tp_r_numero_cuenta
+        EXPORTING
+          e_ti_historial_imp_diferido TYPE tp_ti_historial_imp_diferido
+        RETURNING
+          VALUE(r_anular)             TYPE flag,
+      anular_documento
+        IMPORTING
+          i_es_norma_ledger       TYPE tacc_trgt_ldgr
+          i_bukrs                 TYPE t001-bukrs
+          i_fecha_contabilizacion TYPE d
+          i_clase_documento       TYPE bkpf-blart
+          i_periodo               TYPE monat
+          i_mes_final             TYPE char3
+          i_ti_meses              TYPE tp_ti_meses
+          i_es_imp_diferido_total TYPE tp_es_impuesto_diferido_total
+          i_r_cuentas             TYPE tp_r_numero_cuenta,
+      contabilizar_subtotal
+        IMPORTING
+          i_test                       TYPE flag
+          i_bukrs                      TYPE t001-bukrs
+          i_ledger_base                TYPE glfunct-rldnr
+          i_ledger_comparacion         TYPE glfunct-rldnr
+          i_fecha_contabilizacion      TYPE d
+          i_clase_documento            TYPE bkpf-blart
+          i_periodo                    TYPE monat
+          i_mes_final                  TYPE char3
+          i_clase_cuenta               TYPE ztfir1005_3-clase_cuenta
+          i_cuenta_gasto               TYPE hkont
+          i_cuenta_contabilizar        TYPE hkont
+          i_ceco                       TYPE ztfir1005_3-kostl
+          i_centro_beneficio           TYPE prctr
+          i_division                   TYPE gsber
+          i_es_imp_diferido_total      TYPE tp_es_impuesto_diferido_total
+          i_ultimo                     TYPE char1
+          i_r_cuentas                  TYPE tp_r_numero_cuenta
+        CHANGING
+          c_ti_posiciones_cuenta_mayor TYPE  bapiacgl09_tab
+          c_ti_cantidades              TYPE  bapiaccr09_tab
+          c_ti_historial_imp_diferido  TYPE tp_ti_historial_imp_diferido,
+
+      determinar_clase_cuenta
+        IMPORTING
+          i_cuenta              TYPE glu1-racct
+        RETURNING
+          VALUE(r_clase_cuenta) TYPE char7,
+      construir_catalogo_log
+        IMPORTING
+          i_ti_log             TYPE zclfir1005_impuesto_diferido=>tp_ti_log
+        RETURNING
+          VALUE(r_ti_catalogo) TYPE lvc_t_fcat.
+
+ENDCLASS.
+
+
+
+CLASS zclfir1005_impuesto_diferido IMPLEMENTATION.
+
+  METHOD datos_asignar_categoria.
+
+    gti_ztfir1005_1 = i_ti_total[].
+    "verifica si existen registros marcados
+    DELETE gti_ztfir1005_1 WHERE mark IS INITIAL.
+    "Solo es permitido seleccionar un unico registro
+    IF lines( gti_ztfir1005_1 ) GT 1.
+      "Seleccione sólo un registro
+      MESSAGE s102(ag) DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        c_es_ztfir1005_2 = CORRESPONDING #( gti_ztfir1005_1[ 1 ] ).
+      CATCH cx_sy_itab_line_not_found.
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD mod_pantalla_asignar_categoria.
+
+    CLEAR: g_operacion.
+
+    "...Se valida si ya existe la Categoria
+    SELECT SINGLE categoria
+     FROM ztfir1005_2
+     WHERE bukrs     EQ @i_es_ztfir1005_2-bukrs
+     AND   categoria EQ @i_es_ztfir1005_2-categoria
+     INTO @i_es_ztfir1005_2-categoria.
+
+    IF sy-subrc EQ 0.
+      g_operacion = gc_a.
+    ELSE.
+      g_operacion = gc_i.
+    ENDIF.
+
+    IF g_operacion EQ gc_a.
+      LOOP AT SCREEN.
+        IF screen-group1 EQ 'MOD'.
+          screen-input = 0.
+          MODIFY SCREEN.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD val_pantalla_asignar_categoria.
+
+    IF i_es_ztfir1005_2-bukrs IS INITIAL OR
+       i_es_ztfir1005_2-categoria IS INITIAL OR
+       i_es_ztfir1005_2-endda IS INITIAL OR
+       i_es_ztfir1005_2-begda IS INITIAL.
+
+      r_es_mensajes = VALUE #( type = 'I' id = '/PLMU/UI_LBL' number = '001' ).
+      RETURN.
+
+    ENDIF.
+
+    "valida que la fecha Fin sea mayor que la fecha Inicio
+    IF i_es_ztfir1005_2-begda GT i_es_ztfir1005_2-endda.
+      r_es_mensajes = VALUE #( type = 'I'  id = 'CACSMD' number = '025'
+                               message_v1 = i_es_ztfir1005_2-begda message_v2 = i_es_ztfir1005_2-begda ).
+      RETURN.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD guardar_categoria.
+
+    DATA: es_ztfir1005_1 LIKE LINE OF gti_ztfir1005_1.
+
+    IF g_operacion = 'A'.
+      gti_ztfir1005_1 = c_ti_total[].
+
+      READ TABLE gti_ztfir1005_1 ASSIGNING FIELD-SYMBOL(<fs_es_ztfir1005_1>)
+                                 WITH KEY bukrs      = c_es_ztfir1005_2-bukrs
+                                          categoria  = c_es_ztfir1005_2-categoria.
+      IF sy-subrc IS INITIAL.
+        <fs_es_ztfir1005_1>-begda  = c_es_ztfir1005_2-begda.
+        <fs_es_ztfir1005_1>-endda  = c_es_ztfir1005_2-endda.
+
+        c_ti_extract[] = gti_ztfir1005_1[].
+
+        <fs_es_ztfir1005_1>-action = 'U'.
+
+        c_ti_total[] = gti_ztfir1005_1.
+
+      ENDIF.
+
+    ENDIF.
+
+    MODIFY ztfir1005_2 FROM c_es_ztfir1005_2.
+
+    IF sy-subrc IS INITIAL.
+      MESSAGE s091(zfi01) WITH c_es_ztfir1005_2-bukrs c_es_ztfir1005_2-categoria.
+      COMMIT WORK AND WAIT.
+    ELSE.
+      MESSAGE s218(/accgo/oe_msg).
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD cargar_parametrizacion.
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'FI' i_ricefw = 'R1005'  ).
+    ENDIF.
+
+    SELECT *
+    FROM ztfir1005_3
+    WHERE bukrs = @i_bukrs
+    INTO CORRESPONDING FIELDS OF TABLE @e_ti_cuentas_contabilizacion.
+
+*    SELECT bukrs, saknr, altkt
+*    FROM skb1
+*    WHERE bukrs = @i_bukrs
+*    INTO CORRESPONDING FIELDS OF TABLE @e_ti_cuenta_x_sociedad.
+
+  ENDMETHOD.
+
+  METHOD consultar_comparacion_ledger.
+
+    DATA: ti_bdcdata            TYPE TABLE OF bdcdata WITH EMPTY KEY,
+          ti_mensajes_retorno   TYPE STANDARD TABLE OF bdcmsgcoll,
+          ti_comparacion_ledger TYPE tp_ti_ledger_comparacion.
+
+    "Si no se ingresan cuentas se agregan las configuradas por defecto
+    IF i_r_numero_cuenta IS INITIAL.
+      i_r_numero_cuenta = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CUENTAS_DF' )
+                              ( CORRESPONDING #( es_parametro MAPPING option = opti )  )
+                         ).
+    ENDIF.
+
+    "Cuentas que se deben excluir
+    i_r_numero_cuenta = VALUE #( BASE i_r_numero_cuenta
+                                 FOR es_cuentas IN i_ti_cuentas_contabilizacion
+                                 ( sign = 'E' option = 'EQ' low = es_cuentas-cuenta )
+                               ).
+    "Configuracion de parametros para recuperar comparacion de ledger
+
+    ti_bdcdata = VALUE #( ( program  = 'RGUCOMP4' dynpro   = '1000' dynbegin = abap_true )
+                          ( fnam = 'BDC_OKCODE' fval = '=ONLI' )
+                          ( fnam = 'P_BRYEAR' fval = i_ejercicio )
+                        ).
+
+    DATA(opciones) = VALUE ctu_params( dismode  = 'N'
+                                       defsize  = abap_true
+                                       racommit = abap_true ).
+    "Se exportan las cuentas a memoria para que se puedan enviar a la tx GCAC
+    EXPORT: cuentas = i_r_numero_cuenta
+            TO DATABASE indx(sc) ID 'CUENTAS',
+            ledger_base = i_ledger_base
+            TO DATABASE indx(sc) ID 'P_BRLDNR'.
+
+    SET PARAMETER ID 'BUK' FIELD i_bukrs.
+    SET PARAMETER ID 'GJR' FIELD i_ejercicio.
+    SET PARAMETER ID 'VPE' FIELD i_mes_inicio.
+    SET PARAMETER ID 'BPE' FIELD i_mes_final.
+    SET PARAMETER ID 'GLN' FIELD i_ledger_comparacion.
+    SET PARAMETER ID 'GVS' FIELD i_version.
+
+    TRY.
+        CALL TRANSACTION 'GCAC' WITH AUTHORITY-CHECK
+                                USING ti_bdcdata
+                                OPTIONS FROM opciones
+                                MESSAGES INTO ti_mensajes_retorno.
+
+        IMPORT ti_comparacion_d = ti_comparacion_ledger
+        FROM DATABASE indx(sc) ID 'TI_COMPARACION_D'.
+*      CATCH cx_sy_import_mismatch_error ##NO_HANDLER.
+      CATCH cx_sy_authorization_error ##NO_HANDLER.
+    ENDTRY.
+    DELETE FROM DATABASE indx(sc) ID 'TI_COMPARACION_D'.
+    " se considera solo moneda de sociedad, CURTP = 10
+    DELETE ti_comparacion_ledger WHERE curtp NE '10'.
+
+    LOOP AT ti_comparacion_ledger INTO DATA(es_comparacion_ledger).
+      COLLECT CORRESPONDING tp_es_comparacion_total( es_comparacion_ledger )
+      INTO r_ti_diferencias.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD consultar_cuentas.
+
+    "Consulta cuentas y grupo de cuentas existentes.
+    IF c_ti_diferencias IS SUPPLIED AND c_ti_diferencias IS NOT INITIAL.
+      SELECT ska1~saknr, ska1~bilkt, ska1~ktoks, skat~txt50,
+             t~spras, t~ktopl, txt30
+        FROM ska1
+        INNER JOIN skat
+        ON ska1~saknr EQ skat~saknr
+        LEFT JOIN t077z AS t
+        ON t~spras EQ @sy-langu
+        AND t~ktopl = ska1~ktopl
+        AND t~ktoks = ska1~ktoks
+        FOR ALL ENTRIES IN @c_ti_diferencias
+            WHERE
+            (   ska1~ktopl EQ @gc_puco
+            AND ska1~saknr EQ @c_ti_diferencias-racct
+            AND skat~spras = @sy-langu
+            )
+            OR ska1~ktopl EQ @gc_pcgl
+       INTO TABLE @e_ti_ska1.
+    ENDIF.
+
+    "porcentaje cuentas
+    SELECT *
+    FROM ztfir1005_1
+    WHERE bukrs = @i_bukrs
+    INTO TABLE @e_ti_porcentaje_cuenta.
+
+    "cuentas que han sido marcadas como permanentes de acuerdo a la sociedad.
+    SELECT *
+      FROM ztfir1005_4
+      WHERE bukrs = @i_bukrs
+      INTO CORRESPONDING FIELDS OF TABLE @e_ti_cuentas_permanentes.
+
+  ENDMETHOD.
+
+  METHOD consolidar_impuesto_diferido.
+
+    DATA: ti_porcentaje_cuenta TYPE tp_ti_porcentaje_cuenta,
+          es_porcentaje_cuenta LIKE LINE OF ti_porcentaje_cuenta,
+          ti_ska1              TYPE tp_ti_ska1,
+          es_ska1              LIKE LINE OF ti_ska1,
+          clase_cuenta         TYPE char7.
+
+    FIELD-SYMBOLS: <fs_es_impuesto_diferido>   LIKE LINE OF  c_ti_impuesto_diferido,
+                   <fs_es_impuesto_diferido_d> LIKE LINE OF  c_ti_impuesto_diferido.
+
+    CHECK c_ti_diferencias IS NOT INITIAL.
+
+    consultar_cuentas(
+      EXPORTING
+        i_bukrs                  = i_bukrs
+      IMPORTING
+        e_ti_cuentas_permanentes = DATA(ti_cuentas_permanentes)
+        e_ti_ska1                = ti_ska1
+        e_ti_porcentaje_cuenta   = ti_porcentaje_cuenta
+      CHANGING
+        c_ti_diferencias         = c_ti_diferencias  ).
+
+    SORT c_ti_diferencias BY racct.
+
+    DELETE ti_porcentaje_cuenta WHERE nodo NOT IN VALUE fkk_rt_hkont_kk(  FOR es_diferencia IN c_ti_diferencias
+                                                                            ( sign = 'I' option = 'EQ' low = es_diferencia-racct ) )
+                                    OR ( endda IS INITIAL OR begda IS INITIAL ).
+
+    LOOP AT c_ti_diferencias ASSIGNING FIELD-SYMBOL(<fs_es_diferenia>).
+
+      CLEAR: es_porcentaje_cuenta, es_ska1, clase_cuenta.
+
+      READ TABLE ti_porcentaje_cuenta INTO es_porcentaje_cuenta
+                                      WITH KEY nodo = <fs_es_diferenia>-racct.
+
+      IF sy-subrc = 0 AND ( es_porcentaje_cuenta-endda < i_fecha_contabilizacion OR
+                            es_porcentaje_cuenta-begda > i_fecha_contabilizacion ).
+        CONTINUE.
+      ENDIF.
+
+      READ TABLE ti_ska1 INTO es_ska1 WITH KEY saknr = <fs_es_diferenia>-racct
+                                               ktopl = gc_puco.
+
+      APPEND INITIAL LINE TO c_ti_impuesto_diferido ASSIGNING <fs_es_impuesto_diferido>.
+
+      clase_cuenta = determinar_clase_cuenta( <fs_es_diferenia>-racct ).
+
+
+      <fs_es_impuesto_diferido> = VALUE #( bukrs      = <fs_es_diferenia>-orgunit
+                                           clase_cta  = <fs_es_diferenia>-racct(1)
+                                           grupo_ctas = es_ska1-txt30
+                                           den_cuenta = es_ska1-txt50
+                                           cuenta     = <fs_es_diferenia>-racct
+                                           ledger_basico = <fs_es_diferenia>-b_amount
+                                           ledger_comparativo = <fs_es_diferenia>-c_amount
+                                           diferencia = <fs_es_diferenia>-diff_amount
+                                           moneda = <fs_es_diferenia>-currency
+
+                                         ).
+
+      IF  ( <fs_es_diferenia>-b_amount > <fs_es_diferenia>-c_amount ).
+
+        IF ( clase_cuenta = gc_activo OR clase_cuenta = gc_ingreso ).
+
+          <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+          <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+        ELSEIF clase_cuenta = gc_pasivo OR clase_cuenta = gc_gasto.
+
+          <fs_es_impuesto_diferido>-deducible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+
+        ENDIF.
+
+      ELSEIF ( <fs_es_diferenia>-b_amount < <fs_es_diferenia>-c_amount ).
+
+        IF ( clase_cuenta = gc_pasivo OR clase_cuenta = gc_gasto ).
+
+          <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+          <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+        ELSEIF clase_cuenta = gc_activo OR clase_cuenta = gc_ingreso.
+
+          <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+          <fs_es_impuesto_diferido>-deducible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+
+        ENDIF.
+
+      ENDIF.
+
+      " De acuerdo a la naturaleza de las cuentas contables, se debe evaluar la comparación
+      " ya que si la cuenta pertenece al pasivo o egreso el tratamiento al momento de comparar
+      " cambia pues no siempre el valor mayor matemático es el mayor valor contable.
+      IF clase_cuenta = gc_pasivo OR clase_cuenta = gc_ingreso.
+        " 1er caso. si el valor (-) está en el Ledger tributario, se debe comptrtar como mayor valor.
+        IF <fs_es_diferenia>-b_amount LT 0 AND <fs_es_diferenia>-c_amount GE 0.
+          <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+          " Cuando me da que el impuesto es IMPONIBLE el tipo de este debe ser PASIVO
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+          " 2do. caso. Si el valor (-) está en el ledger comparatvo, se debe comportar como menor valor.
+        ELSEIF  <fs_es_diferenia>-b_amount GE 0 AND <fs_es_diferenia>-c_amount LT 0.
+          <fs_es_impuesto_diferido>-deducible = icon_radiobutton.
+          <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+          " Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO
+          <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+
+          " 3er caso. si ambos valores son (-) el tratamiento debe ser con los valores absolutos.
+        ELSEIF  <fs_es_diferenia>-b_amount LT 0 AND <fs_es_diferenia>-c_amount LT 0.
+          IF abs( <fs_es_diferenia>-b_amount ) GT abs( <fs_es_diferenia>-c_amount ).
+            <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+            <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+            " Cuando me da que el impuesto es IMPONIBLE el tipo de este debe ser PASIVO
+            <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+          ELSE.
+            <fs_es_impuesto_diferido>-deducible = icon_radiobutton.
+            <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+            " Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO
+            <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      "Valida si la cuenta esta marcada como permanente
+      IF line_exists( ti_cuentas_permanentes[ bukrs = <fs_es_diferenia>-orgunit hkont = <fs_es_diferenia>-racct ] ).
+        <fs_es_impuesto_diferido> = VALUE #( BASE <fs_es_impuesto_diferido>
+                                             permanente = abap_true
+                                             imponible  = icon_wd_radio_button_empty
+                                             deducible  = icon_wd_radio_button_empty
+                                             tipo_impuesto  = space
+                                           ).
+      ENDIF.
+
+      <fs_es_impuesto_diferido>-sort_tipo_impuesto = <fs_es_impuesto_diferido>-tipo_impuesto.
+
+      IF ( <fs_es_impuesto_diferido>-permanente EQ space AND <fs_es_impuesto_diferido>-imponible EQ space AND <fs_es_impuesto_diferido>-deducible EQ space ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true AND <fs_es_impuesto_diferido>-imponible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true AND <fs_es_impuesto_diferido>-deducible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-imponible EQ abap_true AND <fs_es_impuesto_diferido>-deducible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true ).
+
+        <fs_es_impuesto_diferido>-impuesto_diferido = 0.
+
+        "Signo del valor del impuesto diferido, dependiendo si es activo o pasivo
+        <fs_es_impuesto_diferido>-impuesto_diferido = COND #( WHEN ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_activo AND
+                                                                     <fs_es_impuesto_diferido>-impuesto_diferido LT 0 )
+                                                                   OR
+                                                                   ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_pasivo AND
+                                                                     <fs_es_impuesto_diferido>-impuesto_diferido GT 0 )
+                                                                     THEN
+                                                                <fs_es_impuesto_diferido>-impuesto_diferido * -1
+                                                             ).
+
+      ELSE.
+
+        IF line_exists( ti_porcentaje_cuenta[ nodo = <fs_es_diferenia>-racct ] ).
+
+          LOOP AT ti_porcentaje_cuenta INTO es_porcentaje_cuenta WHERE   nodo = <fs_es_diferenia>-racct
+                                                                   AND ( endda >= i_fecha_contabilizacion OR begda <= i_fecha_contabilizacion ).
+
+*            APPEND INITIAL LINE TO c_ti_impuesto_diferido ASSIGNING <fs_es_impuesto_diferido_d>.
+
+            <fs_es_impuesto_diferido> = VALUE #( BASE <fs_es_impuesto_diferido>
+                                                    impuesto_diferido = <fs_es_diferenia>-diff_amount * ( es_porcentaje_cuenta-porcentaje / 100 )
+                                                    porcentaje = es_porcentaje_cuenta-porcentaje
+                                                    categoria = es_porcentaje_cuenta-categoria ).
+
+            IF ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_activo AND <fs_es_impuesto_diferido>-impuesto_diferido LT 0 ) OR
+               ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_pasivo AND <fs_es_impuesto_diferido>-impuesto_diferido GT 0 ).
+
+              <fs_es_impuesto_diferido>-impuesto_diferido = <fs_es_impuesto_diferido>-impuesto_diferido * -1.
+
+            ENDIF.
+
+*            <fs_es_impuesto_diferido_d> = CORRESPONDING #( <fs_es_impuesto_diferido> ).
+
+          ENDLOOP.
+
+        ELSE.
+
+          IF ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_activo AND <fs_es_impuesto_diferido>-impuesto_diferido LT 0 ) OR
+               ( <fs_es_impuesto_diferido>-tipo_impuesto EQ gc_pasivo AND <fs_es_impuesto_diferido>-impuesto_diferido GT 0 ).
+
+            <fs_es_impuesto_diferido>-impuesto_diferido = <fs_es_impuesto_diferido>-impuesto_diferido * -1.
+
+          ENDIF.
+
+        ENDIF.
+
+      ENDIF.
+
+    ENDLOOP.
+
+    IF i_solo_diferencia = abap_true.
+      DELETE c_ti_impuesto_diferido WHERE diferencia EQ 0.
+    ENDIF.
+
+    SORT c_ti_impuesto_diferido BY clase_cta grupo_ctas sort_tipo_impuesto cuenta ASCENDING.
+
+  ENDMETHOD.
+
+  METHOD contabilizar_impuesto_diferido.
+
+    CONSTANTS: c_txt_imponible TYPE string VALUE 'I',
+               c_txt_deducible TYPE string VALUE 'D',
+               c_shkzg_s       TYPE c VALUE 'S',
+               c_shkzg_h       TYPE c VALUE 'H'.
+
+    DATA: indicador_hs_contrapartida    TYPE shkzg,
+          indicador_hs_partida          TYPE shkzg,
+          ultima_posicion_tabla_interna TYPE char1,
+          s_mensaje                     TYPE string,
+          r_cuentas                     TYPE RANGE OF racct,
+          ti_historial_imp_diferido     TYPE tp_ti_historial_imp_diferido,
+          respuesta_confirma            TYPE string,
+          ti_impuesto_diferido_total    TYPE tp_ti_impuesto_diferido_total,
+          ti_cuentas_contabilizacion    TYPE tp_ti_cuentas_contabilizacion,
+          ti_posiciones_cuenta_mayor    TYPE bapiacgl09_tab,
+          ti_cantidades                 TYPE bapiaccr09_tab,
+          es_cuentas_contabilizacion    LIKE LINE OF ti_cuentas_contabilizacion,
+          total_imp_diferido            TYPE tp_es_impuesto_diferido-impuesto_diferido,
+          es_log                        TYPE tp_es_log,
+          cuenta_gasto                  TYPE hkont,
+          cuenta_contabilizar           TYPE hkont,
+          ceco                          TYPE ztfir1005_3-kostl,
+          centro_beneficio              TYPE prctr,
+          division                      TYPE gsber.
+    BREAK seblondo.
+
+    CLEAR: gti_log.
+
+    cargar_parametrizacion(
+      EXPORTING
+        i_bukrs                      = i_bukrs
+      IMPORTING
+        e_ti_cuentas_contabilizacion = ti_cuentas_contabilizacion ).
+
+    procesar_cuentas_permanente( EXPORTING i_bukrs = i_bukrs CHANGING c_ti_impuesto_diferido = c_ti_impuesto_diferido ).
+
+    IF i_test NE abap_true.
+      CALL FUNCTION 'POPUP_TO_CONFIRM'
+        EXPORTING
+          titlebar       = TEXT-t01 "'Impuesto Diferido '
+          text_question  = TEXT-m03 "'¿Esta seguro de Contabilizar los subtotales del impuesto Diferido?'
+        IMPORTING
+          answer         = respuesta_confirma
+        EXCEPTIONS
+          text_not_found = 1
+          OTHERS         = 2.
+
+      CHECK respuesta_confirma EQ '1'.
+
+    ENDIF.
+
+    total_imp_diferido = REDUCE #( INIT l_total_imp_diferido TYPE glu1-tsl
+                                   FOR es_imp_diferido IN c_ti_impuesto_diferido
+                                   NEXT l_total_imp_diferido += es_imp_diferido-impuesto_diferido ).
+
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti                         = c_ti_impuesto_diferido
+        i_nombre_columna             = 'CUENTA'
+      CHANGING
+        c_ti_rango                   = r_cuentas ).
+
+    LOOP AT c_ti_impuesto_diferido ASSIGNING FIELD-SYMBOL(<fs_es_impuesto_diferido>).
+
+      COLLECT VALUE tp_es_impuesto_diferido_total(
+                          bukrs   = <fs_es_impuesto_diferido>-bukrs
+                          imponible = <fs_es_impuesto_diferido>-imponible
+                          deducible = <fs_es_impuesto_diferido>-deducible
+                          impuesto_diferido = <fs_es_impuesto_diferido>-impuesto_diferido
+                          moneda = <fs_es_impuesto_diferido>-moneda
+                          categoria = <fs_es_impuesto_diferido>-categoria )
+      INTO   ti_impuesto_diferido_total.
+
+      "Registrar hisorial
+      APPEND VALUE ztfir1005_5( bukrs = <fs_es_impuesto_diferido>-bukrs
+                                gjahr = i_ejercicio
+                                hkont = <fs_es_impuesto_diferido>-cuenta
+                                monat = i_mes_final
+                                val_lgr_basico = <fs_es_impuesto_diferido>-ledger_basico
+                                val_lgr_comp = <fs_es_impuesto_diferido>-ledger_comparativo
+                                diferencia = <fs_es_impuesto_diferido>-diferencia
+                                permanente = <fs_es_impuesto_diferido>-permanente
+                                val_impuesto = <fs_es_impuesto_diferido>-impuesto_diferido
+                                porcentaje = <fs_es_impuesto_diferido>-porcentaje
+                                waers = <fs_es_impuesto_diferido>-moneda
+                                categoria = <fs_es_impuesto_diferido>-categoria
+                                imponible = COND #( WHEN <fs_es_impuesto_diferido>-imponible EQ icon_radiobutton THEN
+                                                       abap_true
+                                                  )
+                                deducible = COND #( WHEN <fs_es_impuesto_diferido>-deducible EQ icon_radiobutton THEN
+                                                       abap_true
+                                                  )
+                              )
+      TO ti_historial_imp_diferido.
+
+    ENDLOOP.
+
+    " Verificar que hay valores a contabilizar
+    IF total_imp_diferido IS INITIAL.
+      MESSAGE i252(/scwm/gm).
+      EXIT.
+    ENDIF.
+
+    SORT ti_impuesto_diferido_total DESCENDING.
+    DELETE ti_impuesto_diferido_total WHERE impuesto_diferido IS  INITIAL.
+
+    LOOP AT ti_impuesto_diferido_total ASSIGNING FIELD-SYMBOL(<fs_es_imp_diferido_total>).
+
+      CLEAR: es_cuentas_contabilizacion.
+
+      IF sy-tabix EQ 1 AND sy-tabix < lines( ti_impuesto_diferido_total ).
+        ultima_posicion_tabla_interna = 1.
+      ELSEIF sy-tabix EQ lines( ti_impuesto_diferido_total ).
+        ultima_posicion_tabla_interna = abap_true.
+      ENDIF.
+
+      es_log = VALUE #( num_registro = sy-tabix
+                        bukrs = <fs_es_imp_diferido_total>-bukrs ).
+
+      " Colocar clase de cuenta: imponible o deducible
+      es_log-clase_cta = COND #( WHEN <fs_es_imp_diferido_total>-imponible EQ icon_radiobutton THEN
+                                    c_txt_imponible
+                                 WHEN <fs_es_imp_diferido_total>-deducible EQ icon_radiobutton THEN
+                                    c_txt_deducible ).
+
+      es_log-impuesto = <fs_es_imp_diferido_total>-impuesto_diferido.
+      es_log-moneda = <fs_es_imp_diferido_total>-moneda.
+
+      " Indicador debe/haber para las posiciones de contabilización
+      IF es_log-impuesto GT 0.
+        indicador_hs_contrapartida = c_shkzg_h.
+        indicador_hs_partida = c_shkzg_s.
+      ELSE.
+        indicador_hs_contrapartida = c_shkzg_s.
+        indicador_hs_partida = c_shkzg_h.
+      ENDIF.
+
+      " Consulto por la cuenta de contrapartida para contabilizar
+      READ TABLE ti_cuentas_contabilizacion INTO es_cuentas_contabilizacion
+                                            WITH KEY bukrs = <fs_es_imp_diferido_total>-bukrs
+                                                     clase_cuenta = es_log-clase_cta
+                                                     shkzg = indicador_hs_contrapartida
+                                                     categoria = <fs_es_imp_diferido_total>-categoria.
+
+      es_log-cuenta_gasto = cuenta_gasto = es_cuentas_contabilizacion-cuenta.
+      ceco = es_cuentas_contabilizacion-kostl.
+      division = es_cuentas_contabilizacion-division.
+      centro_beneficio = es_cuentas_contabilizacion-prctr.
+
+      " Siempre debe estar ingresado un registro de tipo GASTO para hacer la contrapartida de la contabilización
+      IF ti_cuentas_contabilizacion IS NOT INITIAL.
+        " Consulto la cuenta a la que se contabilizara la clase de cuenta y el grupo de cuentas
+        CLEAR es_cuentas_contabilizacion.
+        READ TABLE ti_cuentas_contabilizacion INTO es_cuentas_contabilizacion
+                                              WITH KEY bukrs = <fs_es_imp_diferido_total>-bukrs
+                                                       clase_cuenta = es_log-clase_cta
+                                                       shkzg = indicador_hs_partida
+                                                       categoria = <fs_es_imp_diferido_total>-categoria.
+        IF sy-subrc EQ 0.
+          " Como se hallo la cuenta a la cual se va a contabilizar se ingresa a los mensajes y se lanza la rutina de contabilizar
+          es_log-cuenta = cuenta_contabilizar = es_cuentas_contabilizacion-cuenta.
+          "Contabilizacion del subtotal
+          contabilizar_subtotal( EXPORTING
+                                     i_test                  = i_test
+                                     i_bukrs                 = <fs_es_imp_diferido_total>-bukrs
+                                     i_ledger_base           = i_ledger_base
+                                     i_ledger_comparacion    = i_ledger_comparacion
+                                     i_clase_cuenta          = es_log-clase_cta
+                                     i_fecha_contabilizacion = i_fecha_contabilizacion
+                                     i_clase_documento       = i_clase_documento
+                                     i_periodo               = i_periodo
+                                     i_mes_final             = i_mes_final
+                                     i_cuenta_gasto          = cuenta_gasto
+                                     i_cuenta_contabilizar   = cuenta_contabilizar
+                                     i_ceco                  = ceco
+                                     i_centro_beneficio      = centro_beneficio
+                                     i_division              = division
+                                     i_es_imp_diferido_total = <fs_es_imp_diferido_total>
+                                     i_ultimo                = ultima_posicion_tabla_interna
+                                     i_r_cuentas             = r_cuentas
+                                 CHANGING
+                                    c_ti_cantidades              = ti_cantidades
+                                    c_ti_posiciones_cuenta_mayor = ti_posiciones_cuenta_mayor
+                                    c_ti_historial_imp_diferido  = ti_historial_imp_diferido ).
+
+        ELSE.
+          " La Clase de Cuenta y grupo de cuentas No existe en Ztfir1005_3 y no es posible determinar la cuenta a contabilizar
+          es_log-semaforo = icon_red_light.
+          MESSAGE s002(zfi01) WITH <fs_es_imp_diferido_total>-bukrs <fs_es_imp_diferido_total>-categoria
+          INTO es_log-mensaje.
+
+          APPEND es_log TO gti_log.
+        ENDIF.
+      ELSE.
+        " No hay cuenta de GASTO para contrapartida y se ingresa el error
+        es_log-semaforo = icon_red_light.
+        MESSAGE s002(zfi01) WITH <fs_es_imp_diferido_total>-bukrs es_log-clase_cta indicador_hs_partida <fs_es_imp_diferido_total>-categoria
+        INTO es_log-mensaje.
+
+        APPEND es_log TO gti_log.
+      ENDIF.
+    ENDLOOP.
+
+    IF i_test = abap_false.
+
+      DELETE ti_historial_imp_diferido WHERE belnr IS INITIAL.
+      DELETE ADJACENT DUPLICATES FROM ti_historial_imp_diferido COMPARING bukrs gjahr belnr hkont monat.
+
+      INSERT ztfir1005_5 FROM TABLE ti_historial_imp_diferido.
+    ENDIF.
+
+    CALL FUNCTION 'ZCXR1002_MOSTRARALV_01'
+      EXPORTING
+        i_ti_datos    = REF #( gti_log )
+        i_ti_catalogo = construir_catalogo_log( gti_log )
+*       i_status_gui  =
+*       i_statusgui_programa =
+*       i_titulo      =
+*       i_o_ctr_alvgrid      =
+*       i_id_reporte  = SY-REPID
+*       i_es_layout   =
+*       i_es_variante =
+*       i_nombreusuario      = SY-UNAME
+*       i_conservar_catalogo = space
+*       i_persistir_dynpro   = space
+*       i_ti_sort     =
+      .
+
+  ENDMETHOD.
+
+
+  METHOD consultar_meses.
+
+    SELECT * FROM t247
+    WHERE spras = @sy-langu
+     INTO TABLE @e_ti_meses.
+
+  ENDMETHOD.
+
+
+  METHOD consultar_norma_ledger.
+
+    SELECT SINGLE *
+    FROM tacc_trgt_ldgr
+    WHERE ldgrp_gl = @i_ledger_base
+    INTO @e_es_norma_ledger.
+
+  ENDMETHOD.
+
+
+  METHOD verificar_anulacion_documento.
+
+    DATA: respuesta_confirmacion       TYPE c.
+
+    CHECK i_r_cuentas IS NOT INITIAL.
+
+    "Hallar registros anteriores
+    SELECT *
+    FROM ztfir1005_5
+    WHERE bukrs    EQ @i_bukrs
+    AND hkont    IN @i_r_cuentas
+    INTO TABLE @e_ti_historial_imp_diferido.
+
+    "Eliminamos los registros con estatus = A (Anulados)
+    DELETE e_ti_historial_imp_diferido WHERE estatus EQ gc_estado_anulado.
+
+    SORT e_ti_historial_imp_diferido DESCENDING BY bukrs gjahr belnr hkont.
+    READ TABLE e_ti_historial_imp_diferido INTO DATA(es_historial_imp_diferido) INDEX 1.
+    DELETE e_ti_historial_imp_diferido WHERE belnr <> es_historial_imp_diferido-belnr.
+
+    IF NOT e_ti_historial_imp_diferido[] IS INITIAL.
+
+      CALL FUNCTION 'SWO_POPUP_TO_CONFIRM'
+        EXPORTING
+          text   = TEXT-tc1
+          title  = TEXT-tt3
+        IMPORTING
+          answer = respuesta_confirmacion.
+
+      IF respuesta_confirmacion EQ 'J'.
+        r_anular = abap_true.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD anular_documento.
+    CONSTANTS: c_msg_rw   TYPE c LENGTH 2 VALUE 'RW', " Clase de mensaje RW
+               c_msg_numb TYPE c LENGTH 3 VALUE '614'. " Numero de mensaje 614
+
+    DATA: valor_impuesto             TYPE char15,
+          es_header                  TYPE bapiache09, "Cabecera del Documento Contable
+          ti_historial_imp_diferido  TYPE tp_ti_historial_imp_diferido,
+          ti_posiciones_cuenta_mayor TYPE TABLE OF bapiacgl09,
+          ti_cantidades              TYPE STANDARD TABLE OF bapiaccr09,
+          ti_msg_retorno             TYPE bapiret2_t,
+          es_log                     TYPE tp_es_log,
+          obj_type                   TYPE
+          bapiache09-obj_type,
+          obj_key                    TYPE  bapiache09-obj_key,
+          obj_sys                    TYPE  bapiache09-obj_sys.
+
+    CHECK verificar_anulacion_documento( EXPORTING i_bukrs = i_bukrs i_r_cuentas = i_r_cuentas
+                                         IMPORTING e_ti_historial_imp_diferido = ti_historial_imp_diferido ) = abap_true.
+
+    " cabecera de la BAPI
+    es_header = VALUE #(
+                            acc_principle = i_es_norma_ledger-acc_principle
+                            comp_code = i_bukrs
+                            doc_date = |{ i_fecha_contabilizacion(6) }01|
+                            pstng_date = |{ i_fecha_contabilizacion(6) }01|
+                            trans_date = i_fecha_contabilizacion
+                            doc_type = i_clase_documento
+                            fisc_year = i_fecha_contabilizacion(4)
+                            fis_period = i_periodo
+                            header_txt = COND #( WHEN i_ti_meses IS NOT INITIAL THEN
+                                                 |Anul.Imp.Dif. { i_ti_meses[ spras = sy-langu mnr = i_mes_final ]-ltx }|
+                                               )
+                            username = sy-uname
+                            bus_act = 'RFBU'
+                       ).
+
+    es_header-ref_doc_no = es_header-header_txt.
+    " Obtener documento anterior
+    READ TABLE ti_historial_imp_diferido INDEX 1 ASSIGNING FIELD-SYMBOL(<fs_es_historial_imp_diferido>).
+
+    SELECT bukrs, gjahr, belnr,  buzei, shkzg, wrbtr, prctr, hkont, kostl
+    FROM bseg
+    WHERE gjahr EQ @<fs_es_historial_imp_diferido>-gjahr
+    AND belnr EQ @<fs_es_historial_imp_diferido>-belnr
+    AND bukrs EQ @<fs_es_historial_imp_diferido>-bukrs
+    INTO TABLE @DATA(ti_bseg).
+
+    IF sy-subrc IS INITIAL.
+
+      " Por cada posicion encontrada, crear una posicion de anulación
+      LOOP AT ti_bseg INTO DATA(es_bseg).
+
+        " Registro de cuenta de mayor
+        ti_posiciones_cuenta_mayor = VALUE #( BASE ti_posiciones_cuenta_mayor
+                                              ( itemno_acc = sy-tabix
+                                                gl_account = es_bseg-hkont
+                                                doc_type   = i_clase_documento
+                                                comp_code  = es_bseg-bukrs
+                                                fisc_year  = es_bseg-gjahr
+                                                fis_period = i_periodo
+                                                pstng_date = es_header-doc_date
+                                                profit_ctr = es_bseg-prctr
+                                                costcenter = es_bseg-kostl
+                                                item_text  = es_header-header_txt )
+                                            ).
+
+
+
+        " Registro de valor de la posición, con signo opuesto
+        WRITE es_bseg-wrbtr TO valor_impuesto
+        CURRENCY i_es_imp_diferido_total-moneda NO-GROUPING DECIMALS 0.
+
+        valor_impuesto = COND #( WHEN es_bseg-shkzg EQ 'S' THEN
+                                    valor_impuesto * -1
+                                 ELSE
+                                    valor_impuesto
+                                ).
+
+        ti_cantidades = VALUE #( BASE ti_cantidades
+                                 (  itemno_acc = sy-tabix
+                                    amt_doccur = valor_impuesto
+                                    amt_base   = valor_impuesto
+                                    currency   = i_es_imp_diferido_total-moneda )
+                               ).
+
+      ENDLOOP.
+    ENDIF.
+
+    "verificación de contabilización
+    CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+      EXPORTING
+        documentheader = es_header
+      TABLES
+        accountgl      = ti_posiciones_cuenta_mayor
+        currencyamount = ti_cantidades
+        return         = ti_msg_retorno.
+
+    "Hallar mensaje de confirmación de documento OK
+
+    IF line_exists( ti_msg_retorno[ id = c_msg_rw number = c_msg_numb ] ).
+
+      CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+        EXPORTING
+          documentheader = es_header
+        IMPORTING
+          obj_type       = obj_type
+          obj_key        = obj_key
+          obj_sys        = obj_sys
+        TABLES
+          accountgl      = ti_posiciones_cuenta_mayor
+          currencyamount = ti_cantidades
+          return         = ti_msg_retorno.
+
+
+      IF line_exists( ti_msg_retorno[ number = '605' ] ).
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        es_log = VALUE #( documento = obj_key(10)
+                          semaforo = icon_green_light
+                          mensaje = |Anulación: { ti_msg_retorno[ number = '605' ]-message }|
+                         ).
+        APPEND es_log TO gti_log.
+
+        " Guardar registro en tabla de historial
+        MODIFY ti_historial_imp_diferido FROM VALUE #( estatus  = gc_estado_anulado belnr_an =  es_log-documento )
+        TRANSPORTING estatus belnr_an
+        WHERE  belnr = space OR belnr NE space.
+
+        UPDATE ztfir1005_5 FROM TABLE ti_historial_imp_diferido.
+
+      ENDIF.
+    ELSE.
+
+      gti_log = VALUE #( BASE gti_log
+                         FOR es_msg_retorno IN ti_msg_retorno
+                         ( impuesto = 0 semaforo = icon_red_light mensaje = |Anulación: { es_msg_retorno-message }| )
+                       ).
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD contabilizar_subtotal.
+
+    DATA: s_mensaje       TYPE string,
+          valor_impuesto  TYPE char15,
+
+          ti_meses        TYPE STANDARD TABLE OF  t247,
+          es_norma_ledger TYPE tacc_trgt_ldgr,
+          es_header       TYPE bapiache09, "Cabecera del Documento Contable
+          ti_msg_retorno  TYPE bapiret2_t,
+          es_log          TYPE tp_es_log,
+          obj_type        TYPE  bapiache09-obj_type,
+          obj_key         TYPE  bapiache09-obj_key,
+          obj_sys         TYPE  bapiache09-obj_sys.
+
+    consultar_meses( IMPORTING e_ti_meses = ti_meses ).
+    consultar_norma_ledger( EXPORTING i_ledger_base = i_ledger_base
+                            IMPORTING e_es_norma_ledger = es_norma_ledger ).
+
+
+    IF es_norma_ledger-ldgrp_gl EQ i_ledger_base.
+      " Se llena el registro de cabecera de la BAPI
+      es_header = VALUE #(
+                          acc_principle = es_norma_ledger-acc_principle
+                          comp_code = i_bukrs
+                          doc_date = i_fecha_contabilizacion
+                          pstng_date = i_fecha_contabilizacion
+                          trans_date = i_fecha_contabilizacion
+                          doc_type = i_clase_documento
+                          fisc_year = i_fecha_contabilizacion(4)
+                          fis_period = i_periodo
+                         ).
+      READ TABLE ti_meses INTO DATA(es_mes)
+                          WITH KEY spras = sy-langu mnr = i_mes_final.
+      CONCATENATE  'Reg.Imp.Dif.' es_mes-ltx INTO es_header-header_txt SEPARATED BY space.
+
+      es_header-ref_doc_no = es_header-header_txt.
+      es_header-username = sy-uname.
+      es_header-bus_act = 'RFBU'.
+
+      APPEND  VALUE #(
+                      itemno_acc = lines( c_ti_posiciones_cuenta_mayor ) + 1
+                      gl_account = i_cuenta_contabilizar
+                      doc_type = i_clase_documento
+                      comp_code = i_bukrs
+                      fisc_year =  i_fecha_contabilizacion(4)
+                      fis_period = i_periodo
+                      pstng_date = i_fecha_contabilizacion
+                      alloc_nmbr = i_fecha_contabilizacion
+                      profit_ctr = i_centro_beneficio
+                      costcenter = i_ceco
+                      bus_area = i_division
+                      item_text = es_header-header_txt
+                     )
+      TO c_ti_posiciones_cuenta_mayor.
+
+      " Ingreso el monto en la primera posicion
+      WRITE i_es_imp_diferido_total-impuesto_diferido TO valor_impuesto
+      CURRENCY i_es_imp_diferido_total-moneda NO-GROUPING DECIMALS 0.
+
+      APPEND VALUE #(
+                      itemno_acc = lines( c_ti_cantidades ) + 1
+                      amt_doccur = valor_impuesto
+                      amt_base = valor_impuesto
+                      currency = i_es_imp_diferido_total-moneda
+                     )
+      TO c_ti_cantidades.
+
+      " Se llena el segundo registro de posicion de la BAPI
+      APPEND  VALUE #(
+                      itemno_acc = lines( c_ti_posiciones_cuenta_mayor ) + 1
+                      gl_account = i_cuenta_gasto
+                      doc_type = i_clase_documento
+                      comp_code = i_bukrs
+                      fisc_year =  i_fecha_contabilizacion(4)
+                      fis_period = i_periodo
+                      pstng_date = i_fecha_contabilizacion
+                      alloc_nmbr = i_fecha_contabilizacion
+                      profit_ctr = i_centro_beneficio
+                      costcenter = i_ceco
+                      bus_area = i_division
+                      item_text = es_header-header_txt
+                     )
+      TO c_ti_posiciones_cuenta_mayor.
+
+      " Ingreso el monto en la segunda posicion
+      APPEND VALUE #(
+                      itemno_acc = lines( c_ti_cantidades ) + 1
+                      amt_doccur = valor_impuesto * -1
+                      amt_base = valor_impuesto * -1
+                      currency = i_es_imp_diferido_total-moneda
+                     )
+      TO c_ti_cantidades.
+
+      " Proceso de contabilización solo en ultimo registro de subtotal
+      IF i_ultimo EQ abap_true.
+
+        IF i_test = abap_true.
+          CALL FUNCTION 'BAPI_ACC_DOCUMENT_CHECK'
+            EXPORTING
+              documentheader = es_header
+            TABLES
+              accountgl      = c_ti_posiciones_cuenta_mayor
+              currencyamount = c_ti_cantidades
+              return         = ti_msg_retorno.
+
+          LOOP AT ti_msg_retorno INTO DATA(es_msg_retorno).
+            "Para el segundo mensaje del registro en adelante no debe salir valor para que el total cuadre
+            IF sy-tabix NE 1.
+              es_log-impuesto = 0.
+            ENDIF.
+            IF es_msg_retorno-type = 'S'.
+              es_log-semaforo = icon_green_light.
+            ELSEIF es_msg_retorno-type = 'W'.
+              es_log-semaforo = icon_yellow_light.
+            ELSE.
+              es_log-semaforo = icon_red_light.
+            ENDIF.
+            es_log-documento = 'MODO TEST'  .
+            es_log-mensaje = es_msg_retorno-message.
+            APPEND es_log TO gti_log.
+          ENDLOOP.
+        ELSE.
+
+          anular_documento(
+            EXPORTING
+              i_es_norma_ledger           = es_norma_ledger
+              i_bukrs                     = i_bukrs
+              i_fecha_contabilizacion     = i_fecha_contabilizacion
+              i_clase_documento           = i_clase_documento
+              i_periodo                   = i_periodo
+              i_mes_final                 = i_mes_final
+              i_ti_meses                  = ti_meses
+              i_es_imp_diferido_total     = i_es_imp_diferido_total
+              i_r_cuentas                 = i_r_cuentas ).
+
+          CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+            EXPORTING
+              documentheader = es_header
+            IMPORTING
+              obj_type       = obj_type
+              obj_key        = obj_key
+              obj_sys        = obj_sys
+            TABLES
+              accountgl      = c_ti_posiciones_cuenta_mayor
+              currencyamount = c_ti_cantidades
+              return         = ti_msg_retorno.
+
+*      Type ID Number Message
+*      S RW 605 Document posted successfully
+*      S RW 614 Document check without errors
+*      A RW 609 Error in document
+
+          READ TABLE ti_msg_retorno INTO es_msg_retorno WITH KEY number = '605'.
+
+          IF sy-subrc = 0.
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+
+            APPEND VALUE #(  documento = obj_key(10)
+                             semaforo = icon_green_light
+                             mensaje = es_msg_retorno-message
+                          )
+            TO gti_log.
+
+            MODIFY c_ti_historial_imp_diferido FROM VALUE #( belnr = es_log-documento )
+            TRANSPORTING belnr
+            WHERE belnr = space OR belnr NE space .
+
+          ELSE.
+
+            LOOP AT ti_msg_retorno INTO es_msg_retorno.
+
+              IF sy-tabix NE 1.
+                es_log-impuesto = 0.
+              ENDIF.
+              es_log-semaforo = icon_red_light.
+              es_log-mensaje = es_msg_retorno-message.
+              APPEND es_log TO gti_log.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+
+    ELSE.
+      es_log-semaforo = icon_red_light.
+      CONCATENATE TEXT-m09 i_ledger_comparacion TEXT-m10
+        INTO s_mensaje SEPARATED BY space.
+      es_log-mensaje = s_mensaje.
+      APPEND es_log TO gti_log.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD procesar_cuentas_permanente.
+
+    DATA: indicador_de_cambio,
+          impuesto_diferido   TYPE p LENGTH 15 DECIMALS 2.
+
+    consultar_cuentas(
+      EXPORTING
+        i_bukrs                  = i_bukrs
+      IMPORTING
+        e_ti_cuentas_permanentes = DATA(ti_cuentas_permanentes)
+        e_ti_porcentaje_cuenta   = DATA(ti_porcentaje_cuenta) ).
+
+
+
+    "Actualizar las cuentas marcadas como permanentes y borrando el impuesto diferido cuando no aplique
+    LOOP AT c_ti_impuesto_diferido ASSIGNING FIELD-SYMBOL(<fs_es_impuesto_diferido>).
+
+      CLEAR indicador_de_cambio.
+
+* Hallar cuentas que sean permanentes
+      READ TABLE ti_cuentas_permanentes INTO DATA(es_cuentas_permanentes) WITH KEY bukrs = <fs_es_impuesto_diferido>-bukrs
+                                                                                   hkont = <fs_es_impuesto_diferido>-cuenta.
+      IF sy-subrc EQ 0.
+        IF <fs_es_impuesto_diferido>-permanente IS INITIAL.
+          indicador_de_cambio = abap_true.
+        ENDIF.
+        <fs_es_impuesto_diferido>-permanente = abap_true.
+      ELSE.
+        IF <fs_es_impuesto_diferido>-permanente EQ abap_true.
+          indicador_de_cambio = abap_true.
+        ENDIF.
+        <fs_es_impuesto_diferido>-permanente = space.
+      ENDIF.
+
+      " Tomar las validaciones de definidas para saber que no se calcula impuesto
+      IF ( <fs_es_impuesto_diferido>-permanente EQ space AND <fs_es_impuesto_diferido>-imponible EQ space AND <fs_es_impuesto_diferido>-deducible EQ space ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true AND <fs_es_impuesto_diferido>-imponible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true AND <fs_es_impuesto_diferido>-deducible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-imponible EQ abap_true AND <fs_es_impuesto_diferido>-deducible EQ abap_true ) OR
+         ( <fs_es_impuesto_diferido>-permanente EQ abap_true ).
+        <fs_es_impuesto_diferido>-impuesto_diferido = 0.
+        <fs_es_impuesto_diferido>-imponible         = icon_wd_radio_button_empty.
+        <fs_es_impuesto_diferido>-deducible         = icon_wd_radio_button_empty.
+        <fs_es_impuesto_diferido>-tipo_impuesto     = space.
+
+      ELSEIF <fs_es_impuesto_diferido>-permanente EQ space AND indicador_de_cambio IS NOT INITIAL.
+
+        IF <fs_es_impuesto_diferido>-deducible EQ icon_wd_radio_button_empty AND <fs_es_impuesto_diferido>-imponible EQ icon_wd_radio_button_empty  .
+
+          DATA(clase_cuenta) = determinar_clase_cuenta( <fs_es_impuesto_diferido>-cuenta ).
+
+          IF <fs_es_impuesto_diferido>-ledger_basico GT <fs_es_impuesto_diferido>-ledger_comparativo.
+            IF clase_cuenta = gc_activo OR clase_cuenta = gc_ingreso.
+              <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+              <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+              "     Cuando me da que el impuesto es IMPONIBLE el tipo de este debe ser PASIVO
+              <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+            ELSEIF clase_cuenta = gc_pasivo OR clase_cuenta = gc_gasto.
+              <fs_es_impuesto_diferido>-deducible = icon_radiobutton. "abap_true.
+              <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+              "     Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO
+              <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+            ENDIF.
+          ELSEIF <fs_es_impuesto_diferido>-ledger_basico LT <fs_es_impuesto_diferido>-ledger_comparativo.
+            IF clase_cuenta = gc_activo OR clase_cuenta = gc_ingreso.
+              <fs_es_impuesto_diferido>-imponible = icon_wd_radio_button_empty.
+              <fs_es_impuesto_diferido>-deducible = icon_radiobutton. "abap_true.
+              "     Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO
+              <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+            ELSEIF clase_cuenta = gc_pasivo OR clase_cuenta = gc_gasto.
+              <fs_es_impuesto_diferido>-deducible = icon_wd_radio_button_empty.
+              <fs_es_impuesto_diferido>-imponible = icon_radiobutton.
+              "     Cuando me da que el impuesto es IMPONIBLE el tipo de este debe ser PASIVO
+              <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+
+            ENDIF.
+          ENDIF.
+        ENDIF.
+
+        " Calculo el valor del impuesto diferido
+        READ TABLE ti_porcentaje_cuenta INTO DATA(es_porcentaje_cuenta) WITH KEY nodo = <fs_es_impuesto_diferido>-cuenta.
+
+        IF sy-subrc EQ 0.
+
+          impuesto_diferido = <fs_es_impuesto_diferido>-diferencia * ( es_porcentaje_cuenta-porcentaje / 100 ).
+          <fs_es_impuesto_diferido>-impuesto_diferido = impuesto_diferido.
+          <fs_es_impuesto_diferido>-impuesto_diferido = impuesto_diferido.
+
+          " Cuando me da que el impuesto es DEDUCIBLE el tipo de este debe ser ACTIVO, caso contrario PASIVO
+          IF <fs_es_impuesto_diferido>-deducible EQ abap_true.
+            <fs_es_impuesto_diferido>-tipo_impuesto = gc_activo.
+            <fs_es_impuesto_diferido>-sort_tipo_impuesto = gc_activo.
+          ELSE.
+            <fs_es_impuesto_diferido>-tipo_impuesto = gc_pasivo.
+            <fs_es_impuesto_diferido>-sort_tipo_impuesto = gc_pasivo.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+    "Ordeno la tabla del impuesto diferido segun la salida necesaria para subtotalizar
+    SORT c_ti_impuesto_diferido BY clase_cta grupo_ctas sort_tipo_impuesto cuenta ASCENDING.
+
+  ENDMETHOD.
+
+
+  METHOD determinar_clase_cuenta.
+
+    r_clase_cuenta = SWITCH #( i_cuenta(1)
+                                WHEN '1' OR '8' THEN
+                                    gc_activo
+                                WHEN '2' THEN
+                                    gc_pasivo
+                                WHEN '4' THEN
+                                    gc_ingreso
+                                WHEN '5' OR '7' THEN
+                                    gc_gasto
+                               ).
+
+  ENDMETHOD.
+
+
+  METHOD construir_catalogo_log.
+
+    r_ti_catalogo = zclcxr1002_util=>construir_catalogo( i_ti  = i_ti_log i_optimizar_columnas = abap_true ).
+
+    LOOP AT r_ti_catalogo ASSIGNING FIELD-SYMBOL(<fs_es_catalogo>).
+
+      CASE <fs_es_catalogo>-fieldname.
+        WHEN 'SEMAFORO'.
+          <fs_es_catalogo>-coltext = 'Status'.
+          <fs_es_catalogo>-outputlen = 12.
+          <fs_es_catalogo>-fix_column = abap_true.
+        WHEN 'NUM_REGISTRO'.
+          <fs_es_catalogo>-coltext = 'Num. Registro'.
+          <fs_es_catalogo>-outputlen = 13.
+          <fs_es_catalogo>-fix_column = abap_true.
+          <fs_es_catalogo>-no_out = abap_true.
+        WHEN 'DOCUMENTO' OR  'BUKRS'.
+          "No elimina la columna
+        WHEN 'MENSAJE'.
+          <fs_es_catalogo>-coltext = 'Mensaje'.
+        WHEN OTHERS.
+          <fs_es_catalogo>-no_out = abap_true.
+      ENDCASE.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD cargar_historico_imp_diferido.
+
+    SELECT *
+    FROM ztfir1005_5
+    WHERE bukrs IN @i_r_bukrs
+    AND gjahr IN @i_r_gjahr
+    AND belnr IN @i_r_belnr
+    AND hkont IN @i_r_hkont
+    AND monat IN @i_r_monat
+    AND estatus IN @i_r_estado
+    AND belnr_an IN @i_r_doc_anulacion
+    INTO CORRESPONDING FIELDS OF TABLE @gti_historico_imp_diferido.
+
+  ENDMETHOD.
+
+  METHOD expor_comparacion.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'R1005' ) = abap_true.
+
+    IF sy-binpt = abap_true.
+      EXPORT ti_comparacion_d = c_ti_comparacion
+      TO DATABASE indx(sc) ID 'TI_COMPARACION_D'.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD recupera_cuenta.
+
+    CHECK zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'R1005' ) = abap_true.
+
+    IMPORT: cuentas = c_r_numero_cuenta FROM DATABASE indx(sc)
+          ID 'CUENTAS',
+          ledger_base = c_ledger FROM DATABASE indx(sc)
+          ID 'P_BRLDNR'.
+
+    DELETE FROM DATABASE indx(sc) ID 'CUENTAS'.
+    DELETE FROM DATABASE indx(sc) ID 'P_BRLDNR'.
+  ENDMETHOD.
+
+ENDCLASS.

@@ -1,0 +1,4108 @@
+CLASS zclppi1202_ordenes_produccion DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF gtp_es_material_antiguo,
+             matnr               TYPE mara-matnr,
+             bismt               TYPE mara-bismt,
+             size1               TYPE mara-size1,
+             color               TYPE mara-color,
+             satnr               TYPE mara-satnr,
+             planta              TYPE werks_d,
+             version_fabricacion TYPE verid,
+           END OF gtp_es_material_antiguo,
+
+           BEGIN OF gtp_es_estado_orden,
+             numero_orden TYPE aufnr,
+             estado       TYPE jest-stat,
+             objnr        TYPE aufk-objnr,
+           END OF gtp_es_estado_orden.
+
+
+    TYPES: gtp_ti_material_antiguo TYPE STANDARD TABLE OF gtp_es_material_antiguo WITH EMPTY KEY,
+           gtp_ti_estado_orden     TYPE STANDARD TABLE OF gtp_es_estado_orden WITH EMPTY KEY,
+           gtp_ti_log_op           TYPE STANDARD TABLE OF ztppi1202_1.
+
+    TYPES: gtp_r_numero_orden TYPE RANGE OF aufk-aufnr,
+           gtp_r_clase_orden  TYPE RANGE OF aufk-auart,
+           gtp_r_estado       TYPE RANGE OF jest-stat.
+
+    CONSTANTS: gc_ricefw                      TYPE zzedricefw VALUE 'I1202',
+               gc_clase_mensajes              TYPE msgid VALUE 'ZPP01',
+               gc_op_no_creada_desde_interfaz TYPE zed_estado_integra_op_legacy VALUE '99',
+               gc_estado_proceso_op_error     TYPE zed_estado_integra_op_legacy VALUE '9',
+               gc_estado_creacion_op_creada   TYPE zed_estado_integra_op_legacy VALUE '1',
+               gc_estado_actualizacion_op     TYPE zed_estado_integra_op_legacy VALUE '2',
+               gc_estado_op_peticion_borrado  TYPE zed_estado_integra_op_legacy VALUE '3',
+               gc_estado_op_cierre_tecnico    TYPE zed_estado_integra_op_legacy VALUE '4',
+               gc_estado_op_liberada          TYPE zed_estado_integra_op_legacy VALUE '5',
+               gc_accion_crear                TYPE zed_accion_legado VALUE '1',
+               gc_accion_modificar            TYPE zed_accion_legado VALUE '2',
+               gc_accion_ptbo                 TYPE zed_accion_legado VALUE '3',
+               gc_accion_ctec                 TYPE zed_accion_legado VALUE '4',
+               gc_accion_liberar              TYPE zed_accion_legado VALUE '5',
+               gc_simu                        TYPE char4 VALUE 'SIMU'.              ".adicion Jose Miguel Valencia 04.03.2025 ID-12583
+
+    CLASS-DATA:
+              go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    DATA: ges_info_mensaje             TYPE ztcxr1001_1,
+          gr_estado_liberacion         TYPE gtp_r_estado,
+          gr_estado_cte                TYPE gtp_r_estado,
+          gr_clase_orden_actualizar    TYPE gtp_r_clase_orden,
+          gr_clase_orden_val_quimico   TYPE gtp_r_clase_orden,
+          gr_clase_orden_componente    TYPE gtp_r_clase_orden,
+          gr_clase_orden_subproducto   TYPE gtp_r_clase_orden,
+          gr_clase_orden_statusquimico TYPE gtp_r_clase_orden,
+          g_statusquimico_estado_e     TYPE ztmmi1054_3-msg_typ,
+          gr_almacen_componente        TYPE RANGE OF lgort_d,
+          gr_tipo_pos_componente       TYPE gtp_r_clase_orden,
+          gr_posicion_operacion        TYPE gtp_r_clase_orden,
+          go_parametros                TYPE REF TO zclcxr1000_parametros.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      cargar_parametros
+        IMPORTING
+          VALUE(i_modulo) TYPE zzedmodulo DEFAULT 'PP'
+          VALUE(i_ricefw) TYPE zzedricefw DEFAULT gc_ricefw,
+      iniciar_proceso_creacion_op
+        EXPORTING
+          VALUE(e_ti_return)   TYPE bapiret2_t
+        CHANGING
+          VALUE(i_datos_proxy) TYPE REF TO data,
+      completar_datos_de_entrada
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      validar_consistencia_datos
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      crear_op
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      modificar_estado_op_ptbo
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      registrar_log_proceso
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      modificar_op
+        CHANGING
+          c_es_datos_op TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      modificar_op_cierre_tecnico
+        CHANGING
+          c_es_datos_op TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      modificar_op_liberada
+        CHANGING
+          c_es_datos_op TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity.
+
+
+  PROTECTED SECTION.
+
+private section.
+
+  methods VALIDAR_ESTADO_LIBERACION_OP
+    importing
+      value(I_R_NUMERO_ORDEN) type GTP_R_NUMERO_ORDEN
+      value(I_R_ESTADO_OP) like GR_ESTADO_LIBERACION
+    returning
+      value(R_ESTADO_ORDEN) type GTP_TI_ESTADO_ORDEN .
+  methods REGISTRAR_LOG_MONITOR_COSTOS
+    importing
+      value(I_ES_DATOS_OP) type ZCLPPI1202_API_GESTIO_MPC_EXT=>TS_DEEP_ENTITY
+      value(I_TI_LOG_OP) type GTP_TI_LOG_OP .
+  methods ASIGNAR_SEGMENTO_PUERTA
+    importing
+      !I_C_NUMERO_ORDEN type AUFNR
+      !I_C_SEGMENTO_PUERTA type ZZ1_SEGMENTACIONPUERTA
+    exporting
+      !E_ES_RETURN type BAPIRET2 .
+  methods ELIMINAR_COMPONENTES
+    importing
+      !I_C_NUMERO_ORDEN type AUFNR
+      !I_C_SEGMENTO_PUERTA type ZZ1_SEGMENTACIONPUERTA
+    exporting
+      !E_TI_RETURN type BAPIRET2_T .
+  methods PROCESAR_SEGMENTO_PUERTA
+    importing
+      !I_C_NUMERO_ORDEN type AUFNR
+      !I_C_SEGMENTO_PUERTA type ZZ1_SEGMENTACIONPUERTA
+    exporting
+      !E_TI_RETURN type BAPIRET2_T .
+ENDCLASS.
+
+
+
+CLASS ZCLPPI1202_ORDENES_PRODUCCION IMPLEMENTATION.
+
+
+  METHOD constructor.
+    ges_info_mensaje = i_es_info_mensaje.
+  ENDMETHOD.
+
+
+  METHOD cargar_parametros.
+
+    go_parametros = NEW zclcxr1000_parametros(
+      i_modulo = i_modulo
+      i_ricefw = i_ricefw ).
+
+    SORT go_parametros->gti_parametros BY idparam consec.
+
+    gr_estado_liberacion = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ESTLIBER' )
+                                    ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_estado_cte = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ESTOPCTE' )
+                                    ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_actualizar = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'AC_CLASEOP' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_val_quimico = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CLOP_VLQUI' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_componente = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ORDEN_COMP' )
+                                    ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_almacen_componente = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ALMAC_COMP' )
+                                    ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_tipo_pos_componente = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'TP_POSICIO' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_posicion_operacion = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'POS_OPERAC' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_subproducto = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CLORD_SUBP' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_statusquimico = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'STATUSQUI' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    g_statusquimico_estado_e = VALUE #( go_parametros->gti_parametros[ idparam = 'STATUSQUI' ]-idcomo OPTIONAL ).
+
+
+  ENDMETHOD.
+
+
+  METHOD iniciar_proceso_creacion_op.
+
+    DATA: accion_legado TYPE zed_accion_legado.
+
+    FIELD-SYMBOLS: <fs_es_datos_op> TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    cargar_parametros( i_modulo = 'PP' i_ricefw = gc_ricefw ).
+
+    ASSIGN i_datos_proxy->* TO <fs_es_datos_op>.
+
+    SORT <fs_es_datos_op>-ordenproduccionset BY numero_secuencia material talla color.
+
+    accion_legado = VALUE #( <fs_es_datos_op>-ordenproduccionset[ 1 ]-accion_legado OPTIONAL ).
+
+    completar_datos_de_entrada(
+      CHANGING
+        c_es_datos_op = <fs_es_datos_op> ).
+
+    validar_consistencia_datos(
+      CHANGING
+        c_es_datos_op = <fs_es_datos_op> ).
+
+    "Solo Ejecuta el proceso si no existen errores
+    IF go_log->get_errores( ) IS INITIAL.
+      CASE accion_legado.
+
+        WHEN gc_accion_crear.
+
+          crear_op( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+        WHEN gc_accion_ptbo.
+
+          modificar_estado_op_ptbo( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+        WHEN gc_accion_modificar."Modificar cantidad y numero de secuencia
+
+          modificar_op( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+        WHEN gc_accion_ctec.
+
+          modificar_op_cierre_tecnico( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+        WHEN gc_accion_liberar.
+
+          modificar_op_liberada( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+      ENDCASE.
+    ENDIF.
+
+    registrar_log_proceso(
+      CHANGING
+        c_es_datos_op = <fs_es_datos_op> ).
+
+    e_ti_return = CORRESPONDING #( go_log->get_log( ) ).
+
+    "Modificar tipo de mensaje, para cambio de color del icono de AZUL a Verde, dado que a Maritza no le gusta azul
+    MODIFY e_ti_return
+    FROM VALUE #( type = 'S' )
+    TRANSPORTING type
+    WHERE type = 'I'.
+
+    DELETE e_ti_return WHERE id = space.
+
+  ENDMETHOD.
+
+
+  METHOD crear_op.
+
+    DATA: es_datos_op            TYPE bapi_pp_order_create,
+          es_msj_retorno         TYPE bapiret2,
+          numero_op              TYPE aufnr,
+          es_componente          TYPE fsh_s_prod_ord_comp_add,
+          es_componentex         TYPE fsh_s_prod_ord_comp_addx,
+          tipo_op                TYPE aufart,
+          error_en_componente    TYPE xfeld,
+          es_componente_agregado TYPE resbb,
+          ti_msj_respuesta       TYPE bapiret2_t,
+          ti_return              TYPE bapiret2_t.
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_datos_op_gr)
+                          WHERE estado_creacion_op IS INITIAL
+                          GROUP BY ( numero_secuencia = r_es_datos_op_gr->numero_secuencia
+                                     material = r_es_datos_op_gr->material
+                                     talla = r_es_datos_op_gr->talla
+                                     color = r_es_datos_op_gr->color ).
+
+      CLEAR: es_datos_op, es_msj_retorno.
+
+      es_datos_op = VALUE #( order_number = r_es_datos_op_gr->numero_orden
+                            material = r_es_datos_op_gr->material
+                            plant = r_es_datos_op_gr->planta
+                            planning_plant = r_es_datos_op_gr->centro_planificacion
+                            order_type = r_es_datos_op_gr->clase_orden
+                            basic_start_date = r_es_datos_op_gr->fecha_inicio_extrema
+                            basic_start_time = r_es_datos_op_gr->hora_inicio_extrema
+                            basic_end_date = r_es_datos_op_gr->fecha_fin_extrema
+                            basic_end_time = r_es_datos_op_gr->hora_fin_extrema
+                            quantity = r_es_datos_op_gr->cantidad_total
+                            scrap_quantity = r_es_datos_op_gr->cantidad_rechazo_total
+                            quantity_uom = r_es_datos_op_gr->unidad_medida
+                            routing_type = r_es_datos_op_gr->tipo_hoja_ruta
+                            routing_group = r_es_datos_op_gr->grupo_hojas_ruta
+                            routing_counter = r_es_datos_op_gr->contador_grupo_hojas_ruta
+                            prod_version = r_es_datos_op_gr->version_fabricacion
+                            explosion_date = r_es_datos_op_gr->fecha_explosion
+                            order_priority = r_es_datos_op_gr->prioridad_orden
+                            mrp_controller = r_es_datos_op_gr->planificador_necesidades
+                            configuration = r_es_datos_op_gr->configuracion
+                            wbs_element = r_es_datos_op_gr->elemento_pep
+                            sales_order = r_es_datos_op_gr->pedido_cliente
+                            sales_order_item = r_es_datos_op_gr->posicion_pedido_cliente
+                            business_area = r_es_datos_op_gr->division
+                            profit_center = r_es_datos_op_gr->centro_beneficio
+                            sequence_number = r_es_datos_op_gr->numero_secuencia
+                            stock_type = r_es_datos_op_gr->tipo_stock
+                            gr_proc_time = r_es_datos_op_gr->tiempo_trat_entrada_mercancia
+                            storage_location = r_es_datos_op_gr->almacen
+                            mrp_distr_key = r_es_datos_op_gr->clave_planificador_necesidades
+                            goods_recipient = r_es_datos_op_gr->destinatario_mercancia
+                            unloading_point = r_es_datos_op_gr->punto_descarga
+                            material_external = r_es_datos_op_gr->numero_material_externo
+                            material_guid = r_es_datos_op_gr->uid_material
+                            material_version = r_es_datos_op_gr->version_material
+                            additional_days = r_es_datos_op_gr->dias_adicionales
+                            stock_segment = r_es_datos_op_gr->segmento_stock
+                            material_long = r_es_datos_op_gr->numero_material_largo
+                            stk_seg_long = r_es_datos_op_gr->segmento_stock_largo
+                            validity_object = r_es_datos_op_gr->valor_validez
+                            ).
+
+      ".Verificamos si el proceso va hacer una simulacion           .adicion Jose Miguel Valencia 04.03.2025 ID-12583
+      IF es_datos_op-mrp_distr_key EQ gc_simu.
+        es_datos_op-order_number = gc_simu.
+        CLEAR: es_datos_op-mrp_distr_key.
+      ENDIF.
+
+      CALL FUNCTION 'BAPI_PRODORD_CREATE'
+        EXPORTING
+          orderdata    = es_datos_op
+        IMPORTING
+          return       = es_msj_retorno
+          order_number = numero_op
+          order_type   = tipo_op.
+
+      ".Ajustamos el retorno del mensaje cuando se requiere solo la validacion de informacion ".adicion Jose Miguel Valencia 04.03.2025 ID-12583
+      IF es_datos_op-order_number EQ gc_simu AND
+         es_msj_retorno-number = '083'.
+
+        es_msj_retorno-id = gc_clase_mensajes.
+        es_msj_retorno-number = '999'.
+        es_msj_retorno-message = 'Validaciones Realizadas con Exito.'.
+      ENDIF.
+
+      es_msj_retorno-parameter = r_es_datos_op_gr->numero_secuencia.
+      go_log->set_es_log( i_es = CORRESPONDING #( es_msj_retorno ) ).
+
+      IF numero_op IS NOT INITIAL.
+
+        r_es_datos_op_gr->numero_orden = numero_op.
+        r_es_datos_op_gr->estado_creacion_op = gc_estado_creacion_op_creada.
+
+        go_log->set_es_log( i_es = VALUE #( id = 'PORD_MESSAGES' number = '048' type = 'S'
+                                            message_v1 = r_es_datos_op_gr->numero_orden
+                                            parameter = r_es_datos_op_gr->numero_orden ) ).
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        WAIT UP TO 1 SECONDS.
+
+*.......Se realiza el procesamiento de los datos que dependen del Segmento/Puerta
+        me->procesar_segmento_puerta(
+          EXPORTING
+            i_c_numero_orden    = numero_op
+            i_c_segmento_puerta = r_es_datos_op_gr->segmento_puerta
+          IMPORTING
+            e_ti_return         =  ti_return
+        ).
+
+        LOOP AT ti_return INTO DATA(es_return).
+          go_log->set_es_log( i_es = CORRESPONDING #( es_return ) ).
+        ENDLOOP.
+
+        "Agregar componente
+        IF tipo_op IN gr_clase_orden_componente.
+
+          SELECT SINGLE
+          FROM caufv
+          FIELDS aufnr, auart, plnbez, werks, gamng
+          WHERE aufnr = @numero_op
+          INTO @DATA(es_orden).
+
+          es_componente = VALUE fsh_s_prod_ord_comp_add( order_number = numero_op
+                                                                 item_category = VALUE #( gr_tipo_pos_componente[ 1 ]-low OPTIONAL )
+                                                                 bom_item_number = VALUE #( gr_posicion_operacion[ 1 ]-low OPTIONAL )
+                                                                 material = es_orden-plnbez plant = es_orden-werks
+                                                                 storage_location = VALUE #( gr_almacen_componente[ 1 ]-low OPTIONAL )
+                                                                 requirement_quantity = es_orden-gamng
+                                                                 operation_counter = VALUE #( gr_posicion_operacion[ 1 ]-low OPTIONAL )
+                                                               ).
+
+          zclcxr1002_util=>asignar_marcado_estructura(
+            EXPORTING
+              i_es_origen  = es_componente
+*             i_prefijo_estructura_destino =
+            CHANGING
+              c_es_destino = es_componentex
+          ).
+
+          CALL FUNCTION 'FSH_API_PROD_ORD_COMP_ADD'
+            EXPORTING
+              is_component      = es_componente
+              is_componentx     = es_componentex
+            IMPORTING
+              ev_error_occurred = error_en_componente
+              es_component      = es_componente_agregado
+              et_bapireturn     = ti_msj_respuesta.
+
+          go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_respuesta ) ).
+
+          IF error_en_componente = abap_false.
+
+            r_es_datos_op_gr->estado_creacion_op = gc_estado_creacion_op_creada.
+
+            go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '089' type = 'S'
+                                                message_v1 = r_es_datos_op_gr->numero_orden
+                                                parameter = r_es_datos_op_gr->numero_orden ) ).
+
+          ELSE.
+            r_es_datos_op_gr->estado_creacion_op = gc_estado_proceso_op_error.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+            DATA(es_op_eliminar) = VALUE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity(
+                                   ordenproduccionset = VALUE #( ( CORRESPONDING #( r_es_datos_op_gr->* EXCEPT estado_creacion_op ) ) ) ).
+
+            modificar_estado_op_ptbo( CHANGING c_es_datos_op = es_op_eliminar ).
+
+          ENDIF.
+        ENDIF.
+
+      ELSE.
+        r_es_datos_op_gr->estado_creacion_op = gc_estado_proceso_op_error.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD validar_consistencia_datos.
+
+    DATA: aplica_clave_de_control        TYPE flag,
+          aplica_material_subproducto    TYPE flag,
+          validar_subproducto            TYPE flag,
+          posicion_hoja_ruta             TYPE i,
+          evaluar_ultima_posicion        TYPE flag,
+          ti_material_entrada            TYPE gtp_ti_material_antiguo,
+          material_generico              TYPE mara-matnr,
+          material_variante              TYPE mara-matnr,
+          validacion_op_inicial_ok       TYPE flag,
+          unidad_medida_salida           TYPE marm-meinh,
+          orden_fab                      TYPE ztmmi1054_3-orden_fab,
+          ti_log                         TYPE zclcxr1002_log_aplicacion=>gtp_ti_log,
+          ti_claves_control_configuradas TYPE RANGE OF plpo-steus,
+          ti_claves_control_permitidas   TYPE RANGE OF plpo-steus,
+          r_tipo_material_valido         TYPE RANGE OF mara-mtart,
+          r_tipo_material_lista_material TYPE RANGE OF mara-mtart,
+          r_tipo_material_grupo_articulo TYPE RANGE OF mara-mtart,
+          r_grupo_articulo               TYPE RANGE OF string,
+          r_grupo_articulo_rectilineo    TYPE RANGE OF string,
+          r_excluir_grupo_articulo       TYPE RANGE OF string,
+          r_numero_orden                 TYPE gtp_r_numero_orden.
+
+    DATA:
+          es_clave_control_config LIKE LINE OF ti_claves_control_configuradas. "Adicion 08Ago2024 Sebastian Restrepo Villa
+
+    DATA:
+          v_auart   TYPE aufk-auart.
+
+    r_tipo_material_lista_material = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'TP_MATLIST' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_tipo_material_lista_material WHERE low IS INITIAL.
+
+    r_tipo_material_valido = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'TPMATERIAL' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_tipo_material_valido WHERE low IS INITIAL.
+
+    ti_claves_control_configuradas = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'ORDVSCLVCT' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    r_tipo_material_grupo_articulo = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'TPMATGRART' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_tipo_material_grupo_articulo WHERE low IS INITIAL.
+
+    r_grupo_articulo = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'GRUPARTICU' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_grupo_articulo WHERE low IS INITIAL.
+
+    r_grupo_articulo_rectilineo = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'GRPARTRECT' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_grupo_articulo_rectilineo WHERE low IS INITIAL.
+
+    ti_material_entrada = CORRESPONDING #( c_es_datos_op-ordenproduccionset MAPPING matnr = material size1 = talla ).
+
+    "Validar que la OP exista
+    r_numero_orden = VALUE #( FOR es_dato_op IN c_es_datos_op-ordenproduccionset WHERE ( numero_orden IS NOT INITIAL )
+                               ( sign = 'I' option = 'EQ' low = es_dato_op-numero_orden ) ).
+
+    IF r_numero_orden IS NOT INITIAL.
+
+      SELECT
+      FROM aufk
+      FIELDS aufnr, auart, loekz
+      WHERE aufnr IN @r_numero_orden
+      INTO TABLE @DATA(ti_ordenes).
+
+*Inicio Adicion 08Ago2024 Sebastia Restrepo Villa
+      SELECT
+      FROM afpo
+      FIELDS aufnr, posnr, matnr, dwerk, verid
+      WHERE aufnr IN @r_numero_orden
+      INTO TABLE @DATA(ti_afpo).
+*Fin Adicion 08Ago2024 Sebastia Restrepo Villa
+
+      "Validar que la OP sea creada desde el proceso textil
+      SELECT
+      FROM ztppi1202_1
+      FIELDS *
+      WHERE numero_orden IN @r_numero_orden
+      INTO TABLE @DATA(ti_registro_proceso_textil).
+
+      DATA(ti_estado_orden_liberada) = validar_estado_liberacion_op( i_r_numero_orden = r_numero_orden i_r_estado_op = gr_estado_liberacion ).
+      DATA(ti_estado_orden_ctec) = validar_estado_liberacion_op( i_r_numero_orden = r_numero_orden i_r_estado_op = gr_estado_cte ).
+
+    ENDIF.
+
+    "Clase de OP
+    SELECT *
+    FROM t003o
+    INTO TABLE @DATA(ti_clase_op_sap).
+
+    "Consultar OP asociadas a la OP Tejdio del sistema legado
+    SELECT
+    FROM ztppi1202_1
+    FIELDS *
+    FOR ALL ENTRIES IN @c_es_datos_op-ordenproduccionset
+    WHERE numero_orden = @c_es_datos_op-ordenproduccionset-numero_orden
+    INTO TABLE @DATA(ti_op_tejido_sap).
+
+*Inicio Modificacion 08Ago2024 Sebastia Restrepo Villa
+    IF r_numero_orden IS INITIAL.
+      "Validar material
+      SELECT
+      FROM @ti_material_entrada AS _material_entrada
+      INNER JOIN mara AS _material ON
+      _material~satnr = _material_entrada~matnr
+      AND   _material~size1 = _material_entrada~size1
+      AND   _material~color = _material_entrada~color
+      LEFT JOIN marc AS _material_x_centro ON
+      _material_x_centro~matnr = _material~matnr
+      AND _material_x_centro~werks = _material_entrada~planta
+      FIELDS _material~matnr, _material~color, _material~size1, _material~bismt, _material~matkl,
+      _material~satnr, _material~mtart, mmsta, meins,
+      _material_x_centro~werks, _material_entrada~version_fabricacion
+      INTO TABLE @DATA(ti_materiales).
+    ELSE.
+
+      DATA(ti_afpo_aux) = ti_afpo.
+      SORT ti_afpo_aux BY aufnr matnr dwerk.
+      DELETE ADJACENT DUPLICATES FROM ti_afpo_aux COMPARING aufnr matnr dwerk.
+
+      LOOP AT c_es_datos_op-ordenproduccionset ASSIGNING FIELD-SYMBOL(<fs_es_op_entrada>).
+        IF <fs_es_op_entrada>-numero_orden IS NOT INITIAL.
+          IF <fs_es_op_entrada>-version_fabricacion IS NOT INITIAL.
+            LOOP AT ti_afpo_aux ASSIGNING FIELD-SYMBOL(<fs_es_afpo>) WHERE aufnr = <fs_es_op_entrada>-numero_orden.
+              <fs_es_afpo>-verid = <fs_es_op_entrada>-version_fabricacion.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+      SORT ti_afpo_aux BY matnr dwerk.
+      DELETE ADJACENT DUPLICATES FROM ti_afpo_aux COMPARING matnr dwerk.
+
+      "Validar material
+      SELECT
+      FROM @ti_afpo_aux AS _material_entrada
+      INNER JOIN mara AS _material ON
+      _material~matnr = _material_entrada~matnr
+      LEFT JOIN marc AS _material_x_centro ON
+      _material_x_centro~matnr = _material~matnr
+      AND _material_x_centro~werks = _material_entrada~dwerk
+      FIELDS _material~matnr, _material~color, _material~size1, _material~bismt, _material~matkl,
+      _material~satnr, _material~mtart, mmsta, meins,
+      _material_x_centro~werks, _material_entrada~verid AS version_fabricacion
+      INTO TABLE @ti_materiales.
+
+    ENDIF.
+*Fin Modificacion 08Ago2024 Sebastia Restrepo Villa
+
+    IF ti_materiales IS NOT INITIAL.
+
+      "unidades de medida
+      SELECT *
+      FROM marm
+      FOR ALL ENTRIES IN @ti_materiales
+      WHERE matnr = @ti_materiales-matnr
+      INTO TABLE @DATA(ti_unidad_medida_material).
+
+      "Valida Orden vs Clave de control
+      SELECT
+      FROM mkal AS _version_fabricacion
+      LEFT JOIN plas AS _posicion_hoja_ruta ON
+      _posicion_hoja_ruta~plnnr = _version_fabricacion~plnnr
+      AND _posicion_hoja_ruta~plnal = _version_fabricacion~alnal
+      LEFT JOIN plko AS _hoja_ruta_cab ON
+      _hoja_ruta_cab~plnnr = _posicion_hoja_ruta~plnnr
+      AND _hoja_ruta_cab~plnal = _posicion_hoja_ruta~plnal
+      LEFT JOIN plpo AS _hoja_ruta_operacion ON
+      _hoja_ruta_operacion~zaehl = _posicion_hoja_ruta~zaehl
+      AND _hoja_ruta_operacion~plnnr = _posicion_hoja_ruta~plnnr
+      AND _hoja_ruta_operacion~plnkn = _posicion_hoja_ruta~plnkn
+      FIELDS _hoja_ruta_operacion~plnnr, matnr, _version_fabricacion~werks,_hoja_ruta_operacion~plnkn, _hoja_ruta_operacion~zaehl,
+      _hoja_ruta_operacion~vornr,  "Adicion 08Ago2024 Sebastian Restrpo Villa
+      verid, steus, _hoja_ruta_cab~loekz
+      FOR ALL ENTRIES IN @ti_materiales
+      WHERE _version_fabricacion~matnr = @ti_materiales-matnr
+      AND _version_fabricacion~werks   = @ti_materiales-werks
+      AND _version_fabricacion~verid   = @ti_materiales-version_fabricacion
+      AND _hoja_ruta_cab~loekz         = @space
+      INTO TABLE @DATA(ti_hoja_ruta).
+
+*      SORT ti_hoja_ruta BY matnr werks verid plnkn zaehl steus.        "Comentario 08Ago2024 Sebastian Restrepo Villa
+      SORT ti_hoja_ruta BY matnr werks verid vornr plnkn zaehl steus.   "Adicion 08Ago2024 Sebastian Restrepo Villa
+
+      "Validar lista de material
+      SELECT
+      FROM mkal AS _version_fabricacion
+      LEFT JOIN mast AS _lista_material ON
+      _lista_material~matnr = _version_fabricacion~matnr
+      AND _lista_material~werks = _version_fabricacion~werks
+      AND _lista_material~stlal = _version_fabricacion~stlal
+      LEFT JOIN stas AS _pos_lista_material ON
+      _pos_lista_material~stlnr = _lista_material~stlnr
+      AND _pos_lista_material~stlal = _lista_material~stlal
+      AND _pos_lista_material~lkenz = @space
+      LEFT JOIN stpo AS _lista_material_pos ON
+      _lista_material_pos~stlnr = _pos_lista_material~stlnr
+      AND _lista_material_pos~stlkn = _pos_lista_material~stlkn
+      LEFT JOIN mara AS _material ON
+      _material~matnr = _lista_material_pos~idnrk
+      FIELDS _version_fabricacion~matnr, _version_fabricacion~werks, _material~mtart, verid, menge,
+      _lista_material_pos~stlnr, _lista_material_pos~lkenz, _version_fabricacion~mksp
+      FOR ALL ENTRIES IN @ti_materiales
+      WHERE _version_fabricacion~matnr = @ti_materiales-matnr
+      AND _version_fabricacion~werks   = @ti_materiales-werks
+      AND _version_fabricacion~verid   = @ti_materiales-version_fabricacion
+      INTO TABLE @DATA(ti_lista_material).
+
+    ENDIF.
+
+    LOOP AT c_es_datos_op-ordenproduccionset ASSIGNING <fs_es_op_entrada>.  "Modificacion 08Ago2024 Sebastia Restrepo Villa
+
+      aplica_clave_de_control = abap_false.
+      validacion_op_inicial_ok = abap_true.
+
+      CLEAR: posicion_hoja_ruta, evaluar_ultima_posicion, aplica_material_subproducto.
+
+*Inicio Modificacion 08Ago2024 Sebastia Restrepo Villa
+      IF <fs_es_op_entrada>-numero_orden IS INITIAL.
+        material_generico = <fs_es_op_entrada>-material.
+
+        DATA(es_material) = VALUE #( ti_materiales[ satnr = material_generico
+                                                    color = <fs_es_op_entrada>-color
+                                                    size1 = <fs_es_op_entrada>-talla  ] OPTIONAL ).
+
+        material_variante = es_material-matnr.
+      ELSE.
+        READ TABLE ti_afpo
+         INTO DATA(es_afpo)
+          WITH KEY aufnr = <fs_es_op_entrada>-numero_orden.
+        IF sy-subrc EQ 0.
+          es_material = VALUE #( ti_materiales[ matnr = es_afpo-matnr ] OPTIONAL ).
+          material_generico = es_material-satnr.
+          material_variante = es_afpo-matnr.
+        ENDIF.
+      ENDIF.
+*Fin Modificacion 08Ago2024 Sebastia Restrepo Villa
+
+      "Validar OP y Clase de OP
+      IF <fs_es_op_entrada>-accion_legado NE gc_accion_crear
+      AND <fs_es_op_entrada>-numero_orden IS NOT INITIAL.
+
+        DATA(es_op) = VALUE #( ti_ordenes[ aufnr = <fs_es_op_entrada>-numero_orden ] OPTIONAL ).
+
+
+        IF <fs_es_op_entrada>-numero_orden IS NOT INITIAL AND
+           es_op-aufnr IS INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = 'PP_PRODORD_CNF_ODATA' number = '003' type = 'E'
+                                              message_v1 = |{ <fs_es_op_entrada>-numero_orden ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+
+        ENDIF.
+        "Validar clase de OP valida para actualizar
+        IF <fs_es_op_entrada>-numero_orden IS NOT INITIAL
+           AND <fs_es_op_entrada>-accion_legado = gc_accion_modificar
+           AND es_op-auart NOT IN gr_clase_orden_actualizar
+           AND <fs_es_op_entrada>-numero_secuencia IS NOT INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '071' type = 'E'
+                                              message_v1 = |{ es_op-auart ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+
+        ENDIF.
+
+        IF es_op IS NOT INITIAL AND es_op-loekz NE space.
+
+          go_log->set_es_log( i_es = VALUE #( id = 'IAOM_OM' number = '007' type = 'E'
+                                              message_v1 = |{ <fs_es_op_entrada>-numero_orden ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+
+        ENDIF.
+        "Si la Orden existe en SAP y pero no se encontro registro en ZTPPI1202_1 (Log interfaz)
+        IF es_op-aufnr IS NOT INITIAL
+        AND NOT line_exists( ti_op_tejido_sap[ numero_orden = es_op-aufnr ] ).
+
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '072' type = 'E'
+                                              message_v1 = |{ <fs_es_op_entrada>-numero_orden ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+
+        ENDIF.
+      ENDIF.
+
+*Inicio Adicion 08Ago2024 Sebastia Restrepo Villa
+      IF <fs_es_op_entrada>-accion_legado = gc_accion_crear.
+        v_auart = <fs_es_op_entrada>-clase_orden.
+      ENDIF.
+      IF <fs_es_op_entrada>-accion_legado = gc_accion_modificar.
+        v_auart = es_op-auart.
+      ENDIF.
+
+      "Valida Orden vs Clave de control: Se evalua en el orden de los valores configurados en el
+      "parametro ORDVSCLVCT, el ultimo valor debe coincidir con el ultimo valor de la hora de ruta
+      ti_claves_control_permitidas = VALUE #( FOR es_claves_control IN ti_claves_control_configuradas
+                                                                    WHERE ( low = v_auart )
+                                                         ( es_claves_control ) ).
+
+      CLEAR: es_clave_control_config.
+      "Solo validar la ultima clave de control cuando se modifiquen versiones de fabricacion
+      IF <fs_es_op_entrada>-version_fabricacion IS NOT INITIAL.
+        DATA(ti_hoja_ruta_material_centro) = ti_hoja_ruta.
+        ti_hoja_ruta_material_centro =
+        VALUE #( FOR _es_hoja_ruta IN ti_hoja_ruta WHERE ( matnr = material_variante
+                                                         AND werks = <fs_es_op_entrada>-planta
+                                                         AND verid = <fs_es_op_entrada>-version_fabricacion
+                                                         AND loekz = space )
+                                                         ( _es_hoja_ruta ) ).
+
+        LOOP AT ti_claves_control_permitidas  INTO es_clave_control_config
+                                             WHERE low = v_auart.
+
+          AT LAST.
+            evaluar_ultima_posicion = abap_true.
+          ENDAT.
+          "Solo la ultima clave de control es la que debe ser evaluada
+          LOOP AT ti_hoja_ruta_material_centro INTO DATA(es_hoja_ruta) WHERE matnr = material_variante
+                                                         AND werks = <fs_es_op_entrada>-planta
+                                                         AND verid = <fs_es_op_entrada>-version_fabricacion
+                                                         AND loekz = space
+                                                         AND steus = es_clave_control_config-high.
+            posicion_hoja_ruta = sy-tabix.
+            aplica_clave_de_control = abap_true.
+          ENDLOOP.
+
+          "Evalua que la ultima clave de control sea la ultima posicion de la hoja de ruta
+          IF evaluar_ultima_posicion = abap_true
+          AND posicion_hoja_ruta NE lines( ti_hoja_ruta_material_centro )
+          AND aplica_clave_de_control = abap_true.
+            aplica_clave_de_control = abap_false.
+          ENDIF.
+
+        ENDLOOP.
+      ENDIF.
+*Fin Adicion 08Ago2024 Sebastia Restrepo Villa
+
+      IF <fs_es_op_entrada>-accion_legado = gc_accion_crear.
+
+        IF <fs_es_op_entrada>-numero_secuencia IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '079' type = 'E'
+                                                parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+        "Validar OP tejido no exista en SAP
+        LOOP AT ti_op_tejido_sap INTO DATA(es_op_tejido_sap)
+                                 WHERE op_tejido_tanda_legacy = <fs_es_op_entrada>-numero_secuencia
+                                   AND material_legado = <fs_es_op_entrada>-material
+                                   AND color_legado = <fs_es_op_entrada>-color
+                                   AND tall_legado = <fs_es_op_entrada>-talla
+                                  AND  numero_orden IS NOT INITIAL.
+        ENDLOOP.
+
+        IF  es_op_tejido_sap IS NOT INITIAL.
+**          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '073' type = 'E'
+**                                           message_v1 = <fs_es_op_entrada>-numero_secuencia
+**                                           message_v2 = es_op_tejido_sap-numero_orden
+**                                           parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+**          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar Clase de OP
+        IF NOT line_exists( ti_clase_op_sap[ auart = <fs_es_op_entrada>-clase_orden ] ).
+          go_log->set_es_log( i_es = VALUE #( id = 'COOS' number = '022' type = 'E'
+                              message_v1 = <fs_es_op_entrada>-clase_orden
+                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar Material variante
+        IF NOT line_exists( ti_materiales[ satnr = material_generico size1 = <fs_es_op_entrada>-talla  color = <fs_es_op_entrada>-color ] ).
+
+          go_log->set_es_log( i_es = VALUE #( id = 'ZMM01' number = '409' type = 'E' message_v1 = |{ material_generico ALPHA = OUT }|
+                                              message_v2 = <fs_es_op_entrada>-talla  message_v3 = <fs_es_op_entrada>-color
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar tipo de material
+        IF es_material-mtart NOT IN r_tipo_material_valido AND
+           r_tipo_material_valido IS NOT INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = '/ISDFPS/FORCER' number = '081' type = 'E'
+                                              message_v1 = |{ es_material-mtart ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+        "Validar material en centro con indicador de borrado
+        IF es_material-mmsta NE space.
+
+          go_log->set_es_log( i_es = VALUE #( id = 'CI' number = '033' type = 'E'
+                                              message_v1 = |{ material_generico ALPHA = OUT }|
+                                              message_v2 = es_material-werks
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar material en centro
+        IF es_material-werks IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( id = 'ZSD06' number = '007' type = 'E'
+                                              message_v1 = |{ material_generico ALPHA = OUT }|
+                                              message_v2 = <fs_es_op_entrada>-planta
+                                              parameter  = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar unidad de medida del material
+        CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+          EXPORTING
+            input          = <fs_es_op_entrada>-unidad_medida
+          IMPORTING
+            output         = unidad_medida_salida
+          EXCEPTIONS
+            unit_not_found = 1
+            OTHERS         = 2.
+
+        IF NOT line_exists( ti_unidad_medida_material[ matnr = es_material-matnr meinh = <fs_es_op_entrada>-unidad_medida ] ).
+          go_log->set_es_log( i_es = VALUE #( id = '/STTPEC/MC_MD' number = '125' type = 'E'
+                                              message_v2 = |{ material_variante ALPHA = OUT }|
+                                              message_v1 = unidad_medida_salida
+                                              parameter  = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        IF validacion_op_inicial_ok = abap_true.
+
+          DATA(es_lista_material) = VALUE #( ti_lista_material[ matnr = material_variante werks = <fs_es_op_entrada>-planta verid = <fs_es_op_entrada>-version_fabricacion ] OPTIONAL ).
+
+          "Validar version fabricación
+          IF  es_lista_material IS INITIAL.
+            go_log->set_es_log( i_es = VALUE #( id = 'IPPECIF' number = '510' type = 'E'
+                                               message_v1 = <fs_es_op_entrada>-version_fabricacion
+                                               message_v2 = <fs_es_op_entrada>-planta
+                                               message_v3 = |{ <fs_es_op_entrada>-material ALPHA = OUT }|
+                                               parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          ELSE.
+            "validar indicador de borrado para version fabricación
+            IF es_lista_material-mksp NE space.
+              go_log->set_es_log( i_es = VALUE #( id = 'RM' number = '169' type = 'E'
+                                                  message_v1 = <fs_es_op_entrada>-version_fabricacion
+                                                  message_v2 = |{ <fs_es_op_entrada>-material ALPHA = OUT }|
+                                                  message_v3 = <fs_es_op_entrada>-planta
+                                                  parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+            ELSE.
+              "Validación tipo material ZQUI en las listas de materiales
+              IF <fs_es_op_entrada>-clase_orden IN gr_clase_orden_val_quimico.
+                LOOP AT ti_lista_material TRANSPORTING NO FIELDS WHERE matnr = material_variante
+                                                                   AND werks = <fs_es_op_entrada>-planta
+                                                                   AND verid = <fs_es_op_entrada>-version_fabricacion
+                                                                   AND mtart IN r_tipo_material_lista_material.
+                  EXIT.
+                ENDLOOP.
+
+                IF sy-subrc IS NOT INITIAL.
+
+                  go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '065' type = 'E'
+                                                      message_v1 = material_variante
+                                                      parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+
+                ENDIF.
+              ENDIF.
+
+*Inicio Comentario 08Ago2024 Sebastia Restrepo Villa
+*              "Valida Orden vs Clave de control: Se evalua en el orden de los valores configurados en el
+*              "parametro ORDVSCLVCT, el ultimo valor debe coincidir con el ultimo valor de la hora de ruta
+*              ti_claves_control_permitidas = VALUE #( FOR es_claves_control IN ti_claves_control_configuradas
+*                                                                            WHERE ( low = <fs_es_op_entrada>-clase_orden )
+*                                                                 ( es_claves_control ) ).
+*
+*              DATA(ti_hoja_ruta_material_centro) = ti_hoja_ruta.
+*              ti_hoja_ruta_material_centro =
+*              VALUE #( FOR _es_hoja_ruta IN ti_hoja_ruta WHERE ( matnr = material_variante
+*                                                               AND werks = <fs_es_op_entrada>-planta
+*                                                               AND verid = <fs_es_op_entrada>-version_fabricacion
+*                                                               AND loekz = space )
+*                                                               ( _es_hoja_ruta ) ).
+*
+*              LOOP AT ti_claves_control_permitidas INTO DATA(es_clave_control_config)
+*                                                   WHERE  low = <fs_es_op_entrada>-clase_orden.
+*
+*                AT LAST.
+*                  evaluar_ultima_posicion = abap_true.
+*                ENDAT.
+*                "Solo la ultima clave de control es la que debe ser evaluada
+*                LOOP AT ti_hoja_ruta_material_centro INTO DATA(es_hoja_ruta) WHERE matnr = material_variante
+*                                                               AND werks = <fs_es_op_entrada>-planta
+*                                                               AND verid = <fs_es_op_entrada>-version_fabricacion
+*                                                               AND loekz = space
+*                                                               AND steus = es_clave_control_config-high.
+*                  posicion_hoja_ruta = sy-tabix.
+*                  aplica_clave_de_control = abap_true.
+*                ENDLOOP.
+*
+*                "Evalua que la ultima clave de control sea la ultima posicion de la hoja de ruta
+*                IF evaluar_ultima_posicion = abap_true
+*                AND posicion_hoja_ruta NE lines( ti_hoja_ruta_material_centro )
+*                AND aplica_clave_de_control = abap_true.
+*                  aplica_clave_de_control = abap_false.
+*                ENDIF.
+*
+*              ENDLOOP.
+*
+*              IF aplica_clave_de_control = abap_false AND
+*                ti_claves_control_permitidas IS INITIAL.
+*
+*                go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '066' type = 'E'
+*                                                    message_v1 = <fs_es_op_entrada>-clase_orden
+*                                                    message_v2 = 'ORDVSCLVCT'
+*                                                    parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+*
+*              ENDIF.
+*
+*              IF aplica_clave_de_control = abap_false
+*              AND es_clave_control_config-high IS NOT INITIAL.
+*
+*                go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '080' type = 'E'
+*                                                    message_v1 = es_material-matnr
+*                                                    message_v2 = es_clave_control_config-high
+*                                                    parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+*
+*              ENDIF.
+*              CLEAR: es_clave_control_config.
+**Fin Comentario 08Ago2024 Sebastia Restrepo Villa
+
+              "Consultar parametro segun los dos primeros caracteres del grupo de articulos
+              r_excluir_grupo_articulo = VALUE #( FOR es_parametros IN go_parametros->gti_parametros
+                                                  WHERE ( idcomo = es_material-matkl(2) AND idparam = 'EXGRUPARTI' )
+                                                 ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+              " Validación material subproducto en la lista de materiales{
+              validar_subproducto = abap_true.
+
+              IF <fs_es_op_entrada>-clase_orden IN gr_clase_orden_subproducto.
+                "Tipo material que valida grupo de articulo
+                IF es_material-mtart IN r_tipo_material_grupo_articulo.
+
+                  IF es_material-matkl(2) IN r_grupo_articulo_rectilineo.
+                    validar_subproducto = abap_false.
+                  ELSE.
+                    IF es_material-matkl(2) IN r_grupo_articulo.
+
+                      validar_subproducto = COND #( WHEN es_material-matkl+4(4)  IN r_excluir_grupo_articulo THEN
+                                                        abap_false
+                                                    ELSE
+                                                        abap_true ).
+                    ELSE.
+                      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '076' type = 'E'
+                                                          message_v1 = es_material-matkl
+                                                          parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+                      validar_subproducto = abap_false.
+                    ENDIF.
+                  ENDIF.
+
+                ENDIF.
+
+                IF validar_subproducto = abap_true.
+                  LOOP AT ti_lista_material TRANSPORTING NO FIELDS WHERE verid = <fs_es_op_entrada>-version_fabricacion
+                                                                     AND menge < 0.
+                    aplica_material_subproducto = abap_true.
+                    EXIT.
+                  ENDLOOP.
+
+                  IF aplica_material_subproducto = abap_false.
+                    go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '067' type = 'E'
+                                                        message_v1 = material_generico
+                                                        parameter  = <fs_es_op_entrada>-numero_secuencia ) ).
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+              "}
+
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+*Inicio Adicion 08Ago2024 Sebastia Restrepo Villa
+      IF <fs_es_op_entrada>-accion_legado = gc_accion_crear OR
+         ( <fs_es_op_entrada>-accion_legado = gc_accion_modificar AND <fs_es_op_entrada>-version_fabricacion IS NOT INITIAL ).
+
+        IF aplica_clave_de_control = abap_false AND
+          ti_claves_control_permitidas IS INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '066' type = 'E'
+                                              message_v1 = <fs_es_op_entrada>-clase_orden
+                                              message_v2 = 'ORDVSCLVCT'
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+        ENDIF.
+
+        IF aplica_clave_de_control = abap_false
+        AND es_clave_control_config-high IS NOT INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '080' type = 'E'
+                                              message_v1 = es_material-matnr
+                                              message_v2 = es_clave_control_config-high
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+        ENDIF.
+      ENDIF.
+*Fin Adicion 08Ago2024 Sebastia Restrepo Villa
+
+      "Cierre de tandas desde el legado, validacion de Status Quimico
+      IF es_op-aufnr IS NOT INITIAL
+      AND es_op-auart IN gr_clase_orden_statusquimico
+      AND <fs_es_op_entrada>-accion_legado = gc_accion_ctec.
+
+        orden_fab = |{ es_op-aufnr ALPHA = OUT }|.
+
+        SELECT orden_fab, tip_tanda, msg_txt, msg_typ, msg_id, msg_num
+        FROM ztmmi1054_3
+        WHERE orden_fab = @orden_fab
+        INTO TABLE @DATA(ti_statusquimicos).
+
+        IF ti_statusquimicos IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '118' type = 'E'
+                                              message_v1 = <fs_es_op_entrada>-numero_orden
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+        ELSE.
+          LOOP AT ti_statusquimicos TRANSPORTING NO FIELDS WHERE msg_typ = g_statusquimico_estado_e.
+            EXIT.
+          ENDLOOP.
+
+          IF sy-subrc IS INITIAL.
+            go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '119' type = 'E'
+                                              message_v1 = <fs_es_op_entrada>-numero_orden
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+
+      "Antes de realizar el cierre técnico a la orden de fabricación CTEC
+      "validar que no haya quedado ninguna notificación con inconsistencia en la trx ZPPR1068_1
+      IF es_op-aufnr IS NOT INITIAL
+      AND <fs_es_op_entrada>-accion_legado = gc_accion_ctec.
+        SELECT
+        FROM ztppi1090_1
+        INNER JOIN ztppi1090_2 ON
+        ztppi1090_1~cs_consec = ztppi1090_2~cs_consec
+        FIELDS ztppi1090_1~*
+        WHERE orderid = @es_op-aufnr
+        AND ztppi1090_2~message NOT LIKE '%CTEC%'
+*        AND ztppi1090_2~message LIKE '%Registros enviados correctamente al monitor para procesamiento posterior!%'
+        INTO TABLE @DATA(ti_log_notificacion).
+
+        IF sy-subrc IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( id = 'ZCX01' number = '066' type = 'E'
+                                            message_v1 = |{ es_op-aufnr ALPHA = OUT }|
+                                            message_v2 = 'al monitor para procesamiento posterior!'
+                                            message_v3 = 'NO realizo CTEC'
+                                            parameter = <fs_es_op_entrada>-numero_orden ) ).
+        ENDIF.
+
+      ENDIF.
+
+      "Validaciones para PTBO
+      IF es_op-aufnr IS NOT INITIAL
+      AND ( <fs_es_op_entrada>-accion_legado = gc_accion_ptbo OR
+           <fs_es_op_entrada>-accion_legado = gc_accion_modificar )
+        AND NOT line_exists( ti_estado_orden_liberada[ numero_orden = <fs_es_op_entrada>-numero_orden ] ).
+        go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '068' type = 'E'
+                                            message_v1 = <fs_es_op_entrada>-numero_orden
+                                            parameter = <fs_es_op_entrada>-numero_orden ) ).
+      ENDIF.
+
+      "Validaciones para Liberacion de OP
+      IF es_op-aufnr IS NOT INITIAL
+      AND <fs_es_op_entrada>-accion_legado = gc_accion_liberar
+        AND NOT line_exists( ti_estado_orden_ctec[ numero_orden = <fs_es_op_entrada>-numero_orden ] ).
+        go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '069' type = 'E'
+                                            message_v1 = <fs_es_op_entrada>-numero_orden
+                                            parameter  = <fs_es_op_entrada>-numero_orden ) ).
+      ENDIF.
+
+      "Validar que se envie numero_secuencia o cantidad para accion "2"
+      IF es_op-aufnr IS NOT INITIAL
+      AND  <fs_es_op_entrada>-accion_legado = gc_accion_modificar
+      AND <fs_es_op_entrada>-numero_secuencia IS INITIAL
+      AND <fs_es_op_entrada>-cantidad_total IS INITIAL
+      AND <fs_es_op_entrada>-version_fabricacion IS INITIAL. "Adicion 08Ago2024 Sebastian Restrepo Villa
+        "Indique NroSecuencia/CantModificar/VerFab orden &1
+        go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '078' type = 'E'
+                                            message_v1 = <fs_es_op_entrada>-numero_orden
+                                            parameter  = <fs_es_op_entrada>-numero_orden ) ).
+      ENDIF.
+
+      ti_log = go_log->get_errores( ).
+      "Actualizar OP con error
+      IF line_exists( ti_log[ parameter = <fs_es_op_entrada>-numero_secuencia
+                              type = 'E' ] )
+         OR
+         ( <fs_es_op_entrada>-numero_orden IS NOT INITIAL
+            AND
+            line_exists( ti_log[ parameter = <fs_es_op_entrada>-numero_orden
+                              type = 'E' ] )
+         ).
+        <fs_es_op_entrada>-estado_creacion_op = gc_estado_proceso_op_error.
+      ELSE.
+        "Actualizar material variante
+        <fs_es_op_entrada>-material = es_material-matnr.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD completar_datos_de_entrada.
+
+    DATA: color TYPE n LENGTH 6,
+          talla TYPE n LENGTH 2.
+
+    LOOP AT c_es_datos_op-ordenproduccionset ASSIGNING FIELD-SYMBOL(<fs_es_op>).
+
+      "Numero OP SAP
+      <fs_es_op>-numero_orden = |{ <fs_es_op>-numero_orden ALPHA = IN }|.
+      "Material
+      CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+        EXPORTING
+          input        = <fs_es_op>-material
+        IMPORTING
+          output       = <fs_es_op>-material
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+      IF sy-subrc <> 0.
+        go_log->set_es_log( i_es = VALUE #( type = sy-msgty number = sy-msgno id = sy-msgid message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+
+      ENDIF.
+
+      color = <fs_es_op>-color.
+      <fs_es_op>-color = color.
+
+      IF <fs_es_op>-talla IS NOT INITIAL.
+        talla = <fs_es_op>-talla.
+        <fs_es_op>-talla = talla.
+      ENDIF.
+
+      "Completar datos del request
+      IF <fs_es_op>-numero_orden IS NOT INITIAL
+      AND <fs_es_op>-accion_legado NE gc_accion_crear.
+        SELECT SINGLE
+        FROM ztppi1202_1
+        FIELDS ztppi1202_1~*
+        WHERE numero_orden = @<fs_es_op>-numero_orden
+        INTO @DATA(es_ztppi1202_1).
+
+        IF sy-subrc IS INITIAL.
+          "No se debe modificar el campo numero_secuencia
+          IF <fs_es_op>-accion_legado = gc_accion_modificar.
+            <fs_es_op> = CORRESPONDING #( BASE ( <fs_es_op> )  es_ztppi1202_1
+                                          MAPPING destinatario_mercancia = op_estilo_legacy
+                                          EXCEPT  numero_secuencia
+                                                  cantidad_total
+                                                  version_fabricacion ). "Adicion 08Ago2024 Sebastian Restrepo Villa
+          ELSE.
+            <fs_es_op> = CORRESPONDING #( BASE ( <fs_es_op> )  es_ztppi1202_1
+                                          MAPPING numero_secuencia = op_tejido_tanda_legacy
+                                                  destinatario_mercancia = op_estilo_legacy
+                                                  material               = material_legado
+                                                  talla                  = tall_legado
+                                                  color                  = color_legado ).
+          ENDIF.
+        ELSE.
+          <fs_es_op>-estado_creacion_op = gc_op_no_creada_desde_interfaz.
+        ENDIF.
+
+      ENDIF.
+
+      "Estos campos deben empezar vacio el proceso
+      IF <fs_es_op>-estado_creacion_op NE gc_op_no_creada_desde_interfaz.
+        CLEAR: <fs_es_op>-estado_creacion_op.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD registrar_log_proceso.
+
+    DATA: ti_log_op                      TYPE STANDARD TABLE OF ztppi1202_1,
+          ti_material_entrada            TYPE gtp_ti_material_antiguo,
+          r_numero_orden                 TYPE gtp_r_numero_orden,
+          r_consecutivo_log              TYPE RANGE OF ztppi1090_1-cs_consec,
+          r_id_log                       TYPE RANGE OF ztppi1090_1-msgguid,
+          numero_orden                   TYPE aufk-aufnr,
+          op_tejido_tandalegacy_anterior TYPE ztppi1202_1-op_tejido_tanda_legacy.
+
+    ti_material_entrada = CORRESPONDING #( c_es_datos_op-ordenproduccionset MAPPING matnr = material size1 = talla ).
+
+    "Validar que la OP exista
+    r_numero_orden = VALUE #( FOR es_dato_op IN c_es_datos_op-ordenproduccionset WHERE ( numero_orden IS NOT INITIAL )
+                               ( sign = 'I' option = 'EQ' low = es_dato_op-numero_orden ) ).
+
+    DELETE r_numero_orden WHERE low IS INITIAL.
+
+    DATA(accion_legado) = c_es_datos_op-ordenproduccionset[ 1 ]-accion_legado.
+
+    ".Validamos si en el Nro de Orden viene el valor SIMU no realiza las validaciones requeridas del proceso    adicion. Jose Miguel Valencia 04.03.2025 ID-12583
+    IF c_es_datos_op-ordenproduccionset[ 1 ]-clave_planificador_necesidades EQ gc_simu.
+      RETURN.
+    ENDIF.
+
+    IF r_numero_orden IS NOT INITIAL.
+
+      SELECT
+      FROM aufk
+      FIELDS aufnr, auart, loekz, erdat, erfzeit
+      WHERE aufnr IN @r_numero_orden
+      INTO TABLE @DATA(ti_ordenes).
+
+      SELECT SINGLE
+      FROM ztppi1202_1
+      FIELDS ztppi1202_1~*
+      WHERE numero_orden IN @r_numero_orden
+      INTO @DATA(es_ztppi1202_1).
+
+    ENDIF.
+
+    "Validar material
+    SELECT
+    FROM @ti_material_entrada AS _material_entrada
+    INNER JOIN mara AS _material ON
+    _material~matnr = _material_entrada~matnr
+    AND   _material~size1 = _material_entrada~size1
+    AND   _material~color = _material_entrada~color
+    LEFT JOIN marc AS _material_x_centro ON
+    _material_x_centro~matnr = _material~matnr
+    AND _material_x_centro~werks = _material_entrada~planta
+    FIELDS _material~matnr, _material~color, _material~size1, _material~bismt, _material~satnr, _material~mtart,
+    _material_x_centro~werks, _material_entrada~version_fabricacion
+    INTO TABLE @DATA(ti_materiales).
+
+    ASSIGN c_es_datos_op-ordenproduccionset[ 1 ] TO FIELD-SYMBOL(<fs_es_datos_op_legacy>).
+
+    IF es_ztppi1202_1-op_tejido_tanda_legacy IS NOT INITIAL
+      AND <fs_es_datos_op_legacy>-numero_secuencia NE es_ztppi1202_1-op_tejido_tanda_legacy
+      AND <fs_es_datos_op_legacy>-numero_secuencia IS NOT INITIAL.
+      op_tejido_tandalegacy_anterior = es_ztppi1202_1-op_tejido_tanda_legacy.
+      es_ztppi1202_1-op_tejido_tanda_legacy = <fs_es_datos_op_legacy>-numero_secuencia.
+    ENDIF.
+
+    IF c_es_datos_op-ordenproduccionset[ 1 ]-accion_legado = gc_accion_crear.
+      ti_log_op = CORRESPONDING #( c_es_datos_op-ordenproduccionset MAPPING op_tejido_tanda_legacy = numero_secuencia
+                                                                            op_estilo_legacy = destinatario_mercancia
+                                                                            cliente_legacy = punto_descarga
+                                                                            tall_legado = talla
+                                                                            color_legado = color
+                                                                            cantidad     = cantidad_total ).
+    ELSE.
+      APPEND es_ztppi1202_1 TO ti_log_op.
+    ENDIF.
+
+    LOOP AT ti_log_op ASSIGNING FIELD-SYMBOL(<fs_es_log_op>).
+
+      <fs_es_log_op>-estado_creacion_op = c_es_datos_op-ordenproduccionset[ 1 ]-accion_legado.
+      <fs_es_log_op>-usuario = sy-uname.
+      <fs_es_log_op>-hora_envio = sy-uzeit.
+      <fs_es_log_op>-fecha_envio = sy-datum.
+      <fs_es_log_op>-id_log = ges_info_mensaje-msgguid.
+
+      DATA(es_op) = VALUE #( ti_ordenes[ aufnr = <fs_es_log_op>-numero_orden ] OPTIONAL ).
+      DATA(es_material) = VALUE #( ti_materiales[ matnr = <fs_es_log_op>-material ] OPTIONAL ).
+
+      IF es_op IS NOT INITIAL.
+        <fs_es_log_op>-fecha_creacion = es_op-erdat.
+        <fs_es_log_op>-hora_creacion = es_op-erfzeit.
+      ENDIF.
+
+      IF es_material IS NOT INITIAL.
+        <fs_es_log_op>-material_legado = es_material-satnr.
+      ENDIF.
+
+*Inicio Modificacion 14Ago2024 Sebastian Restrepo Villa
+      IF accion_legado = gc_accion_modificar.
+        IF c_es_datos_op-ordenproduccionset[ 1 ]-cantidad_total IS NOT INITIAL.
+          <fs_es_log_op>-cantidad = c_es_datos_op-ordenproduccionset[ 1 ]-cantidad_total.
+        ENDIF.
+        IF c_es_datos_op-ordenproduccionset[ 1 ]-version_fabricacion IS NOT INITIAL.
+          <fs_es_log_op>-version_fabricacion = c_es_datos_op-ordenproduccionset[ 1 ]-version_fabricacion.
+        ENDIF.
+      ENDIF.
+*Fin Modificacion 14Ago2024 Sebastian Restrepo Villa
+
+    ENDLOOP.
+
+    "Asignar estado de creacion para OP conjuntas
+    "Si alguna tienen error, el resto debe quedar con el mismo estado
+    IF "accion_legado = gc_accion_crear AND
+    go_log->get_errores( ) IS NOT INITIAL.
+      MODIFY ti_log_op FROM VALUE #( estado_creacion_op = gc_estado_proceso_op_error )
+      TRANSPORTING estado_creacion_op
+      WHERE op_tejido_tanda_legacy IS NOT INITIAL.
+    ENDIF.
+
+    "Eliminar registro acciones anteriores
+    IF accion_legado NE gc_accion_crear.
+      DELETE FROM ztppi1202_1
+      WHERE ( numero_orden IS INITIAL
+        AND op_tejido_tanda_legacy = @op_tejido_tandalegacy_anterior )
+        OR ( numero_orden IS INITIAL AND op_tejido_tanda_legacy IS INITIAL ).
+      "Eliminar numero de secuencia anterior
+      IF <fs_es_datos_op_legacy>-numero_secuencia NE op_tejido_tandalegacy_anterior
+      AND op_tejido_tandalegacy_anterior IS NOT INITIAL.
+        DELETE FROM ztppi1202_1 WHERE op_tejido_tanda_legacy = @op_tejido_tandalegacy_anterior.
+      ENDIF.
+
+    ENDIF.
+
+    MODIFY ztppi1202_1 FROM TABLE ti_log_op.
+
+    IF go_log->get_errores(  ) IS NOT INITIAL.
+      registrar_log_monitor_costos( EXPORTING i_es_datos_op = c_es_datos_op
+                                              i_ti_log_op   = ti_log_op ).
+    ELSE.
+
+      zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_ti             = ti_log_op
+          i_nombre_columna = 'ID_LOG'
+        CHANGING
+          c_ti_rango       = r_id_log ).
+
+      "Eliminar registros anteriores
+      SELECT
+      FROM ztppi1090_1
+      FIELDS 'I' AS sign, 'EQ' AS option, cs_consec AS low
+      WHERE orderid IN @r_numero_orden
+      AND msgguid IN @r_id_log
+      INTO TABLE @r_consecutivo_log.
+
+      IF sy-subrc IS INITIAL.
+        DELETE FROM ztppi1090_1 WHERE cs_consec IN r_consecutivo_log.
+        DELETE FROM ztppi1090_2 WHERE cs_consec IN r_consecutivo_log.
+      ENDIF.
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_estado_op_ptbo.
+
+    DATA: es_msj_retorno    TYPE bapiret2,
+          estado_proceso_op TYPE zeppi1202_1-estado_creacion_op,
+          ti_msj_retorno    TYPE STANDARD TABLE OF bapi_order_return,
+          ti_numeros_de_op  TYPE STANDARD TABLE OF bapi_order_key.
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_op_gr)
+                                             WHERE estado_creacion_op IS INITIAL
+                                             GROUP BY ( numero_orden = r_es_op_gr->numero_orden ).
+
+      CLEAR: es_msj_retorno.
+
+      ti_numeros_de_op = VALUE #( ( order_number = r_es_op_gr->numero_orden ) ).
+
+      CALL FUNCTION 'BAPI_PRODORD_SET_DELETION_FLAG'
+        IMPORTING
+          return        = es_msj_retorno
+        TABLES
+          detail_return = ti_msj_retorno
+          orders        = ti_numeros_de_op.
+
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+      IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        estado_proceso_op = gc_estado_op_peticion_borrado.
+      ELSE.
+
+        estado_proceso_op = gc_estado_proceso_op_error.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+      ENDIF.
+
+      MODIFY c_es_datos_op-ordenproduccionset
+      FROM VALUE #( estado_creacion_op = estado_proceso_op )
+      TRANSPORTING estado_creacion_op
+      WHERE numero_orden = r_es_op_gr->numero_orden.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_op.
+
+    DATA: es_msj_retorno     TYPE bapiret2,
+          estado_creacion_op TYPE zeppi1202_1-estado_creacion_op.
+
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_op_gr)
+                                             WHERE estado_creacion_op IS INITIAL
+                                             GROUP BY ( numero_orden = r_es_op_gr->numero_orden ).
+
+      CLEAR: es_msj_retorno.
+
+      CALL FUNCTION 'BAPI_PRODORD_CHANGE'
+        EXPORTING
+          number     = r_es_op_gr->numero_orden
+          orderdata  = VALUE bapi_pp_order_change( sequence_number  = r_es_op_gr->numero_secuencia
+                                                   quantity         = r_es_op_gr->cantidad_total
+                                                   basic_start_date = COND #( WHEN r_es_op_gr->fecha_inicio_extrema IS NOT INITIAL THEN
+                                                                                r_es_op_gr->fecha_inicio_extrema
+                                                                              ELSE
+                                                                                space )
+                                                   prod_version     = COND #( WHEN r_es_op_gr->version_fabricacion IS NOT INITIAL THEN
+                                                                                r_es_op_gr->version_fabricacion
+                                                                              ELSE
+                                                                                space )
+                                                   explosion_date   = COND #( WHEN r_es_op_gr->fecha_explosion IS NOT INITIAL THEN
+                                                                                r_es_op_gr->fecha_explosion
+                                                                              ELSE
+                                                                                space )
+
+                                                 )
+          orderdatax = VALUE bapi_pp_order_changex( sequence_number   = COND #( WHEN r_es_op_gr->numero_secuencia IS NOT INITIAL THEN
+                                                                                  abap_true
+                                                                                ELSE
+                                                                                  space )
+                                                    quantity          = COND #( WHEN r_es_op_gr->cantidad_total IS NOT INITIAL THEN
+                                                                                 abap_true
+                                                                                ELSE
+                                                                                 space )
+                                                    basic_start_date = COND #( WHEN r_es_op_gr->fecha_inicio_extrema IS NOT INITIAL THEN
+                                                                                 abap_true
+                                                                               ELSE
+                                                                                 space )
+                                                    prod_version     = COND #( WHEN r_es_op_gr->version_fabricacion IS NOT INITIAL THEN
+                                                                                 abap_true
+                                                                               ELSE
+                                                                                 space )
+                                                    explosion_date   = COND #( WHEN r_es_op_gr->fecha_explosion IS NOT INITIAL THEN
+                                                                                abap_true
+                                                                              ELSE
+                                                                                space )
+                                                  )
+        IMPORTING
+          return     = es_msj_retorno.
+
+      IF es_msj_retorno IS INITIAL.
+        es_msj_retorno = VALUE #( type = 'S' id = '/SAPAPO/RRP' number = '552' message_v1 = r_es_op_gr->numero_orden ).
+      ENDIF.
+
+      go_log->set_es_log( i_es = CORRESPONDING #( es_msj_retorno ) ).
+
+      IF es_msj_retorno-type NE 'E'.
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        estado_creacion_op = gc_estado_actualizacion_op.
+
+      ELSE.
+
+        estado_creacion_op = gc_estado_proceso_op_error.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+      ENDIF.
+
+      MODIFY c_es_datos_op-ordenproduccionset
+      FROM VALUE #( estado_creacion_op = estado_creacion_op )
+      TRANSPORTING estado_creacion_op
+      WHERE numero_orden = r_es_op_gr->numero_orden.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD validar_estado_liberacion_op.
+
+    CHECK i_r_numero_orden IS NOT INITIAL
+    AND i_r_estado_op IS NOT INITIAL.
+
+    SELECT
+    FROM aufk AS _orden
+    INNER JOIN jest AS _estado_objeto ON
+    _estado_objeto~objnr = _orden~objnr
+    FIELDS aufnr AS numero_orden, stat AS estado, _orden~objnr
+    WHERE aufnr IN @i_r_numero_orden
+    AND _estado_objeto~stat IN @i_r_estado_op
+    AND _estado_objeto~inact = @space
+    INTO CORRESPONDING FIELDS OF TABLE @r_estado_orden.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_op_cierre_tecnico.
+
+    DATA: es_msj_retorno    TYPE bapiret2,
+          ti_msj_retorno    TYPE STANDARD TABLE OF bapi_order_return,
+          estado_proceso_op TYPE zeppi1202_1-estado_creacion_op,
+          ti_numeros_de_op  TYPE STANDARD TABLE OF bapi_order_key.
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_op_gr)
+                                             GROUP BY ( numero_orden = r_es_op_gr->numero_orden ).
+
+      CLEAR: es_msj_retorno.
+
+      ti_numeros_de_op = VALUE #( ( order_number = r_es_op_gr->numero_orden ) ).
+
+      CALL FUNCTION 'BAPI_PRODORD_COMPLETE_TECH'
+        IMPORTING
+          return        = es_msj_retorno
+        TABLES
+          orders        = ti_numeros_de_op
+          detail_return = ti_msj_retorno.
+
+      MODIFY ti_msj_retorno
+      FROM VALUE #( type = 'S' message_v1 = r_es_op_gr->numero_orden )
+      TRANSPORTING type message_v1
+      WHERE id = 'CO' AND number = '889'.
+
+      go_log->set_es_log( i_es = CORRESPONDING #( es_msj_retorno ) ).
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+      IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        estado_proceso_op = gc_estado_op_cierre_tecnico.
+
+      ELSE.
+
+        estado_proceso_op = gc_estado_proceso_op_error.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+      ENDIF.
+
+      MODIFY c_es_datos_op-ordenproduccionset
+      FROM VALUE #( estado_creacion_op = estado_proceso_op )
+      TRANSPORTING estado_creacion_op
+      WHERE numero_orden = r_es_op_gr->numero_orden.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_op_liberada.
+
+    DATA: es_msj_retorno    TYPE bapiret2,
+          estado_proceso_op TYPE zeppi1202_1-estado_creacion_op.
+
+    DATA(ti_estado_orden_cte) =
+      validar_estado_liberacion_op(
+      i_r_numero_orden = VALUE #( FOR es_op IN c_es_datos_op-ordenproduccionset
+                                    ( sign = 'I' option = 'EQ' low = es_op-numero_orden ) )
+      i_r_estado_op    = gr_estado_cte ).
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_op_gr)
+                                             WHERE estado_creacion_op IS INITIAL
+                                             GROUP BY ( numero_orden = r_es_op_gr->numero_orden ).
+
+      CLEAR: es_msj_retorno, estado_proceso_op.
+
+      DATA(es_estado_orden_cte) = VALUE #( ti_estado_orden_cte[ numero_orden = r_es_op_gr->numero_orden ] OPTIONAL ).
+
+      "Modificar estado
+      IF es_estado_orden_cte-objnr IS NOT INITIAL.
+        CALL FUNCTION 'I_CHANGE_STATUS'
+          EXPORTING
+            objnr          = es_estado_orden_cte-objnr
+            estat_inactive = es_estado_orden_cte-estado
+            estat_active   = 'I0002'
+          EXCEPTIONS
+            cannot_update  = 1
+            OTHERS         = 2.
+
+        IF sy-subrc IS INITIAL.
+
+          "Modificar cantidad
+          CALL FUNCTION 'BAPI_PRODORD_CHANGE'
+            EXPORTING
+              number     = r_es_op_gr->numero_orden
+              orderdata  = VALUE bapi_pp_order_change( quantity = r_es_op_gr->cantidad_total
+                                                     )
+              orderdatax = VALUE bapi_pp_order_changex( quantity = COND #( WHEN r_es_op_gr->cantidad_total IS NOT INITIAL THEN
+                                                                            abap_true
+                                                                           ELSE
+                                                                            space )
+                                                      )
+            IMPORTING
+              return     = es_msj_retorno.
+
+          go_log->set_es_log( i_es = CORRESPONDING #( es_msj_retorno ) ).
+
+          IF es_msj_retorno-type NE 'E'.
+
+            go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '070' type = 'S'
+                                message_v1 = r_es_op_gr->numero_orden
+                                parameter  = r_es_op_gr->numero_orden ) ).
+
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+
+            estado_proceso_op = gc_estado_op_liberada.
+          ENDIF.
+
+        ELSE.
+          go_log->set_es_log( i_es = VALUE #( type = 'E' number = gc_clase_mensajes id = '088'
+                                              message_v1 = es_estado_orden_cte-estado message_v2 = es_estado_orden_cte-numero_orden
+                                              message_v3 = sy-msgv3 message_v4 = sy-msgv4
+                                              parameter = r_es_op_gr->numero_orden ) ).
+
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+        ENDIF.
+      ELSE.
+        go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '074' type = 'E'
+                                            parameter = r_es_op_gr->numero_orden ) ).
+      ENDIF.
+
+      IF estado_proceso_op NE gc_estado_op_liberada.
+        estado_proceso_op = gc_estado_proceso_op_error.
+      ENDIF.
+
+      MODIFY c_es_datos_op-ordenproduccionset
+      FROM VALUE #( estado_creacion_op = estado_proceso_op )
+      TRANSPORTING estado_creacion_op
+      WHERE numero_orden = r_es_op_gr->numero_orden.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD registrar_log_monitor_costos.
+
+    DATA: consecutivo              TYPE ztppi1090_1-cs_consec,
+          r_accion_registra_log_co TYPE RANGE OF zclppi1202_api_gestio_mpc=>ts_ordenproduccion-accion_legado,
+          r_ordenes                TYPE RANGE OF aufk-aufnr,
+          r_id_log                 TYPE RANGE OF ztppi1090_1-msgguid,
+          ti_ztppi1090_1           TYPE STANDARD TABLE OF ztppi1090_1,
+          ti_ztppi1090_2           TYPE STANDARD TABLE OF ztppi1090_2.
+
+    ASSIGN i_es_datos_op-ordenproduccionset
+    TO FIELD-SYMBOL(<fs_ti_op>).
+
+    r_accion_registra_log_co = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ACC_REGLOG' )
+                                   ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+
+    CHECK <fs_ti_op> IS ASSIGNED
+    AND <fs_ti_op>[ 1 ]-accion_legado IN r_accion_registra_log_co.
+
+    r_ordenes = VALUE #( FOR es_op IN i_ti_log_op WHERE ( numero_orden IS NOT INITIAL )
+                        ( sign = 'I' option = 'EQ' low = es_op-numero_orden ) ).
+
+    CHECK r_ordenes IS NOT INITIAL.
+
+    SELECT
+    FROM aufk AS _cabecera
+    INNER JOIN afpo AS _posicion ON
+    _cabecera~aufnr = _posicion~aufnr
+    FIELDS _posicion~aufnr, matnr, _cabecera~werks, _posicion~charg, _posicion~psmng, _posicion~meins, _posicion~lgort
+    WHERE _cabecera~aufnr IN @r_ordenes
+    INTO TABLE @DATA(ti_op_posicion).
+
+    DELETE ti_op_posicion WHERE matnr IS INITIAL.
+    CHECK ti_op_posicion IS NOT INITIAL.
+
+    SELECT
+    FROM @ti_op_posicion AS _material_entrada
+    INNER JOIN mara AS _material ON
+    _material~matnr = _material_entrada~matnr
+    LEFT JOIN marc AS _material_x_centro ON
+    _material_x_centro~matnr = _material~matnr
+    AND _material_x_centro~werks = _material_entrada~werks
+    FIELDS _material~matnr, _material~color, _material~size1, _material~bismt, _material~matkl, lgort,
+    _material~satnr, _material~mtart, mmsta, _material_entrada~meins,
+    _material_entrada~charg, _material_entrada~psmng,
+    _material_x_centro~werks
+    INTO TABLE @DATA(ti_materiales).
+
+    "Consultar Log generado anteriormente
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti             = i_ti_log_op
+        i_nombre_columna = 'ID_LOG'
+      CHANGING
+        c_ti_rango       = r_id_log ).
+
+    SELECT
+    FROM ztppi1090_1
+    INNER JOIN ztppi1090_2 ON
+    ztppi1090_1~cs_consec = ztppi1090_2~cs_consec
+    FIELDS ztppi1090_1~cs_consec, ztppi1090_1~orderid, ztppi1090_1~msgguid
+    WHERE ztppi1090_1~orderid IN @r_ordenes
+    AND ztppi1090_1~msgguid IN @r_id_log
+    INTO TABLE @DATA(ti_log).
+
+    IF ti_log IS INITIAL.
+      CALL FUNCTION 'NUMBER_GET_NEXT'
+        EXPORTING
+          nr_range_nr             = '01'
+          object                  = 'ZPPI1203_1'
+        IMPORTING
+          number                  = consecutivo
+        EXCEPTIONS
+          interval_not_found      = 1
+          number_range_not_intern = 2
+          object_not_found        = 3
+          quantity_is_0           = 4
+          quantity_is_not_1       = 5
+          interval_overflow       = 6
+          buffer_overflow         = 7
+          OTHERS                  = 8.
+    ENDIF.
+
+    DATA(cs_pos) = 1.
+    DATA(ti_errores) = go_log->get_errores( ).
+
+    LOOP AT i_ti_log_op INTO DATA(es_log_op_gr)
+            GROUP BY ( numero_orden = es_log_op_gr-numero_orden
+                       op_tejido_tanda_legacy = es_log_op_gr-op_tejido_tanda_legacy
+                       op_estilo_legacy  = es_log_op_gr-op_estilo_legacy ).
+
+      DATA(es_materiales) = VALUE #( ti_materiales[ matnr = es_log_op_gr-material ] OPTIONAL ).
+      "Consultar consecutivo
+      IF ti_log IS NOT INITIAL.
+        consecutivo = VALUE #( ti_log[ orderid = es_log_op_gr-numero_orden msgguid = es_log_op_gr-id_log ]-cs_consec OPTIONAL ).
+      ENDIF.
+
+      IF es_materiales IS INITIAL.
+        es_materiales = ti_materiales[ 1 ].
+      ENDIF.
+
+      DATA(es_ztppi1090_1) = VALUE ztppi1090_1( cs_consec   = consecutivo
+                                                  pstng_date  = sy-datum
+                                                  doc_date    = sy-datum
+                                                  plant       = es_materiales-werks
+                                                  orderid     = es_log_op_gr-numero_orden
+                                                  material    = es_materiales-matnr
+                                                  stge_loc    = es_materiales-lgort
+                                                  entry_qnt   = es_materiales-psmng
+                                                  entry_uom   = es_materiales-meins
+                                                  clase_not   = <fs_ti_op>[ 1 ]-accion_legado
+                                                  orden_fert  = ''
+                                                  charg       = es_materiales-charg
+                                                  satnr       = es_materiales-satnr
+                                                  size1       = es_materiales-size1
+                                                  color       = es_materiales-color
+                                                  msgguid     = es_log_op_gr-id_log
+                                               ).
+
+      APPEND es_ztppi1090_1 TO ti_ztppi1090_1.
+
+      LOOP AT GROUP es_log_op_gr INTO DATA(es_log_op).
+
+        DATA(es_ztppi1090_2) = VALUE ztppi1090_2(   cs_consec   = consecutivo
+                                                    cs_pos      = cs_pos
+                                                    pstng_date  = sy-datum
+                                                    werks       = es_materiales-werks
+                                                    almacen     = es_materiales-lgort
+                                                    aufnr       = es_log_op-numero_orden
+                                                    hora        = sy-uzeit
+                                                    message     = VALUE #( ti_errores[ 1 ]-message OPTIONAL )
+                                                    material    = es_materiales-matnr
+                                                    cantidad    = es_materiales-psmng
+                                                    unidad      = es_materiales-meins
+                                                    clase_not   = <fs_ti_op>[ 1 ]-accion_legado
+                                                    lote        = es_materiales-charg
+                                                    satnr       = es_materiales-satnr
+                                                    size1       = es_materiales-size1
+                                                    color       = es_materiales-color
+                                                ).
+
+
+        APPEND es_ztppi1090_2 TO ti_ztppi1090_2.
+
+        ADD 1 TO cs_pos.
+
+      ENDLOOP.
+
+    ENDLOOP.
+
+    MODIFY ztppi1090_1 FROM TABLE ti_ztppi1090_1.
+    MODIFY ztppi1090_2 FROM TABLE ti_ztppi1090_2.
+
+  ENDMETHOD.
+
+
+  METHOD asignar_segmento_puerta.
+
+    IF i_c_numero_orden    IS NOT INITIAL AND
+       i_c_segmento_puerta IS NOT INITIAL.
+
+*.....Se lee información de la orden desde la base de datos
+      SELECT *
+        FROM aufk
+        INTO TABLE @DATA(ti_aufk)
+       WHERE aufnr = @i_c_numero_orden.
+
+      IF sy-subrc EQ 0.
+
+*.......Se asigna el valor del campo a actualizar
+        ti_aufk[ 1 ]-zz1_segmentacionpuerta_ord = i_c_segmento_puerta.
+
+*.......Se realiza actualización del campo
+        CALL FUNCTION 'DB_UPDATE_TABLE'
+          EXPORTING
+            tablename      = 'AUFK'
+          TABLES
+            inttab         = ti_aufk
+          EXCEPTIONS
+            db_error       = 1
+            not_found      = 2
+            wrong_param    = 3
+            internal_error = 4
+            OTHERS         = 5.
+
+        IF sy-subrc EQ 0.
+
+          e_es_return-id         = 'ZPP01'.
+          e_es_return-number     = '000'.
+          e_es_return-type       = 'S'.
+          e_es_return-message_v1 = 'Segmento / Puerta'.
+          e_es_return-message_v2 = i_c_segmento_puerta.
+          e_es_return-message_v3 = 'Guardado de Manera Exitosa'.
+          e_es_return-parameter  = i_c_numero_orden.
+
+        ELSE.
+
+          e_es_return-id         = sy-msgid.
+          e_es_return-number     = sy-msgno.
+          e_es_return-type       = sy-msgty.
+          e_es_return-message_v1 = sy-msgv1.
+          e_es_return-message_v2 = sy-msgv2.
+          e_es_return-message_v3 = sy-msgv3.
+          e_es_return-message_v4 = sy-msgv4.
+          e_es_return-parameter  = i_c_numero_orden.
+
+        ENDIF.
+
+      ELSE.
+
+        e_es_return-id         = 'PORD_MESSAGES' .
+        e_es_return-number     = '026' .
+        e_es_return-type       = 'E'.
+        e_es_return-message_v1 = i_c_numero_orden.
+        e_es_return-parameter  = i_c_numero_orden.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD eliminar_componentes.
+
+    DATA:
+*.....Nomnre del objeto de texto
+      c_name  TYPE tdobname,
+*.....Variable indicadora de coincidencia
+      c_match TYPE abap_bool.
+
+    DATA:
+*.....Tabla interna de líneas de texto
+      ti_lines      TYPE tline_t,
+*.....Tabla interna de retorno
+      ti_bapireturn TYPE bapiret2_t.
+
+    DATA:
+*.....Estructura para eliminación de componente
+      es_componente TYPE fsh_s_prod_ord_comp_delete.
+
+*...Se leen datos de Reserva/Necesidades secundarias
+    SELECT SINGLE rsnum
+      FROM resb
+      INTO @DATA(c_rsnum)
+     WHERE aufnr = @i_c_numero_orden.
+
+    IF sy-subrc EQ 0.
+
+*.....Se leen datos de textos de reserva
+      SELECT *
+        FROM resb_text
+        INTO TABLE @DATA(ti_resb_text)
+       WHERE rsnum = @c_rsnum.
+
+      IF sy-subrc EQ 0.
+
+*.......Se recorren los textos de la reserva para validar Segmento/Puerta
+        LOOP AT ti_resb_text INTO DATA(es_resb_text).
+
+*.........Nombre del texto
+          c_name  = es_resb_text-tdname.
+*.........Indicador de coincidencia
+          c_match = abap_false.
+
+*.........Se realiza lectura de texto
+          CALL FUNCTION 'READ_TEXT'
+            EXPORTING
+              id                      = 'MATK'
+              language                = sy-langu
+              name                    = c_name
+              object                  = 'AUFK'
+            TABLES
+              lines                   = ti_lines
+            EXCEPTIONS
+              id                      = 1
+              language                = 2
+              name                    = 3
+              not_found               = 4
+              object                  = 5
+              reference_check         = 6
+              wrong_access_to_archive = 7
+              OTHERS                  = 8.
+
+          IF sy-subrc EQ 0.
+
+*...........Se recorren las líneas para validar Segmento/Puerta
+            LOOP AT ti_lines INTO DATA(es_lines).
+
+*.............Se valida si en la línea está el Segmento/Puerta
+              FIND i_c_segmento_puerta IN es_lines.
+
+              IF sy-subrc EQ 0.
+*...............Se asigna indicador de coincidencia
+                c_match = abap_true.
+                EXIT.
+              ENDIF.
+
+            ENDLOOP.
+
+*...........Si el indicador de coincidencia es falso, se elimina el componente
+            IF c_match EQ abap_false.
+
+*.............Se asigna el número de orden
+              es_componente-order_number            = i_c_numero_orden.
+*.............Se asigna la posición a eliminar
+              es_componente-reservation_item_number = es_resb_text-rspos.
+
+*.............Se elimina el componente
+              CLEAR ti_bapireturn.
+              CALL FUNCTION 'FSH_API_PROD_ORD_COMP_DELETE'
+                EXPORTING
+                  is_component  = es_componente
+                IMPORTING
+                  et_bapireturn = ti_bapireturn.
+
+              APPEND LINES OF ti_bapireturn TO e_ti_return.
+
+            ENDIF.
+
+          ENDIF.
+
+        ENDLOOP.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD procesar_segmento_puerta.
+
+    DATA:
+*.....Estructura de retorno
+      es_return TYPE bapiret2.
+
+    DATA:
+*.....Tabla interna de retorno
+      ti_Return TYPE bapiret2_t.
+
+*...Se realiza la asignación del campo segmento/puerta
+    me->asignar_segmento_puerta(
+      EXPORTING
+        i_c_numero_orden    = i_c_numero_orden
+        i_c_segmento_puerta = i_c_segmento_puerta
+      IMPORTING
+        e_es_return         = es_return
+    ).
+
+    IF es_return IS NOT INITIAL.
+*.....Se adiciona mensaje de retorno
+      APPEND es_return TO e_ti_return.
+    ENDIF.
+
+*...Se realiza eliminación de componentes
+    me->eliminar_componentes(
+      EXPORTING
+        i_c_numero_orden    = i_c_numero_orden
+        i_c_segmento_puerta = i_c_segmento_puerta
+     IMPORTING
+        e_ti_return = ti_return
+    ).
+
+*...Se adiciona mensaje de retorno
+    APPEND LINES OF ti_return TO e_ti_return.
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclppi1202_ordenes_produccion DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: BEGIN OF gtp_es_material_antiguo,
+             matnr               TYPE mara-matnr,
+             bismt               TYPE mara-bismt,
+             size1               TYPE mara-size1,
+             color               TYPE mara-color,
+             satnr               TYPE mara-satnr,
+             planta              TYPE werks_d,
+             version_fabricacion TYPE verid,
+           END OF gtp_es_material_antiguo,
+
+           BEGIN OF gtp_es_estado_orden,
+             numero_orden TYPE aufnr,
+             estado       TYPE jest-stat,
+             objnr        TYPE aufk-objnr,
+           END OF gtp_es_estado_orden.
+
+
+    TYPES: gtp_ti_material_antiguo TYPE STANDARD TABLE OF gtp_es_material_antiguo WITH EMPTY KEY,
+           gtp_ti_estado_orden     TYPE STANDARD TABLE OF gtp_es_estado_orden WITH EMPTY KEY,
+           gtp_ti_log_op           TYPE STANDARD TABLE OF ztppi1202_1.
+
+    TYPES: gtp_r_numero_orden TYPE RANGE OF aufk-aufnr,
+           gtp_r_clase_orden  TYPE RANGE OF aufk-auart,
+           gtp_r_estado       TYPE RANGE OF jest-stat.
+
+    CONSTANTS: gc_ricefw                      TYPE zzedricefw VALUE 'I1202',
+               gc_clase_mensajes              TYPE msgid VALUE 'ZPP01',
+               gc_op_no_creada_desde_interfaz TYPE zed_estado_integra_op_legacy VALUE '99',
+               gc_estado_proceso_op_error     TYPE zed_estado_integra_op_legacy VALUE '9',
+               gc_estado_creacion_op_creada   TYPE zed_estado_integra_op_legacy VALUE '1',
+               gc_estado_actualizacion_op     TYPE zed_estado_integra_op_legacy VALUE '2',
+               gc_estado_op_peticion_borrado  TYPE zed_estado_integra_op_legacy VALUE '3',
+               gc_estado_op_cierre_tecnico    TYPE zed_estado_integra_op_legacy VALUE '4',
+               gc_estado_op_liberada          TYPE zed_estado_integra_op_legacy VALUE '5',
+               gc_accion_crear                TYPE zed_accion_legado VALUE '1',
+               gc_accion_modificar            TYPE zed_accion_legado VALUE '2',
+               gc_accion_ptbo                 TYPE zed_accion_legado VALUE '3',
+               gc_accion_ctec                 TYPE zed_accion_legado VALUE '4',
+               gc_accion_liberar              TYPE zed_accion_legado VALUE '5',
+               gc_simu                        TYPE char4 VALUE 'SIMU'.              ".adicion Jose Miguel Valencia 04.03.2025 ID-12583
+
+    CLASS-DATA:
+              go_log TYPE REF TO zclcxr1002_log_aplicacion.
+
+    DATA: ges_info_mensaje             TYPE ztcxr1001_1,
+          gr_estado_liberacion         TYPE gtp_r_estado,
+          gr_estado_cte                TYPE gtp_r_estado,
+          gr_clase_orden_actualizar    TYPE gtp_r_clase_orden,
+          gr_clase_orden_val_quimico   TYPE gtp_r_clase_orden,
+          gr_clase_orden_componente    TYPE gtp_r_clase_orden,
+          gr_clase_orden_subproducto   TYPE gtp_r_clase_orden,
+          gr_clase_orden_statusquimico TYPE gtp_r_clase_orden,
+          g_statusquimico_estado_e     TYPE ztmmi1054_3-msg_typ,
+          gr_almacen_componente        TYPE RANGE OF lgort_d,
+          gr_tipo_pos_componente       TYPE gtp_r_clase_orden,
+          gr_posicion_operacion        TYPE gtp_r_clase_orden,
+          go_parametros                TYPE REF TO zclcxr1000_parametros.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_es_info_mensaje TYPE ztcxr1001_1 OPTIONAL,
+      cargar_parametros
+        IMPORTING
+          VALUE(i_modulo) TYPE zzedmodulo DEFAULT 'PP'
+          VALUE(i_ricefw) TYPE zzedricefw DEFAULT gc_ricefw,
+      iniciar_proceso_creacion_op
+        EXPORTING
+          VALUE(e_ti_return)   TYPE bapiret2_t
+        CHANGING
+          VALUE(i_datos_proxy) TYPE REF TO data,
+      completar_datos_de_entrada
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      validar_consistencia_datos
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      crear_op
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      modificar_estado_op_ptbo
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      registrar_log_proceso
+        CHANGING
+          VALUE(c_es_datos_op) TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      modificar_op
+        CHANGING
+          c_es_datos_op TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      modificar_op_cierre_tecnico
+        CHANGING
+          c_es_datos_op TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity,
+      modificar_op_liberada
+        CHANGING
+          c_es_datos_op TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity.
+
+
+  PROTECTED SECTION.
+
+private section.
+
+  methods VALIDAR_ESTADO_LIBERACION_OP
+    importing
+      value(I_R_NUMERO_ORDEN) type GTP_R_NUMERO_ORDEN
+      value(I_R_ESTADO_OP) like GR_ESTADO_LIBERACION
+    returning
+      value(R_ESTADO_ORDEN) type GTP_TI_ESTADO_ORDEN .
+  methods REGISTRAR_LOG_MONITOR_COSTOS
+    importing
+      value(I_ES_DATOS_OP) type ZCLPPI1202_API_GESTIO_MPC_EXT=>TS_DEEP_ENTITY
+      value(I_TI_LOG_OP) type GTP_TI_LOG_OP .
+  methods ASIGNAR_SEGMENTO_PUERTA
+    importing
+      !I_C_NUMERO_ORDEN type AUFNR
+      !I_C_SEGMENTO_PUERTA type ZZ1_SEGMENTACIONPUERTA
+    exporting
+      !E_ES_RETURN type BAPIRET2 .
+  methods ELIMINAR_COMPONENTES
+    importing
+      !I_C_NUMERO_ORDEN type AUFNR
+      !I_C_SEGMENTO_PUERTA type ZZ1_SEGMENTACIONPUERTA
+    exporting
+      !E_TI_RETURN type BAPIRET2_T .
+  methods PROCESAR_SEGMENTO_PUERTA
+    importing
+      !I_C_NUMERO_ORDEN type AUFNR
+      !I_C_SEGMENTO_PUERTA type ZZ1_SEGMENTACIONPUERTA
+    exporting
+      !E_TI_RETURN type BAPIRET2_T .
+ENDCLASS.
+
+
+
+CLASS ZCLPPI1202_ORDENES_PRODUCCION IMPLEMENTATION.
+
+
+  METHOD constructor.
+    ges_info_mensaje = i_es_info_mensaje.
+  ENDMETHOD.
+
+
+  METHOD cargar_parametros.
+
+    go_parametros = NEW zclcxr1000_parametros(
+      i_modulo = i_modulo
+      i_ricefw = i_ricefw ).
+
+    SORT go_parametros->gti_parametros BY idparam consec.
+
+    gr_estado_liberacion = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ESTLIBER' )
+                                    ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_estado_cte = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ESTOPCTE' )
+                                    ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_actualizar = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'AC_CLASEOP' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_val_quimico = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CLOP_VLQUI' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_componente = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ORDEN_COMP' )
+                                    ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_almacen_componente = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ALMAC_COMP' )
+                                    ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_tipo_pos_componente = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'TP_POSICIO' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_posicion_operacion = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'POS_OPERAC' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_subproducto = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'CLORD_SUBP' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    gr_clase_orden_statusquimico = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'STATUSQUI' )
+                                ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+    g_statusquimico_estado_e = VALUE #( go_parametros->gti_parametros[ idparam = 'STATUSQUI' ]-idcomo OPTIONAL ).
+
+
+  ENDMETHOD.
+
+
+  METHOD iniciar_proceso_creacion_op.
+
+    DATA: accion_legado TYPE zed_accion_legado.
+
+    FIELD-SYMBOLS: <fs_es_datos_op> TYPE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    cargar_parametros( i_modulo = 'PP' i_ricefw = gc_ricefw ).
+
+    ASSIGN i_datos_proxy->* TO <fs_es_datos_op>.
+
+    SORT <fs_es_datos_op>-ordenproduccionset BY numero_secuencia material talla color.
+
+    accion_legado = VALUE #( <fs_es_datos_op>-ordenproduccionset[ 1 ]-accion_legado OPTIONAL ).
+
+    completar_datos_de_entrada(
+      CHANGING
+        c_es_datos_op = <fs_es_datos_op> ).
+
+    validar_consistencia_datos(
+      CHANGING
+        c_es_datos_op = <fs_es_datos_op> ).
+
+    "Solo Ejecuta el proceso si no existen errores
+    IF go_log->get_errores( ) IS INITIAL.
+      CASE accion_legado.
+
+        WHEN gc_accion_crear.
+
+          crear_op( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+        WHEN gc_accion_ptbo.
+
+          modificar_estado_op_ptbo( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+        WHEN gc_accion_modificar."Modificar cantidad y numero de secuencia
+
+          modificar_op( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+        WHEN gc_accion_ctec.
+
+          modificar_op_cierre_tecnico( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+        WHEN gc_accion_liberar.
+
+          modificar_op_liberada( CHANGING c_es_datos_op = <fs_es_datos_op> ).
+
+      ENDCASE.
+    ENDIF.
+
+    registrar_log_proceso(
+      CHANGING
+        c_es_datos_op = <fs_es_datos_op> ).
+
+    e_ti_return = CORRESPONDING #( go_log->get_log( ) ).
+
+    "Modificar tipo de mensaje, para cambio de color del icono de AZUL a Verde, dado que a Maritza no le gusta azul
+    MODIFY e_ti_return
+    FROM VALUE #( type = 'S' )
+    TRANSPORTING type
+    WHERE type = 'I'.
+
+    DELETE e_ti_return WHERE id = space.
+
+  ENDMETHOD.
+
+
+  METHOD crear_op.
+
+    DATA: es_datos_op            TYPE bapi_pp_order_create,
+          es_msj_retorno         TYPE bapiret2,
+          numero_op              TYPE aufnr,
+          es_componente          TYPE fsh_s_prod_ord_comp_add,
+          es_componentex         TYPE fsh_s_prod_ord_comp_addx,
+          tipo_op                TYPE aufart,
+          error_en_componente    TYPE xfeld,
+          es_componente_agregado TYPE resbb,
+          ti_msj_respuesta       TYPE bapiret2_t,
+          ti_return              TYPE bapiret2_t.
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_datos_op_gr)
+                          WHERE estado_creacion_op IS INITIAL
+                          GROUP BY ( numero_secuencia = r_es_datos_op_gr->numero_secuencia
+                                     material = r_es_datos_op_gr->material
+                                     talla = r_es_datos_op_gr->talla
+                                     color = r_es_datos_op_gr->color ).
+
+      CLEAR: es_datos_op, es_msj_retorno.
+
+      es_datos_op = VALUE #( order_number = r_es_datos_op_gr->numero_orden
+                            material = r_es_datos_op_gr->material
+                            plant = r_es_datos_op_gr->planta
+                            planning_plant = r_es_datos_op_gr->centro_planificacion
+                            order_type = r_es_datos_op_gr->clase_orden
+                            basic_start_date = r_es_datos_op_gr->fecha_inicio_extrema
+                            basic_start_time = r_es_datos_op_gr->hora_inicio_extrema
+                            basic_end_date = r_es_datos_op_gr->fecha_fin_extrema
+                            basic_end_time = r_es_datos_op_gr->hora_fin_extrema
+                            quantity = r_es_datos_op_gr->cantidad_total
+                            scrap_quantity = r_es_datos_op_gr->cantidad_rechazo_total
+                            quantity_uom = r_es_datos_op_gr->unidad_medida
+                            routing_type = r_es_datos_op_gr->tipo_hoja_ruta
+                            routing_group = r_es_datos_op_gr->grupo_hojas_ruta
+                            routing_counter = r_es_datos_op_gr->contador_grupo_hojas_ruta
+                            prod_version = r_es_datos_op_gr->version_fabricacion
+                            explosion_date = r_es_datos_op_gr->fecha_explosion
+                            order_priority = r_es_datos_op_gr->prioridad_orden
+                            mrp_controller = r_es_datos_op_gr->planificador_necesidades
+                            configuration = r_es_datos_op_gr->configuracion
+                            wbs_element = r_es_datos_op_gr->elemento_pep
+                            sales_order = r_es_datos_op_gr->pedido_cliente
+                            sales_order_item = r_es_datos_op_gr->posicion_pedido_cliente
+                            business_area = r_es_datos_op_gr->division
+                            profit_center = r_es_datos_op_gr->centro_beneficio
+                            sequence_number = r_es_datos_op_gr->numero_secuencia
+                            stock_type = r_es_datos_op_gr->tipo_stock
+                            gr_proc_time = r_es_datos_op_gr->tiempo_trat_entrada_mercancia
+                            storage_location = r_es_datos_op_gr->almacen
+                            mrp_distr_key = r_es_datos_op_gr->clave_planificador_necesidades
+                            goods_recipient = r_es_datos_op_gr->destinatario_mercancia
+                            unloading_point = r_es_datos_op_gr->punto_descarga
+                            material_external = r_es_datos_op_gr->numero_material_externo
+                            material_guid = r_es_datos_op_gr->uid_material
+                            material_version = r_es_datos_op_gr->version_material
+                            additional_days = r_es_datos_op_gr->dias_adicionales
+                            stock_segment = r_es_datos_op_gr->segmento_stock
+                            material_long = r_es_datos_op_gr->numero_material_largo
+                            stk_seg_long = r_es_datos_op_gr->segmento_stock_largo
+                            validity_object = r_es_datos_op_gr->valor_validez
+                            ).
+
+      ".Verificamos si el proceso va hacer una simulacion           .adicion Jose Miguel Valencia 04.03.2025 ID-12583
+      IF es_datos_op-mrp_distr_key EQ gc_simu.
+        es_datos_op-order_number = gc_simu.
+        CLEAR: es_datos_op-mrp_distr_key.
+      ENDIF.
+
+      CALL FUNCTION 'BAPI_PRODORD_CREATE'
+        EXPORTING
+          orderdata    = es_datos_op
+        IMPORTING
+          return       = es_msj_retorno
+          order_number = numero_op
+          order_type   = tipo_op.
+
+      ".Ajustamos el retorno del mensaje cuando se requiere solo la validacion de informacion ".adicion Jose Miguel Valencia 04.03.2025 ID-12583
+      IF es_datos_op-order_number EQ gc_simu AND
+         es_msj_retorno-number = '083'.
+
+        es_msj_retorno-id = gc_clase_mensajes.
+        es_msj_retorno-number = '999'.
+        es_msj_retorno-message = 'Validaciones Realizadas con Exito.'.
+      ENDIF.
+
+      es_msj_retorno-parameter = r_es_datos_op_gr->numero_secuencia.
+      go_log->set_es_log( i_es = CORRESPONDING #( es_msj_retorno ) ).
+
+      IF numero_op IS NOT INITIAL.
+
+        r_es_datos_op_gr->numero_orden = numero_op.
+        r_es_datos_op_gr->estado_creacion_op = gc_estado_creacion_op_creada.
+
+        go_log->set_es_log( i_es = VALUE #( id = 'PORD_MESSAGES' number = '048' type = 'S'
+                                            message_v1 = r_es_datos_op_gr->numero_orden
+                                            parameter = r_es_datos_op_gr->numero_orden ) ).
+
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        WAIT UP TO 1 SECONDS.
+
+*.......Se realiza el procesamiento de los datos que dependen del Segmento/Puerta
+        me->procesar_segmento_puerta(
+          EXPORTING
+            i_c_numero_orden    = numero_op
+            i_c_segmento_puerta = r_es_datos_op_gr->segmento_puerta
+          IMPORTING
+            e_ti_return         =  ti_return
+        ).
+
+        LOOP AT ti_return INTO DATA(es_return).
+          go_log->set_es_log( i_es = CORRESPONDING #( es_return ) ).
+        ENDLOOP.
+
+        "Agregar componente
+        IF tipo_op IN gr_clase_orden_componente.
+
+          SELECT SINGLE
+          FROM caufv
+          FIELDS aufnr, auart, plnbez, werks, gamng
+          WHERE aufnr = @numero_op
+          INTO @DATA(es_orden).
+
+          es_componente = VALUE fsh_s_prod_ord_comp_add( order_number = numero_op
+                                                                 item_category = VALUE #( gr_tipo_pos_componente[ 1 ]-low OPTIONAL )
+                                                                 bom_item_number = VALUE #( gr_posicion_operacion[ 1 ]-low OPTIONAL )
+                                                                 material = es_orden-plnbez plant = es_orden-werks
+                                                                 storage_location = VALUE #( gr_almacen_componente[ 1 ]-low OPTIONAL )
+                                                                 requirement_quantity = es_orden-gamng
+                                                                 operation_counter = VALUE #( gr_posicion_operacion[ 1 ]-low OPTIONAL )
+                                                               ).
+
+          zclcxr1002_util=>asignar_marcado_estructura(
+            EXPORTING
+              i_es_origen  = es_componente
+*             i_prefijo_estructura_destino =
+            CHANGING
+              c_es_destino = es_componentex
+          ).
+
+          CALL FUNCTION 'FSH_API_PROD_ORD_COMP_ADD'
+            EXPORTING
+              is_component      = es_componente
+              is_componentx     = es_componentex
+            IMPORTING
+              ev_error_occurred = error_en_componente
+              es_component      = es_componente_agregado
+              et_bapireturn     = ti_msj_respuesta.
+
+          go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_respuesta ) ).
+
+          IF error_en_componente = abap_false.
+
+            r_es_datos_op_gr->estado_creacion_op = gc_estado_creacion_op_creada.
+
+            go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '089' type = 'S'
+                                                message_v1 = r_es_datos_op_gr->numero_orden
+                                                parameter = r_es_datos_op_gr->numero_orden ) ).
+
+          ELSE.
+            r_es_datos_op_gr->estado_creacion_op = gc_estado_proceso_op_error.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+            DATA(es_op_eliminar) = VALUE zclppi1202_api_gestio_mpc_ext=>ts_deep_entity(
+                                   ordenproduccionset = VALUE #( ( CORRESPONDING #( r_es_datos_op_gr->* EXCEPT estado_creacion_op ) ) ) ).
+
+            modificar_estado_op_ptbo( CHANGING c_es_datos_op = es_op_eliminar ).
+
+          ENDIF.
+        ENDIF.
+
+      ELSE.
+        r_es_datos_op_gr->estado_creacion_op = gc_estado_proceso_op_error.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD validar_consistencia_datos.
+
+    DATA: aplica_clave_de_control        TYPE flag,
+          aplica_material_subproducto    TYPE flag,
+          validar_subproducto            TYPE flag,
+          posicion_hoja_ruta             TYPE i,
+          evaluar_ultima_posicion        TYPE flag,
+          ti_material_entrada            TYPE gtp_ti_material_antiguo,
+          material_generico              TYPE mara-matnr,
+          material_variante              TYPE mara-matnr,
+          validacion_op_inicial_ok       TYPE flag,
+          unidad_medida_salida           TYPE marm-meinh,
+          orden_fab                      TYPE ztmmi1054_3-orden_fab,
+          ti_log                         TYPE zclcxr1002_log_aplicacion=>gtp_ti_log,
+          ti_claves_control_configuradas TYPE RANGE OF plpo-steus,
+          ti_claves_control_permitidas   TYPE RANGE OF plpo-steus,
+          r_tipo_material_valido         TYPE RANGE OF mara-mtart,
+          r_tipo_material_lista_material TYPE RANGE OF mara-mtart,
+          r_tipo_material_grupo_articulo TYPE RANGE OF mara-mtart,
+          r_grupo_articulo               TYPE RANGE OF string,
+          r_grupo_articulo_rectilineo    TYPE RANGE OF string,
+          r_excluir_grupo_articulo       TYPE RANGE OF string,
+          r_numero_orden                 TYPE gtp_r_numero_orden.
+
+    DATA:
+          es_clave_control_config LIKE LINE OF ti_claves_control_configuradas. "Adicion 08Ago2024 Sebastian Restrepo Villa
+
+    DATA:
+          v_auart   TYPE aufk-auart.
+
+    r_tipo_material_lista_material = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'TP_MATLIST' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_tipo_material_lista_material WHERE low IS INITIAL.
+
+    r_tipo_material_valido = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'TPMATERIAL' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_tipo_material_valido WHERE low IS INITIAL.
+
+    ti_claves_control_configuradas = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'ORDVSCLVCT' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    r_tipo_material_grupo_articulo = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'TPMATGRART' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_tipo_material_grupo_articulo WHERE low IS INITIAL.
+
+    r_grupo_articulo = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'GRUPARTICU' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_grupo_articulo WHERE low IS INITIAL.
+
+    r_grupo_articulo_rectilineo = VALUE #( FOR es_parametros IN go_parametros->gti_parametros WHERE ( idparam = 'GRPARTRECT' )
+                                              ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+    DELETE r_grupo_articulo_rectilineo WHERE low IS INITIAL.
+
+    ti_material_entrada = CORRESPONDING #( c_es_datos_op-ordenproduccionset MAPPING matnr = material size1 = talla ).
+
+    "Validar que la OP exista
+    r_numero_orden = VALUE #( FOR es_dato_op IN c_es_datos_op-ordenproduccionset WHERE ( numero_orden IS NOT INITIAL )
+                               ( sign = 'I' option = 'EQ' low = es_dato_op-numero_orden ) ).
+
+    IF r_numero_orden IS NOT INITIAL.
+
+      SELECT
+      FROM aufk
+      FIELDS aufnr, auart, loekz
+      WHERE aufnr IN @r_numero_orden
+      INTO TABLE @DATA(ti_ordenes).
+
+*Inicio Adicion 08Ago2024 Sebastia Restrepo Villa
+      SELECT
+      FROM afpo
+      FIELDS aufnr, posnr, matnr, dwerk, verid
+      WHERE aufnr IN @r_numero_orden
+      INTO TABLE @DATA(ti_afpo).
+*Fin Adicion 08Ago2024 Sebastia Restrepo Villa
+
+      "Validar que la OP sea creada desde el proceso textil
+      SELECT
+      FROM ztppi1202_1
+      FIELDS *
+      WHERE numero_orden IN @r_numero_orden
+      INTO TABLE @DATA(ti_registro_proceso_textil).
+
+      DATA(ti_estado_orden_liberada) = validar_estado_liberacion_op( i_r_numero_orden = r_numero_orden i_r_estado_op = gr_estado_liberacion ).
+      DATA(ti_estado_orden_ctec) = validar_estado_liberacion_op( i_r_numero_orden = r_numero_orden i_r_estado_op = gr_estado_cte ).
+
+    ENDIF.
+
+    "Clase de OP
+    SELECT *
+    FROM t003o
+    INTO TABLE @DATA(ti_clase_op_sap).
+
+    "Consultar OP asociadas a la OP Tejdio del sistema legado
+    SELECT
+    FROM ztppi1202_1
+    FIELDS *
+    FOR ALL ENTRIES IN @c_es_datos_op-ordenproduccionset
+    WHERE numero_orden = @c_es_datos_op-ordenproduccionset-numero_orden
+    INTO TABLE @DATA(ti_op_tejido_sap).
+
+*Inicio Modificacion 08Ago2024 Sebastia Restrepo Villa
+    IF r_numero_orden IS INITIAL.
+      "Validar material
+      SELECT
+      FROM @ti_material_entrada AS _material_entrada
+      INNER JOIN mara AS _material ON
+      _material~satnr = _material_entrada~matnr
+      AND   _material~size1 = _material_entrada~size1
+      AND   _material~color = _material_entrada~color
+      LEFT JOIN marc AS _material_x_centro ON
+      _material_x_centro~matnr = _material~matnr
+      AND _material_x_centro~werks = _material_entrada~planta
+      FIELDS _material~matnr, _material~color, _material~size1, _material~bismt, _material~matkl,
+      _material~satnr, _material~mtart, mmsta, meins,
+      _material_x_centro~werks, _material_entrada~version_fabricacion
+      INTO TABLE @DATA(ti_materiales).
+    ELSE.
+
+      DATA(ti_afpo_aux) = ti_afpo.
+      SORT ti_afpo_aux BY aufnr matnr dwerk.
+      DELETE ADJACENT DUPLICATES FROM ti_afpo_aux COMPARING aufnr matnr dwerk.
+
+      LOOP AT c_es_datos_op-ordenproduccionset ASSIGNING FIELD-SYMBOL(<fs_es_op_entrada>).
+        IF <fs_es_op_entrada>-numero_orden IS NOT INITIAL.
+          IF <fs_es_op_entrada>-version_fabricacion IS NOT INITIAL.
+            LOOP AT ti_afpo_aux ASSIGNING FIELD-SYMBOL(<fs_es_afpo>) WHERE aufnr = <fs_es_op_entrada>-numero_orden.
+              <fs_es_afpo>-verid = <fs_es_op_entrada>-version_fabricacion.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+      SORT ti_afpo_aux BY matnr dwerk.
+      DELETE ADJACENT DUPLICATES FROM ti_afpo_aux COMPARING matnr dwerk.
+
+      "Validar material
+      SELECT
+      FROM @ti_afpo_aux AS _material_entrada
+      INNER JOIN mara AS _material ON
+      _material~matnr = _material_entrada~matnr
+      LEFT JOIN marc AS _material_x_centro ON
+      _material_x_centro~matnr = _material~matnr
+      AND _material_x_centro~werks = _material_entrada~dwerk
+      FIELDS _material~matnr, _material~color, _material~size1, _material~bismt, _material~matkl,
+      _material~satnr, _material~mtart, mmsta, meins,
+      _material_x_centro~werks, _material_entrada~verid AS version_fabricacion
+      INTO TABLE @ti_materiales.
+
+    ENDIF.
+*Fin Modificacion 08Ago2024 Sebastia Restrepo Villa
+
+    IF ti_materiales IS NOT INITIAL.
+
+      "unidades de medida
+      SELECT *
+      FROM marm
+      FOR ALL ENTRIES IN @ti_materiales
+      WHERE matnr = @ti_materiales-matnr
+      INTO TABLE @DATA(ti_unidad_medida_material).
+
+      "Valida Orden vs Clave de control
+      SELECT
+      FROM mkal AS _version_fabricacion
+      LEFT JOIN plas AS _posicion_hoja_ruta ON
+      _posicion_hoja_ruta~plnnr = _version_fabricacion~plnnr
+      AND _posicion_hoja_ruta~plnal = _version_fabricacion~alnal
+      LEFT JOIN plko AS _hoja_ruta_cab ON
+      _hoja_ruta_cab~plnnr = _posicion_hoja_ruta~plnnr
+      AND _hoja_ruta_cab~plnal = _posicion_hoja_ruta~plnal
+      LEFT JOIN plpo AS _hoja_ruta_operacion ON
+      _hoja_ruta_operacion~zaehl = _posicion_hoja_ruta~zaehl
+      AND _hoja_ruta_operacion~plnnr = _posicion_hoja_ruta~plnnr
+      AND _hoja_ruta_operacion~plnkn = _posicion_hoja_ruta~plnkn
+      FIELDS _hoja_ruta_operacion~plnnr, matnr, _version_fabricacion~werks,_hoja_ruta_operacion~plnkn, _hoja_ruta_operacion~zaehl,
+      _hoja_ruta_operacion~vornr,  "Adicion 08Ago2024 Sebastian Restrpo Villa
+      verid, steus, _hoja_ruta_cab~loekz
+      FOR ALL ENTRIES IN @ti_materiales
+      WHERE _version_fabricacion~matnr = @ti_materiales-matnr
+      AND _version_fabricacion~werks   = @ti_materiales-werks
+      AND _version_fabricacion~verid   = @ti_materiales-version_fabricacion
+      AND _hoja_ruta_cab~loekz         = @space
+      INTO TABLE @DATA(ti_hoja_ruta).
+
+*      SORT ti_hoja_ruta BY matnr werks verid plnkn zaehl steus.        "Comentario 08Ago2024 Sebastian Restrepo Villa
+      SORT ti_hoja_ruta BY matnr werks verid vornr plnkn zaehl steus.   "Adicion 08Ago2024 Sebastian Restrepo Villa
+
+      "Validar lista de material
+      SELECT
+      FROM mkal AS _version_fabricacion
+      LEFT JOIN mast AS _lista_material ON
+      _lista_material~matnr = _version_fabricacion~matnr
+      AND _lista_material~werks = _version_fabricacion~werks
+      AND _lista_material~stlal = _version_fabricacion~stlal
+      LEFT JOIN stas AS _pos_lista_material ON
+      _pos_lista_material~stlnr = _lista_material~stlnr
+      AND _pos_lista_material~stlal = _lista_material~stlal
+      AND _pos_lista_material~lkenz = @space
+      LEFT JOIN stpo AS _lista_material_pos ON
+      _lista_material_pos~stlnr = _pos_lista_material~stlnr
+      AND _lista_material_pos~stlkn = _pos_lista_material~stlkn
+      LEFT JOIN mara AS _material ON
+      _material~matnr = _lista_material_pos~idnrk
+      FIELDS _version_fabricacion~matnr, _version_fabricacion~werks, _material~mtart, verid, menge,
+      _lista_material_pos~stlnr, _lista_material_pos~lkenz, _version_fabricacion~mksp
+      FOR ALL ENTRIES IN @ti_materiales
+      WHERE _version_fabricacion~matnr = @ti_materiales-matnr
+      AND _version_fabricacion~werks   = @ti_materiales-werks
+      AND _version_fabricacion~verid   = @ti_materiales-version_fabricacion
+      INTO TABLE @DATA(ti_lista_material).
+
+    ENDIF.
+
+    LOOP AT c_es_datos_op-ordenproduccionset ASSIGNING <fs_es_op_entrada>.  "Modificacion 08Ago2024 Sebastia Restrepo Villa
+
+      aplica_clave_de_control = abap_false.
+      validacion_op_inicial_ok = abap_true.
+
+      CLEAR: posicion_hoja_ruta, evaluar_ultima_posicion, aplica_material_subproducto.
+
+*Inicio Modificacion 08Ago2024 Sebastia Restrepo Villa
+      IF <fs_es_op_entrada>-numero_orden IS INITIAL.
+        material_generico = <fs_es_op_entrada>-material.
+
+        DATA(es_material) = VALUE #( ti_materiales[ satnr = material_generico
+                                                    color = <fs_es_op_entrada>-color
+                                                    size1 = <fs_es_op_entrada>-talla  ] OPTIONAL ).
+
+        material_variante = es_material-matnr.
+      ELSE.
+        READ TABLE ti_afpo
+         INTO DATA(es_afpo)
+          WITH KEY aufnr = <fs_es_op_entrada>-numero_orden.
+        IF sy-subrc EQ 0.
+          es_material = VALUE #( ti_materiales[ matnr = es_afpo-matnr ] OPTIONAL ).
+          material_generico = es_material-satnr.
+          material_variante = es_afpo-matnr.
+        ENDIF.
+      ENDIF.
+*Fin Modificacion 08Ago2024 Sebastia Restrepo Villa
+
+      "Validar OP y Clase de OP
+      IF <fs_es_op_entrada>-accion_legado NE gc_accion_crear
+      AND <fs_es_op_entrada>-numero_orden IS NOT INITIAL.
+
+        DATA(es_op) = VALUE #( ti_ordenes[ aufnr = <fs_es_op_entrada>-numero_orden ] OPTIONAL ).
+
+
+        IF <fs_es_op_entrada>-numero_orden IS NOT INITIAL AND
+           es_op-aufnr IS INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = 'PP_PRODORD_CNF_ODATA' number = '003' type = 'E'
+                                              message_v1 = |{ <fs_es_op_entrada>-numero_orden ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+
+        ENDIF.
+        "Validar clase de OP valida para actualizar
+        IF <fs_es_op_entrada>-numero_orden IS NOT INITIAL
+           AND <fs_es_op_entrada>-accion_legado = gc_accion_modificar
+           AND es_op-auart NOT IN gr_clase_orden_actualizar
+           AND <fs_es_op_entrada>-numero_secuencia IS NOT INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '071' type = 'E'
+                                              message_v1 = |{ es_op-auart ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+
+        ENDIF.
+
+        IF es_op IS NOT INITIAL AND es_op-loekz NE space.
+
+          go_log->set_es_log( i_es = VALUE #( id = 'IAOM_OM' number = '007' type = 'E'
+                                              message_v1 = |{ <fs_es_op_entrada>-numero_orden ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+
+        ENDIF.
+        "Si la Orden existe en SAP y pero no se encontro registro en ZTPPI1202_1 (Log interfaz)
+        IF es_op-aufnr IS NOT INITIAL
+        AND NOT line_exists( ti_op_tejido_sap[ numero_orden = es_op-aufnr ] ).
+
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '072' type = 'E'
+                                              message_v1 = |{ <fs_es_op_entrada>-numero_orden ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+
+        ENDIF.
+      ENDIF.
+
+*Inicio Adicion 08Ago2024 Sebastia Restrepo Villa
+      IF <fs_es_op_entrada>-accion_legado = gc_accion_crear.
+        v_auart = <fs_es_op_entrada>-clase_orden.
+      ENDIF.
+      IF <fs_es_op_entrada>-accion_legado = gc_accion_modificar.
+        v_auart = es_op-auart.
+      ENDIF.
+
+      "Valida Orden vs Clave de control: Se evalua en el orden de los valores configurados en el
+      "parametro ORDVSCLVCT, el ultimo valor debe coincidir con el ultimo valor de la hora de ruta
+      ti_claves_control_permitidas = VALUE #( FOR es_claves_control IN ti_claves_control_configuradas
+                                                                    WHERE ( low = v_auart )
+                                                         ( es_claves_control ) ).
+
+      CLEAR: es_clave_control_config.
+      "Solo validar la ultima clave de control cuando se modifiquen versiones de fabricacion
+      IF <fs_es_op_entrada>-version_fabricacion IS NOT INITIAL.
+        DATA(ti_hoja_ruta_material_centro) = ti_hoja_ruta.
+        ti_hoja_ruta_material_centro =
+        VALUE #( FOR _es_hoja_ruta IN ti_hoja_ruta WHERE ( matnr = material_variante
+                                                         AND werks = <fs_es_op_entrada>-planta
+                                                         AND verid = <fs_es_op_entrada>-version_fabricacion
+                                                         AND loekz = space )
+                                                         ( _es_hoja_ruta ) ).
+
+        LOOP AT ti_claves_control_permitidas  INTO es_clave_control_config
+                                             WHERE low = v_auart.
+
+          AT LAST.
+            evaluar_ultima_posicion = abap_true.
+          ENDAT.
+          "Solo la ultima clave de control es la que debe ser evaluada
+          LOOP AT ti_hoja_ruta_material_centro INTO DATA(es_hoja_ruta) WHERE matnr = material_variante
+                                                         AND werks = <fs_es_op_entrada>-planta
+                                                         AND verid = <fs_es_op_entrada>-version_fabricacion
+                                                         AND loekz = space
+                                                         AND steus = es_clave_control_config-high.
+            posicion_hoja_ruta = sy-tabix.
+            aplica_clave_de_control = abap_true.
+          ENDLOOP.
+
+          "Evalua que la ultima clave de control sea la ultima posicion de la hoja de ruta
+          IF evaluar_ultima_posicion = abap_true
+          AND posicion_hoja_ruta NE lines( ti_hoja_ruta_material_centro )
+          AND aplica_clave_de_control = abap_true.
+            aplica_clave_de_control = abap_false.
+          ENDIF.
+
+        ENDLOOP.
+      ENDIF.
+*Fin Adicion 08Ago2024 Sebastia Restrepo Villa
+
+      IF <fs_es_op_entrada>-accion_legado = gc_accion_crear.
+
+        IF <fs_es_op_entrada>-numero_secuencia IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '079' type = 'E'
+                                                parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+        "Validar OP tejido no exista en SAP
+        LOOP AT ti_op_tejido_sap INTO DATA(es_op_tejido_sap)
+                                 WHERE op_tejido_tanda_legacy = <fs_es_op_entrada>-numero_secuencia
+                                   AND material_legado = <fs_es_op_entrada>-material
+                                   AND color_legado = <fs_es_op_entrada>-color
+                                   AND tall_legado = <fs_es_op_entrada>-talla
+                                  AND  numero_orden IS NOT INITIAL.
+        ENDLOOP.
+
+        IF  es_op_tejido_sap IS NOT INITIAL.
+**          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '073' type = 'E'
+**                                           message_v1 = <fs_es_op_entrada>-numero_secuencia
+**                                           message_v2 = es_op_tejido_sap-numero_orden
+**                                           parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+**          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar Clase de OP
+        IF NOT line_exists( ti_clase_op_sap[ auart = <fs_es_op_entrada>-clase_orden ] ).
+          go_log->set_es_log( i_es = VALUE #( id = 'COOS' number = '022' type = 'E'
+                              message_v1 = <fs_es_op_entrada>-clase_orden
+                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar Material variante
+        IF NOT line_exists( ti_materiales[ satnr = material_generico size1 = <fs_es_op_entrada>-talla  color = <fs_es_op_entrada>-color ] ).
+
+          go_log->set_es_log( i_es = VALUE #( id = 'ZMM01' number = '409' type = 'E' message_v1 = |{ material_generico ALPHA = OUT }|
+                                              message_v2 = <fs_es_op_entrada>-talla  message_v3 = <fs_es_op_entrada>-color
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar tipo de material
+        IF es_material-mtart NOT IN r_tipo_material_valido AND
+           r_tipo_material_valido IS NOT INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = '/ISDFPS/FORCER' number = '081' type = 'E'
+                                              message_v1 = |{ es_material-mtart ALPHA = OUT }|
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+        "Validar material en centro con indicador de borrado
+        IF es_material-mmsta NE space.
+
+          go_log->set_es_log( i_es = VALUE #( id = 'CI' number = '033' type = 'E'
+                                              message_v1 = |{ material_generico ALPHA = OUT }|
+                                              message_v2 = es_material-werks
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar material en centro
+        IF es_material-werks IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( id = 'ZSD06' number = '007' type = 'E'
+                                              message_v1 = |{ material_generico ALPHA = OUT }|
+                                              message_v2 = <fs_es_op_entrada>-planta
+                                              parameter  = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        "Validar unidad de medida del material
+        CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+          EXPORTING
+            input          = <fs_es_op_entrada>-unidad_medida
+          IMPORTING
+            output         = unidad_medida_salida
+          EXCEPTIONS
+            unit_not_found = 1
+            OTHERS         = 2.
+
+        IF NOT line_exists( ti_unidad_medida_material[ matnr = es_material-matnr meinh = <fs_es_op_entrada>-unidad_medida ] ).
+          go_log->set_es_log( i_es = VALUE #( id = '/STTPEC/MC_MD' number = '125' type = 'E'
+                                              message_v2 = |{ material_variante ALPHA = OUT }|
+                                              message_v1 = unidad_medida_salida
+                                              parameter  = <fs_es_op_entrada>-numero_secuencia ) ).
+          validacion_op_inicial_ok = abap_false.
+        ENDIF.
+
+        IF validacion_op_inicial_ok = abap_true.
+
+          DATA(es_lista_material) = VALUE #( ti_lista_material[ matnr = material_variante werks = <fs_es_op_entrada>-planta verid = <fs_es_op_entrada>-version_fabricacion ] OPTIONAL ).
+
+          "Validar version fabricación
+          IF  es_lista_material IS INITIAL.
+            go_log->set_es_log( i_es = VALUE #( id = 'IPPECIF' number = '510' type = 'E'
+                                               message_v1 = <fs_es_op_entrada>-version_fabricacion
+                                               message_v2 = <fs_es_op_entrada>-planta
+                                               message_v3 = |{ <fs_es_op_entrada>-material ALPHA = OUT }|
+                                               parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+          ELSE.
+            "validar indicador de borrado para version fabricación
+            IF es_lista_material-mksp NE space.
+              go_log->set_es_log( i_es = VALUE #( id = 'RM' number = '169' type = 'E'
+                                                  message_v1 = <fs_es_op_entrada>-version_fabricacion
+                                                  message_v2 = |{ <fs_es_op_entrada>-material ALPHA = OUT }|
+                                                  message_v3 = <fs_es_op_entrada>-planta
+                                                  parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+            ELSE.
+              "Validación tipo material ZQUI en las listas de materiales
+              IF <fs_es_op_entrada>-clase_orden IN gr_clase_orden_val_quimico.
+                LOOP AT ti_lista_material TRANSPORTING NO FIELDS WHERE matnr = material_variante
+                                                                   AND werks = <fs_es_op_entrada>-planta
+                                                                   AND verid = <fs_es_op_entrada>-version_fabricacion
+                                                                   AND mtart IN r_tipo_material_lista_material.
+                  EXIT.
+                ENDLOOP.
+
+                IF sy-subrc IS NOT INITIAL.
+
+                  go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '065' type = 'E'
+                                                      message_v1 = material_variante
+                                                      parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+
+                ENDIF.
+              ENDIF.
+
+*Inicio Comentario 08Ago2024 Sebastia Restrepo Villa
+*              "Valida Orden vs Clave de control: Se evalua en el orden de los valores configurados en el
+*              "parametro ORDVSCLVCT, el ultimo valor debe coincidir con el ultimo valor de la hora de ruta
+*              ti_claves_control_permitidas = VALUE #( FOR es_claves_control IN ti_claves_control_configuradas
+*                                                                            WHERE ( low = <fs_es_op_entrada>-clase_orden )
+*                                                                 ( es_claves_control ) ).
+*
+*              DATA(ti_hoja_ruta_material_centro) = ti_hoja_ruta.
+*              ti_hoja_ruta_material_centro =
+*              VALUE #( FOR _es_hoja_ruta IN ti_hoja_ruta WHERE ( matnr = material_variante
+*                                                               AND werks = <fs_es_op_entrada>-planta
+*                                                               AND verid = <fs_es_op_entrada>-version_fabricacion
+*                                                               AND loekz = space )
+*                                                               ( _es_hoja_ruta ) ).
+*
+*              LOOP AT ti_claves_control_permitidas INTO DATA(es_clave_control_config)
+*                                                   WHERE  low = <fs_es_op_entrada>-clase_orden.
+*
+*                AT LAST.
+*                  evaluar_ultima_posicion = abap_true.
+*                ENDAT.
+*                "Solo la ultima clave de control es la que debe ser evaluada
+*                LOOP AT ti_hoja_ruta_material_centro INTO DATA(es_hoja_ruta) WHERE matnr = material_variante
+*                                                               AND werks = <fs_es_op_entrada>-planta
+*                                                               AND verid = <fs_es_op_entrada>-version_fabricacion
+*                                                               AND loekz = space
+*                                                               AND steus = es_clave_control_config-high.
+*                  posicion_hoja_ruta = sy-tabix.
+*                  aplica_clave_de_control = abap_true.
+*                ENDLOOP.
+*
+*                "Evalua que la ultima clave de control sea la ultima posicion de la hoja de ruta
+*                IF evaluar_ultima_posicion = abap_true
+*                AND posicion_hoja_ruta NE lines( ti_hoja_ruta_material_centro )
+*                AND aplica_clave_de_control = abap_true.
+*                  aplica_clave_de_control = abap_false.
+*                ENDIF.
+*
+*              ENDLOOP.
+*
+*              IF aplica_clave_de_control = abap_false AND
+*                ti_claves_control_permitidas IS INITIAL.
+*
+*                go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '066' type = 'E'
+*                                                    message_v1 = <fs_es_op_entrada>-clase_orden
+*                                                    message_v2 = 'ORDVSCLVCT'
+*                                                    parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+*
+*              ENDIF.
+*
+*              IF aplica_clave_de_control = abap_false
+*              AND es_clave_control_config-high IS NOT INITIAL.
+*
+*                go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '080' type = 'E'
+*                                                    message_v1 = es_material-matnr
+*                                                    message_v2 = es_clave_control_config-high
+*                                                    parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+*
+*              ENDIF.
+*              CLEAR: es_clave_control_config.
+**Fin Comentario 08Ago2024 Sebastia Restrepo Villa
+
+              "Consultar parametro segun los dos primeros caracteres del grupo de articulos
+              r_excluir_grupo_articulo = VALUE #( FOR es_parametros IN go_parametros->gti_parametros
+                                                  WHERE ( idcomo = es_material-matkl(2) AND idparam = 'EXGRUPARTI' )
+                                                 ( CORRESPONDING #( es_parametros MAPPING option = opti ) ) ).
+
+              " Validación material subproducto en la lista de materiales{
+              validar_subproducto = abap_true.
+
+              IF <fs_es_op_entrada>-clase_orden IN gr_clase_orden_subproducto.
+                "Tipo material que valida grupo de articulo
+                IF es_material-mtart IN r_tipo_material_grupo_articulo.
+
+                  IF es_material-matkl(2) IN r_grupo_articulo_rectilineo.
+                    validar_subproducto = abap_false.
+                  ELSE.
+                    IF es_material-matkl(2) IN r_grupo_articulo.
+
+                      validar_subproducto = COND #( WHEN es_material-matkl+4(4)  IN r_excluir_grupo_articulo THEN
+                                                        abap_false
+                                                    ELSE
+                                                        abap_true ).
+                    ELSE.
+                      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '076' type = 'E'
+                                                          message_v1 = es_material-matkl
+                                                          parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+                      validar_subproducto = abap_false.
+                    ENDIF.
+                  ENDIF.
+
+                ENDIF.
+
+                IF validar_subproducto = abap_true.
+                  LOOP AT ti_lista_material TRANSPORTING NO FIELDS WHERE verid = <fs_es_op_entrada>-version_fabricacion
+                                                                     AND menge < 0.
+                    aplica_material_subproducto = abap_true.
+                    EXIT.
+                  ENDLOOP.
+
+                  IF aplica_material_subproducto = abap_false.
+                    go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '067' type = 'E'
+                                                        message_v1 = material_generico
+                                                        parameter  = <fs_es_op_entrada>-numero_secuencia ) ).
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+              "}
+
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+*Inicio Adicion 08Ago2024 Sebastia Restrepo Villa
+      IF <fs_es_op_entrada>-accion_legado = gc_accion_crear OR
+         ( <fs_es_op_entrada>-accion_legado = gc_accion_modificar AND <fs_es_op_entrada>-version_fabricacion IS NOT INITIAL ).
+
+        IF aplica_clave_de_control = abap_false AND
+          ti_claves_control_permitidas IS INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '066' type = 'E'
+                                              message_v1 = <fs_es_op_entrada>-clase_orden
+                                              message_v2 = 'ORDVSCLVCT'
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+        ENDIF.
+
+        IF aplica_clave_de_control = abap_false
+        AND es_clave_control_config-high IS NOT INITIAL.
+
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '080' type = 'E'
+                                              message_v1 = es_material-matnr
+                                              message_v2 = es_clave_control_config-high
+                                              parameter = <fs_es_op_entrada>-numero_secuencia ) ).
+        ENDIF.
+      ENDIF.
+*Fin Adicion 08Ago2024 Sebastia Restrepo Villa
+
+      "Cierre de tandas desde el legado, validacion de Status Quimico
+      IF es_op-aufnr IS NOT INITIAL
+      AND es_op-auart IN gr_clase_orden_statusquimico
+      AND <fs_es_op_entrada>-accion_legado = gc_accion_ctec.
+
+        orden_fab = |{ es_op-aufnr ALPHA = OUT }|.
+
+        SELECT orden_fab, tip_tanda, msg_txt, msg_typ, msg_id, msg_num
+        FROM ztmmi1054_3
+        WHERE orden_fab = @orden_fab
+        INTO TABLE @DATA(ti_statusquimicos).
+
+        IF ti_statusquimicos IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '118' type = 'E'
+                                              message_v1 = <fs_es_op_entrada>-numero_orden
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+        ELSE.
+          LOOP AT ti_statusquimicos TRANSPORTING NO FIELDS WHERE msg_typ = g_statusquimico_estado_e.
+            EXIT.
+          ENDLOOP.
+
+          IF sy-subrc IS INITIAL.
+            go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '119' type = 'E'
+                                              message_v1 = <fs_es_op_entrada>-numero_orden
+                                              parameter = <fs_es_op_entrada>-numero_orden ) ).
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+
+      "Antes de realizar el cierre técnico a la orden de fabricación CTEC
+      "validar que no haya quedado ninguna notificación con inconsistencia en la trx ZPPR1068_1
+      IF es_op-aufnr IS NOT INITIAL
+      AND <fs_es_op_entrada>-accion_legado = gc_accion_ctec.
+        SELECT
+        FROM ztppi1090_1
+        INNER JOIN ztppi1090_2 ON
+        ztppi1090_1~cs_consec = ztppi1090_2~cs_consec
+        FIELDS ztppi1090_1~*
+        WHERE orderid = @es_op-aufnr
+        AND ztppi1090_2~message NOT LIKE '%CTEC%'
+*        AND ztppi1090_2~message LIKE '%Registros enviados correctamente al monitor para procesamiento posterior!%'
+        INTO TABLE @DATA(ti_log_notificacion).
+
+        IF sy-subrc IS INITIAL.
+          go_log->set_es_log( i_es = VALUE #( id = 'ZCX01' number = '066' type = 'E'
+                                            message_v1 = |{ es_op-aufnr ALPHA = OUT }|
+                                            message_v2 = 'al monitor para procesamiento posterior!'
+                                            message_v3 = 'NO realizo CTEC'
+                                            parameter = <fs_es_op_entrada>-numero_orden ) ).
+        ENDIF.
+
+      ENDIF.
+
+      "Validaciones para PTBO
+      IF es_op-aufnr IS NOT INITIAL
+      AND ( <fs_es_op_entrada>-accion_legado = gc_accion_ptbo OR
+           <fs_es_op_entrada>-accion_legado = gc_accion_modificar )
+        AND NOT line_exists( ti_estado_orden_liberada[ numero_orden = <fs_es_op_entrada>-numero_orden ] ).
+        go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '068' type = 'E'
+                                            message_v1 = <fs_es_op_entrada>-numero_orden
+                                            parameter = <fs_es_op_entrada>-numero_orden ) ).
+      ENDIF.
+
+      "Validaciones para Liberacion de OP
+      IF es_op-aufnr IS NOT INITIAL
+      AND <fs_es_op_entrada>-accion_legado = gc_accion_liberar
+        AND NOT line_exists( ti_estado_orden_ctec[ numero_orden = <fs_es_op_entrada>-numero_orden ] ).
+        go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '069' type = 'E'
+                                            message_v1 = <fs_es_op_entrada>-numero_orden
+                                            parameter  = <fs_es_op_entrada>-numero_orden ) ).
+      ENDIF.
+
+      "Validar que se envie numero_secuencia o cantidad para accion "2"
+      IF es_op-aufnr IS NOT INITIAL
+      AND  <fs_es_op_entrada>-accion_legado = gc_accion_modificar
+      AND <fs_es_op_entrada>-numero_secuencia IS INITIAL
+      AND <fs_es_op_entrada>-cantidad_total IS INITIAL
+      AND <fs_es_op_entrada>-version_fabricacion IS INITIAL. "Adicion 08Ago2024 Sebastian Restrepo Villa
+        "Indique NroSecuencia/CantModificar/VerFab orden &1
+        go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '078' type = 'E'
+                                            message_v1 = <fs_es_op_entrada>-numero_orden
+                                            parameter  = <fs_es_op_entrada>-numero_orden ) ).
+      ENDIF.
+
+      ti_log = go_log->get_errores( ).
+      "Actualizar OP con error
+      IF line_exists( ti_log[ parameter = <fs_es_op_entrada>-numero_secuencia
+                              type = 'E' ] )
+         OR
+         ( <fs_es_op_entrada>-numero_orden IS NOT INITIAL
+            AND
+            line_exists( ti_log[ parameter = <fs_es_op_entrada>-numero_orden
+                              type = 'E' ] )
+         ).
+        <fs_es_op_entrada>-estado_creacion_op = gc_estado_proceso_op_error.
+      ELSE.
+        "Actualizar material variante
+        <fs_es_op_entrada>-material = es_material-matnr.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD completar_datos_de_entrada.
+
+    DATA: color TYPE n LENGTH 6,
+          talla TYPE n LENGTH 2.
+
+    LOOP AT c_es_datos_op-ordenproduccionset ASSIGNING FIELD-SYMBOL(<fs_es_op>).
+
+      "Numero OP SAP
+      <fs_es_op>-numero_orden = |{ <fs_es_op>-numero_orden ALPHA = IN }|.
+      "Material
+      CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+        EXPORTING
+          input        = <fs_es_op>-material
+        IMPORTING
+          output       = <fs_es_op>-material
+        EXCEPTIONS
+          length_error = 1
+          OTHERS       = 2.
+
+      IF sy-subrc <> 0.
+        go_log->set_es_log( i_es = VALUE #( type = sy-msgty number = sy-msgno id = sy-msgid message_v1 = sy-msgv1 message_v2 = sy-msgv2
+                                            message_v3 = sy-msgv3 message_v4 = sy-msgv4 ) ).
+
+      ENDIF.
+
+      color = <fs_es_op>-color.
+      <fs_es_op>-color = color.
+
+      IF <fs_es_op>-talla IS NOT INITIAL.
+        talla = <fs_es_op>-talla.
+        <fs_es_op>-talla = talla.
+      ENDIF.
+
+      "Completar datos del request
+      IF <fs_es_op>-numero_orden IS NOT INITIAL
+      AND <fs_es_op>-accion_legado NE gc_accion_crear.
+        SELECT SINGLE
+        FROM ztppi1202_1
+        FIELDS ztppi1202_1~*
+        WHERE numero_orden = @<fs_es_op>-numero_orden
+        INTO @DATA(es_ztppi1202_1).
+
+        IF sy-subrc IS INITIAL.
+          "No se debe modificar el campo numero_secuencia
+          IF <fs_es_op>-accion_legado = gc_accion_modificar.
+            <fs_es_op> = CORRESPONDING #( BASE ( <fs_es_op> )  es_ztppi1202_1
+                                          MAPPING destinatario_mercancia = op_estilo_legacy
+                                          EXCEPT  numero_secuencia
+                                                  cantidad_total
+                                                  version_fabricacion ). "Adicion 08Ago2024 Sebastian Restrepo Villa
+          ELSE.
+            <fs_es_op> = CORRESPONDING #( BASE ( <fs_es_op> )  es_ztppi1202_1
+                                          MAPPING numero_secuencia = op_tejido_tanda_legacy
+                                                  destinatario_mercancia = op_estilo_legacy
+                                                  material               = material_legado
+                                                  talla                  = tall_legado
+                                                  color                  = color_legado ).
+          ENDIF.
+        ELSE.
+          <fs_es_op>-estado_creacion_op = gc_op_no_creada_desde_interfaz.
+        ENDIF.
+
+      ENDIF.
+
+      "Estos campos deben empezar vacio el proceso
+      IF <fs_es_op>-estado_creacion_op NE gc_op_no_creada_desde_interfaz.
+        CLEAR: <fs_es_op>-estado_creacion_op.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD registrar_log_proceso.
+
+    DATA: ti_log_op                      TYPE STANDARD TABLE OF ztppi1202_1,
+          ti_material_entrada            TYPE gtp_ti_material_antiguo,
+          r_numero_orden                 TYPE gtp_r_numero_orden,
+          r_consecutivo_log              TYPE RANGE OF ztppi1090_1-cs_consec,
+          r_id_log                       TYPE RANGE OF ztppi1090_1-msgguid,
+          numero_orden                   TYPE aufk-aufnr,
+          op_tejido_tandalegacy_anterior TYPE ztppi1202_1-op_tejido_tanda_legacy.
+
+    ti_material_entrada = CORRESPONDING #( c_es_datos_op-ordenproduccionset MAPPING matnr = material size1 = talla ).
+
+    "Validar que la OP exista
+    r_numero_orden = VALUE #( FOR es_dato_op IN c_es_datos_op-ordenproduccionset WHERE ( numero_orden IS NOT INITIAL )
+                               ( sign = 'I' option = 'EQ' low = es_dato_op-numero_orden ) ).
+
+    DELETE r_numero_orden WHERE low IS INITIAL.
+
+    DATA(accion_legado) = c_es_datos_op-ordenproduccionset[ 1 ]-accion_legado.
+
+    ".Validamos si en el Nro de Orden viene el valor SIMU no realiza las validaciones requeridas del proceso    adicion. Jose Miguel Valencia 04.03.2025 ID-12583
+    IF c_es_datos_op-ordenproduccionset[ 1 ]-clave_planificador_necesidades EQ gc_simu.
+      RETURN.
+    ENDIF.
+
+    IF r_numero_orden IS NOT INITIAL.
+
+      SELECT
+      FROM aufk
+      FIELDS aufnr, auart, loekz, erdat, erfzeit
+      WHERE aufnr IN @r_numero_orden
+      INTO TABLE @DATA(ti_ordenes).
+
+      SELECT SINGLE
+      FROM ztppi1202_1
+      FIELDS ztppi1202_1~*
+      WHERE numero_orden IN @r_numero_orden
+      INTO @DATA(es_ztppi1202_1).
+
+    ENDIF.
+
+    "Validar material
+    SELECT
+    FROM @ti_material_entrada AS _material_entrada
+    INNER JOIN mara AS _material ON
+    _material~matnr = _material_entrada~matnr
+    AND   _material~size1 = _material_entrada~size1
+    AND   _material~color = _material_entrada~color
+    LEFT JOIN marc AS _material_x_centro ON
+    _material_x_centro~matnr = _material~matnr
+    AND _material_x_centro~werks = _material_entrada~planta
+    FIELDS _material~matnr, _material~color, _material~size1, _material~bismt, _material~satnr, _material~mtart,
+    _material_x_centro~werks, _material_entrada~version_fabricacion
+    INTO TABLE @DATA(ti_materiales).
+
+    ASSIGN c_es_datos_op-ordenproduccionset[ 1 ] TO FIELD-SYMBOL(<fs_es_datos_op_legacy>).
+
+    IF es_ztppi1202_1-op_tejido_tanda_legacy IS NOT INITIAL
+      AND <fs_es_datos_op_legacy>-numero_secuencia NE es_ztppi1202_1-op_tejido_tanda_legacy
+      AND <fs_es_datos_op_legacy>-numero_secuencia IS NOT INITIAL.
+      op_tejido_tandalegacy_anterior = es_ztppi1202_1-op_tejido_tanda_legacy.
+      es_ztppi1202_1-op_tejido_tanda_legacy = <fs_es_datos_op_legacy>-numero_secuencia.
+    ENDIF.
+
+    IF c_es_datos_op-ordenproduccionset[ 1 ]-accion_legado = gc_accion_crear.
+      ti_log_op = CORRESPONDING #( c_es_datos_op-ordenproduccionset MAPPING op_tejido_tanda_legacy = numero_secuencia
+                                                                            op_estilo_legacy = destinatario_mercancia
+                                                                            cliente_legacy = punto_descarga
+                                                                            tall_legado = talla
+                                                                            color_legado = color
+                                                                            cantidad     = cantidad_total ).
+    ELSE.
+      APPEND es_ztppi1202_1 TO ti_log_op.
+    ENDIF.
+
+    LOOP AT ti_log_op ASSIGNING FIELD-SYMBOL(<fs_es_log_op>).
+
+      <fs_es_log_op>-estado_creacion_op = c_es_datos_op-ordenproduccionset[ 1 ]-accion_legado.
+      <fs_es_log_op>-usuario = sy-uname.
+      <fs_es_log_op>-hora_envio = sy-uzeit.
+      <fs_es_log_op>-fecha_envio = sy-datum.
+      <fs_es_log_op>-id_log = ges_info_mensaje-msgguid.
+
+      DATA(es_op) = VALUE #( ti_ordenes[ aufnr = <fs_es_log_op>-numero_orden ] OPTIONAL ).
+      DATA(es_material) = VALUE #( ti_materiales[ matnr = <fs_es_log_op>-material ] OPTIONAL ).
+
+      IF es_op IS NOT INITIAL.
+        <fs_es_log_op>-fecha_creacion = es_op-erdat.
+        <fs_es_log_op>-hora_creacion = es_op-erfzeit.
+      ENDIF.
+
+      IF es_material IS NOT INITIAL.
+        <fs_es_log_op>-material_legado = es_material-satnr.
+      ENDIF.
+
+*Inicio Modificacion 14Ago2024 Sebastian Restrepo Villa
+      IF accion_legado = gc_accion_modificar.
+        IF c_es_datos_op-ordenproduccionset[ 1 ]-cantidad_total IS NOT INITIAL.
+          <fs_es_log_op>-cantidad = c_es_datos_op-ordenproduccionset[ 1 ]-cantidad_total.
+        ENDIF.
+        IF c_es_datos_op-ordenproduccionset[ 1 ]-version_fabricacion IS NOT INITIAL.
+          <fs_es_log_op>-version_fabricacion = c_es_datos_op-ordenproduccionset[ 1 ]-version_fabricacion.
+        ENDIF.
+      ENDIF.
+*Fin Modificacion 14Ago2024 Sebastian Restrepo Villa
+
+    ENDLOOP.
+
+    "Asignar estado de creacion para OP conjuntas
+    "Si alguna tienen error, el resto debe quedar con el mismo estado
+    IF "accion_legado = gc_accion_crear AND
+    go_log->get_errores( ) IS NOT INITIAL.
+      MODIFY ti_log_op FROM VALUE #( estado_creacion_op = gc_estado_proceso_op_error )
+      TRANSPORTING estado_creacion_op
+      WHERE op_tejido_tanda_legacy IS NOT INITIAL.
+    ENDIF.
+
+    "Eliminar registro acciones anteriores
+    IF accion_legado NE gc_accion_crear.
+      DELETE FROM ztppi1202_1
+      WHERE ( numero_orden IS INITIAL
+        AND op_tejido_tanda_legacy = @op_tejido_tandalegacy_anterior )
+        OR ( numero_orden IS INITIAL AND op_tejido_tanda_legacy IS INITIAL ).
+      "Eliminar numero de secuencia anterior
+      IF <fs_es_datos_op_legacy>-numero_secuencia NE op_tejido_tandalegacy_anterior
+      AND op_tejido_tandalegacy_anterior IS NOT INITIAL.
+        DELETE FROM ztppi1202_1 WHERE op_tejido_tanda_legacy = @op_tejido_tandalegacy_anterior.
+      ENDIF.
+
+    ENDIF.
+
+    MODIFY ztppi1202_1 FROM TABLE ti_log_op.
+
+    IF go_log->get_errores(  ) IS NOT INITIAL.
+      registrar_log_monitor_costos( EXPORTING i_es_datos_op = c_es_datos_op
+                                              i_ti_log_op   = ti_log_op ).
+    ELSE.
+
+      zclcxr1002_util=>crear_rango(
+        EXPORTING
+          i_ti             = ti_log_op
+          i_nombre_columna = 'ID_LOG'
+        CHANGING
+          c_ti_rango       = r_id_log ).
+
+      "Eliminar registros anteriores
+      SELECT
+      FROM ztppi1090_1
+      FIELDS 'I' AS sign, 'EQ' AS option, cs_consec AS low
+      WHERE orderid IN @r_numero_orden
+      AND msgguid IN @r_id_log
+      INTO TABLE @r_consecutivo_log.
+
+      IF sy-subrc IS INITIAL.
+        DELETE FROM ztppi1090_1 WHERE cs_consec IN r_consecutivo_log.
+        DELETE FROM ztppi1090_2 WHERE cs_consec IN r_consecutivo_log.
+      ENDIF.
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_estado_op_ptbo.
+
+    DATA: es_msj_retorno    TYPE bapiret2,
+          estado_proceso_op TYPE zeppi1202_1-estado_creacion_op,
+          ti_msj_retorno    TYPE STANDARD TABLE OF bapi_order_return,
+          ti_numeros_de_op  TYPE STANDARD TABLE OF bapi_order_key.
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_op_gr)
+                                             WHERE estado_creacion_op IS INITIAL
+                                             GROUP BY ( numero_orden = r_es_op_gr->numero_orden ).
+
+      CLEAR: es_msj_retorno.
+
+      ti_numeros_de_op = VALUE #( ( order_number = r_es_op_gr->numero_orden ) ).
+
+      CALL FUNCTION 'BAPI_PRODORD_SET_DELETION_FLAG'
+        IMPORTING
+          return        = es_msj_retorno
+        TABLES
+          detail_return = ti_msj_retorno
+          orders        = ti_numeros_de_op.
+
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+      IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        estado_proceso_op = gc_estado_op_peticion_borrado.
+      ELSE.
+
+        estado_proceso_op = gc_estado_proceso_op_error.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+      ENDIF.
+
+      MODIFY c_es_datos_op-ordenproduccionset
+      FROM VALUE #( estado_creacion_op = estado_proceso_op )
+      TRANSPORTING estado_creacion_op
+      WHERE numero_orden = r_es_op_gr->numero_orden.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_op.
+
+    DATA: es_msj_retorno     TYPE bapiret2,
+          estado_creacion_op TYPE zeppi1202_1-estado_creacion_op.
+
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_op_gr)
+                                             WHERE estado_creacion_op IS INITIAL
+                                             GROUP BY ( numero_orden = r_es_op_gr->numero_orden ).
+
+      CLEAR: es_msj_retorno.
+
+      CALL FUNCTION 'BAPI_PRODORD_CHANGE'
+        EXPORTING
+          number     = r_es_op_gr->numero_orden
+          orderdata  = VALUE bapi_pp_order_change( sequence_number  = r_es_op_gr->numero_secuencia
+                                                   quantity         = r_es_op_gr->cantidad_total
+                                                   basic_start_date = COND #( WHEN r_es_op_gr->fecha_inicio_extrema IS NOT INITIAL THEN
+                                                                                r_es_op_gr->fecha_inicio_extrema
+                                                                              ELSE
+                                                                                space )
+                                                   prod_version     = COND #( WHEN r_es_op_gr->version_fabricacion IS NOT INITIAL THEN
+                                                                                r_es_op_gr->version_fabricacion
+                                                                              ELSE
+                                                                                space )
+                                                   explosion_date   = COND #( WHEN r_es_op_gr->fecha_explosion IS NOT INITIAL THEN
+                                                                                r_es_op_gr->fecha_explosion
+                                                                              ELSE
+                                                                                space )
+
+                                                 )
+          orderdatax = VALUE bapi_pp_order_changex( sequence_number   = COND #( WHEN r_es_op_gr->numero_secuencia IS NOT INITIAL THEN
+                                                                                  abap_true
+                                                                                ELSE
+                                                                                  space )
+                                                    quantity          = COND #( WHEN r_es_op_gr->cantidad_total IS NOT INITIAL THEN
+                                                                                 abap_true
+                                                                                ELSE
+                                                                                 space )
+                                                    basic_start_date = COND #( WHEN r_es_op_gr->fecha_inicio_extrema IS NOT INITIAL THEN
+                                                                                 abap_true
+                                                                               ELSE
+                                                                                 space )
+                                                    prod_version     = COND #( WHEN r_es_op_gr->version_fabricacion IS NOT INITIAL THEN
+                                                                                 abap_true
+                                                                               ELSE
+                                                                                 space )
+                                                    explosion_date   = COND #( WHEN r_es_op_gr->fecha_explosion IS NOT INITIAL THEN
+                                                                                abap_true
+                                                                              ELSE
+                                                                                space )
+                                                  )
+        IMPORTING
+          return     = es_msj_retorno.
+
+      IF es_msj_retorno IS INITIAL.
+        es_msj_retorno = VALUE #( type = 'S' id = '/SAPAPO/RRP' number = '552' message_v1 = r_es_op_gr->numero_orden ).
+      ENDIF.
+
+      go_log->set_es_log( i_es = CORRESPONDING #( es_msj_retorno ) ).
+
+      IF es_msj_retorno-type NE 'E'.
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        estado_creacion_op = gc_estado_actualizacion_op.
+
+      ELSE.
+
+        estado_creacion_op = gc_estado_proceso_op_error.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+      ENDIF.
+
+      MODIFY c_es_datos_op-ordenproduccionset
+      FROM VALUE #( estado_creacion_op = estado_creacion_op )
+      TRANSPORTING estado_creacion_op
+      WHERE numero_orden = r_es_op_gr->numero_orden.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD validar_estado_liberacion_op.
+
+    CHECK i_r_numero_orden IS NOT INITIAL
+    AND i_r_estado_op IS NOT INITIAL.
+
+    SELECT
+    FROM aufk AS _orden
+    INNER JOIN jest AS _estado_objeto ON
+    _estado_objeto~objnr = _orden~objnr
+    FIELDS aufnr AS numero_orden, stat AS estado, _orden~objnr
+    WHERE aufnr IN @i_r_numero_orden
+    AND _estado_objeto~stat IN @i_r_estado_op
+    AND _estado_objeto~inact = @space
+    INTO CORRESPONDING FIELDS OF TABLE @r_estado_orden.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_op_cierre_tecnico.
+
+    DATA: es_msj_retorno    TYPE bapiret2,
+          ti_msj_retorno    TYPE STANDARD TABLE OF bapi_order_return,
+          estado_proceso_op TYPE zeppi1202_1-estado_creacion_op,
+          ti_numeros_de_op  TYPE STANDARD TABLE OF bapi_order_key.
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_op_gr)
+                                             GROUP BY ( numero_orden = r_es_op_gr->numero_orden ).
+
+      CLEAR: es_msj_retorno.
+
+      ti_numeros_de_op = VALUE #( ( order_number = r_es_op_gr->numero_orden ) ).
+
+      CALL FUNCTION 'BAPI_PRODORD_COMPLETE_TECH'
+        IMPORTING
+          return        = es_msj_retorno
+        TABLES
+          orders        = ti_numeros_de_op
+          detail_return = ti_msj_retorno.
+
+      MODIFY ti_msj_retorno
+      FROM VALUE #( type = 'S' message_v1 = r_es_op_gr->numero_orden )
+      TRANSPORTING type message_v1
+      WHERE id = 'CO' AND number = '889'.
+
+      go_log->set_es_log( i_es = CORRESPONDING #( es_msj_retorno ) ).
+      go_log->set_ti_log( i_ti = CORRESPONDING #( ti_msj_retorno ) ).
+
+      IF NOT line_exists( ti_msj_retorno[ type = 'E' ] ).
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = abap_true.
+
+        estado_proceso_op = gc_estado_op_cierre_tecnico.
+
+      ELSE.
+
+        estado_proceso_op = gc_estado_proceso_op_error.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+      ENDIF.
+
+      MODIFY c_es_datos_op-ordenproduccionset
+      FROM VALUE #( estado_creacion_op = estado_proceso_op )
+      TRANSPORTING estado_creacion_op
+      WHERE numero_orden = r_es_op_gr->numero_orden.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD modificar_op_liberada.
+
+    DATA: es_msj_retorno    TYPE bapiret2,
+          estado_proceso_op TYPE zeppi1202_1-estado_creacion_op.
+
+    DATA(ti_estado_orden_cte) =
+      validar_estado_liberacion_op(
+      i_r_numero_orden = VALUE #( FOR es_op IN c_es_datos_op-ordenproduccionset
+                                    ( sign = 'I' option = 'EQ' low = es_op-numero_orden ) )
+      i_r_estado_op    = gr_estado_cte ).
+
+    LOOP AT c_es_datos_op-ordenproduccionset REFERENCE INTO DATA(r_es_op_gr)
+                                             WHERE estado_creacion_op IS INITIAL
+                                             GROUP BY ( numero_orden = r_es_op_gr->numero_orden ).
+
+      CLEAR: es_msj_retorno, estado_proceso_op.
+
+      DATA(es_estado_orden_cte) = VALUE #( ti_estado_orden_cte[ numero_orden = r_es_op_gr->numero_orden ] OPTIONAL ).
+
+      "Modificar estado
+      IF es_estado_orden_cte-objnr IS NOT INITIAL.
+        CALL FUNCTION 'I_CHANGE_STATUS'
+          EXPORTING
+            objnr          = es_estado_orden_cte-objnr
+            estat_inactive = es_estado_orden_cte-estado
+            estat_active   = 'I0002'
+          EXCEPTIONS
+            cannot_update  = 1
+            OTHERS         = 2.
+
+        IF sy-subrc IS INITIAL.
+
+          "Modificar cantidad
+          CALL FUNCTION 'BAPI_PRODORD_CHANGE'
+            EXPORTING
+              number     = r_es_op_gr->numero_orden
+              orderdata  = VALUE bapi_pp_order_change( quantity = r_es_op_gr->cantidad_total
+                                                     )
+              orderdatax = VALUE bapi_pp_order_changex( quantity = COND #( WHEN r_es_op_gr->cantidad_total IS NOT INITIAL THEN
+                                                                            abap_true
+                                                                           ELSE
+                                                                            space )
+                                                      )
+            IMPORTING
+              return     = es_msj_retorno.
+
+          go_log->set_es_log( i_es = CORRESPONDING #( es_msj_retorno ) ).
+
+          IF es_msj_retorno-type NE 'E'.
+
+            go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '070' type = 'S'
+                                message_v1 = r_es_op_gr->numero_orden
+                                parameter  = r_es_op_gr->numero_orden ) ).
+
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+
+            estado_proceso_op = gc_estado_op_liberada.
+          ENDIF.
+
+        ELSE.
+          go_log->set_es_log( i_es = VALUE #( type = 'E' number = gc_clase_mensajes id = '088'
+                                              message_v1 = es_estado_orden_cte-estado message_v2 = es_estado_orden_cte-numero_orden
+                                              message_v3 = sy-msgv3 message_v4 = sy-msgv4
+                                              parameter = r_es_op_gr->numero_orden ) ).
+
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+        ENDIF.
+      ELSE.
+        go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensajes number = '074' type = 'E'
+                                            parameter = r_es_op_gr->numero_orden ) ).
+      ENDIF.
+
+      IF estado_proceso_op NE gc_estado_op_liberada.
+        estado_proceso_op = gc_estado_proceso_op_error.
+      ENDIF.
+
+      MODIFY c_es_datos_op-ordenproduccionset
+      FROM VALUE #( estado_creacion_op = estado_proceso_op )
+      TRANSPORTING estado_creacion_op
+      WHERE numero_orden = r_es_op_gr->numero_orden.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD registrar_log_monitor_costos.
+
+    DATA: consecutivo              TYPE ztppi1090_1-cs_consec,
+          r_accion_registra_log_co TYPE RANGE OF zclppi1202_api_gestio_mpc=>ts_ordenproduccion-accion_legado,
+          r_ordenes                TYPE RANGE OF aufk-aufnr,
+          r_id_log                 TYPE RANGE OF ztppi1090_1-msgguid,
+          ti_ztppi1090_1           TYPE STANDARD TABLE OF ztppi1090_1,
+          ti_ztppi1090_2           TYPE STANDARD TABLE OF ztppi1090_2.
+
+    ASSIGN i_es_datos_op-ordenproduccionset
+    TO FIELD-SYMBOL(<fs_ti_op>).
+
+    r_accion_registra_log_co = VALUE #( FOR es_parametro IN go_parametros->gti_parametros WHERE ( idparam = 'ACC_REGLOG' )
+                                   ( CORRESPONDING #( es_parametro MAPPING option = opti )  ) ).
+
+
+    CHECK <fs_ti_op> IS ASSIGNED
+    AND <fs_ti_op>[ 1 ]-accion_legado IN r_accion_registra_log_co.
+
+    r_ordenes = VALUE #( FOR es_op IN i_ti_log_op WHERE ( numero_orden IS NOT INITIAL )
+                        ( sign = 'I' option = 'EQ' low = es_op-numero_orden ) ).
+
+    CHECK r_ordenes IS NOT INITIAL.
+
+    SELECT
+    FROM aufk AS _cabecera
+    INNER JOIN afpo AS _posicion ON
+    _cabecera~aufnr = _posicion~aufnr
+    FIELDS _posicion~aufnr, matnr, _cabecera~werks, _posicion~charg, _posicion~psmng, _posicion~meins, _posicion~lgort
+    WHERE _cabecera~aufnr IN @r_ordenes
+    INTO TABLE @DATA(ti_op_posicion).
+
+    DELETE ti_op_posicion WHERE matnr IS INITIAL.
+    CHECK ti_op_posicion IS NOT INITIAL.
+
+    SELECT
+    FROM @ti_op_posicion AS _material_entrada
+    INNER JOIN mara AS _material ON
+    _material~matnr = _material_entrada~matnr
+    LEFT JOIN marc AS _material_x_centro ON
+    _material_x_centro~matnr = _material~matnr
+    AND _material_x_centro~werks = _material_entrada~werks
+    FIELDS _material~matnr, _material~color, _material~size1, _material~bismt, _material~matkl, lgort,
+    _material~satnr, _material~mtart, mmsta, _material_entrada~meins,
+    _material_entrada~charg, _material_entrada~psmng,
+    _material_x_centro~werks
+    INTO TABLE @DATA(ti_materiales).
+
+    "Consultar Log generado anteriormente
+    zclcxr1002_util=>crear_rango(
+      EXPORTING
+        i_ti             = i_ti_log_op
+        i_nombre_columna = 'ID_LOG'
+      CHANGING
+        c_ti_rango       = r_id_log ).
+
+    SELECT
+    FROM ztppi1090_1
+    INNER JOIN ztppi1090_2 ON
+    ztppi1090_1~cs_consec = ztppi1090_2~cs_consec
+    FIELDS ztppi1090_1~cs_consec, ztppi1090_1~orderid, ztppi1090_1~msgguid
+    WHERE ztppi1090_1~orderid IN @r_ordenes
+    AND ztppi1090_1~msgguid IN @r_id_log
+    INTO TABLE @DATA(ti_log).
+
+    IF ti_log IS INITIAL.
+      CALL FUNCTION 'NUMBER_GET_NEXT'
+        EXPORTING
+          nr_range_nr             = '01'
+          object                  = 'ZPPI1203_1'
+        IMPORTING
+          number                  = consecutivo
+        EXCEPTIONS
+          interval_not_found      = 1
+          number_range_not_intern = 2
+          object_not_found        = 3
+          quantity_is_0           = 4
+          quantity_is_not_1       = 5
+          interval_overflow       = 6
+          buffer_overflow         = 7
+          OTHERS                  = 8.
+    ENDIF.
+
+    DATA(cs_pos) = 1.
+    DATA(ti_errores) = go_log->get_errores( ).
+
+    LOOP AT i_ti_log_op INTO DATA(es_log_op_gr)
+            GROUP BY ( numero_orden = es_log_op_gr-numero_orden
+                       op_tejido_tanda_legacy = es_log_op_gr-op_tejido_tanda_legacy
+                       op_estilo_legacy  = es_log_op_gr-op_estilo_legacy ).
+
+      DATA(es_materiales) = VALUE #( ti_materiales[ matnr = es_log_op_gr-material ] OPTIONAL ).
+      "Consultar consecutivo
+      IF ti_log IS NOT INITIAL.
+        consecutivo = VALUE #( ti_log[ orderid = es_log_op_gr-numero_orden msgguid = es_log_op_gr-id_log ]-cs_consec OPTIONAL ).
+      ENDIF.
+
+      IF es_materiales IS INITIAL.
+        es_materiales = ti_materiales[ 1 ].
+      ENDIF.
+
+      DATA(es_ztppi1090_1) = VALUE ztppi1090_1( cs_consec   = consecutivo
+                                                  pstng_date  = sy-datum
+                                                  doc_date    = sy-datum
+                                                  plant       = es_materiales-werks
+                                                  orderid     = es_log_op_gr-numero_orden
+                                                  material    = es_materiales-matnr
+                                                  stge_loc    = es_materiales-lgort
+                                                  entry_qnt   = es_materiales-psmng
+                                                  entry_uom   = es_materiales-meins
+                                                  clase_not   = <fs_ti_op>[ 1 ]-accion_legado
+                                                  orden_fert  = ''
+                                                  charg       = es_materiales-charg
+                                                  satnr       = es_materiales-satnr
+                                                  size1       = es_materiales-size1
+                                                  color       = es_materiales-color
+                                                  msgguid     = es_log_op_gr-id_log
+                                               ).
+
+      APPEND es_ztppi1090_1 TO ti_ztppi1090_1.
+
+      LOOP AT GROUP es_log_op_gr INTO DATA(es_log_op).
+
+        DATA(es_ztppi1090_2) = VALUE ztppi1090_2(   cs_consec   = consecutivo
+                                                    cs_pos      = cs_pos
+                                                    pstng_date  = sy-datum
+                                                    werks       = es_materiales-werks
+                                                    almacen     = es_materiales-lgort
+                                                    aufnr       = es_log_op-numero_orden
+                                                    hora        = sy-uzeit
+                                                    message     = VALUE #( ti_errores[ 1 ]-message OPTIONAL )
+                                                    material    = es_materiales-matnr
+                                                    cantidad    = es_materiales-psmng
+                                                    unidad      = es_materiales-meins
+                                                    clase_not   = <fs_ti_op>[ 1 ]-accion_legado
+                                                    lote        = es_materiales-charg
+                                                    satnr       = es_materiales-satnr
+                                                    size1       = es_materiales-size1
+                                                    color       = es_materiales-color
+                                                ).
+
+
+        APPEND es_ztppi1090_2 TO ti_ztppi1090_2.
+
+        ADD 1 TO cs_pos.
+
+      ENDLOOP.
+
+    ENDLOOP.
+
+    MODIFY ztppi1090_1 FROM TABLE ti_ztppi1090_1.
+    MODIFY ztppi1090_2 FROM TABLE ti_ztppi1090_2.
+
+  ENDMETHOD.
+
+
+  METHOD asignar_segmento_puerta.
+
+    IF i_c_numero_orden    IS NOT INITIAL AND
+       i_c_segmento_puerta IS NOT INITIAL.
+
+*.....Se lee información de la orden desde la base de datos
+      SELECT *
+        FROM aufk
+        INTO TABLE @DATA(ti_aufk)
+       WHERE aufnr = @i_c_numero_orden.
+
+      IF sy-subrc EQ 0.
+
+*.......Se asigna el valor del campo a actualizar
+        ti_aufk[ 1 ]-zz1_segmentacionpuerta_ord = i_c_segmento_puerta.
+
+*.......Se realiza actualización del campo
+        CALL FUNCTION 'DB_UPDATE_TABLE'
+          EXPORTING
+            tablename      = 'AUFK'
+          TABLES
+            inttab         = ti_aufk
+          EXCEPTIONS
+            db_error       = 1
+            not_found      = 2
+            wrong_param    = 3
+            internal_error = 4
+            OTHERS         = 5.
+
+        IF sy-subrc EQ 0.
+
+          e_es_return-id         = 'ZPP01'.
+          e_es_return-number     = '000'.
+          e_es_return-type       = 'S'.
+          e_es_return-message_v1 = 'Segmento / Puerta'.
+          e_es_return-message_v2 = i_c_segmento_puerta.
+          e_es_return-message_v3 = 'Guardado de Manera Exitosa'.
+          e_es_return-parameter  = i_c_numero_orden.
+
+        ELSE.
+
+          e_es_return-id         = sy-msgid.
+          e_es_return-number     = sy-msgno.
+          e_es_return-type       = sy-msgty.
+          e_es_return-message_v1 = sy-msgv1.
+          e_es_return-message_v2 = sy-msgv2.
+          e_es_return-message_v3 = sy-msgv3.
+          e_es_return-message_v4 = sy-msgv4.
+          e_es_return-parameter  = i_c_numero_orden.
+
+        ENDIF.
+
+      ELSE.
+
+        e_es_return-id         = 'PORD_MESSAGES' .
+        e_es_return-number     = '026' .
+        e_es_return-type       = 'E'.
+        e_es_return-message_v1 = i_c_numero_orden.
+        e_es_return-parameter  = i_c_numero_orden.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD eliminar_componentes.
+
+    DATA:
+*.....Nomnre del objeto de texto
+      c_name  TYPE tdobname,
+*.....Variable indicadora de coincidencia
+      c_match TYPE abap_bool.
+
+    DATA:
+*.....Tabla interna de líneas de texto
+      ti_lines      TYPE tline_t,
+*.....Tabla interna de retorno
+      ti_bapireturn TYPE bapiret2_t.
+
+    DATA:
+*.....Estructura para eliminación de componente
+      es_componente TYPE fsh_s_prod_ord_comp_delete.
+
+*...Se leen datos de Reserva/Necesidades secundarias
+    SELECT SINGLE rsnum
+      FROM resb
+      INTO @DATA(c_rsnum)
+     WHERE aufnr = @i_c_numero_orden.
+
+    IF sy-subrc EQ 0.
+
+*.....Se leen datos de textos de reserva
+      SELECT *
+        FROM resb_text
+        INTO TABLE @DATA(ti_resb_text)
+       WHERE rsnum = @c_rsnum.
+
+      IF sy-subrc EQ 0.
+
+*.......Se recorren los textos de la reserva para validar Segmento/Puerta
+        LOOP AT ti_resb_text INTO DATA(es_resb_text).
+
+*.........Nombre del texto
+          c_name  = es_resb_text-tdname.
+*.........Indicador de coincidencia
+          c_match = abap_false.
+
+*.........Se realiza lectura de texto
+          CALL FUNCTION 'READ_TEXT'
+            EXPORTING
+              id                      = 'MATK'
+              language                = sy-langu
+              name                    = c_name
+              object                  = 'AUFK'
+            TABLES
+              lines                   = ti_lines
+            EXCEPTIONS
+              id                      = 1
+              language                = 2
+              name                    = 3
+              not_found               = 4
+              object                  = 5
+              reference_check         = 6
+              wrong_access_to_archive = 7
+              OTHERS                  = 8.
+
+          IF sy-subrc EQ 0.
+
+*...........Se recorren las líneas para validar Segmento/Puerta
+            LOOP AT ti_lines INTO DATA(es_lines).
+
+*.............Se valida si en la línea está el Segmento/Puerta
+              FIND i_c_segmento_puerta IN es_lines.
+
+              IF sy-subrc EQ 0.
+*...............Se asigna indicador de coincidencia
+                c_match = abap_true.
+                EXIT.
+              ENDIF.
+
+            ENDLOOP.
+
+*...........Si el indicador de coincidencia es falso, se elimina el componente
+            IF c_match EQ abap_false.
+
+*.............Se asigna el número de orden
+              es_componente-order_number            = i_c_numero_orden.
+*.............Se asigna la posición a eliminar
+              es_componente-reservation_item_number = es_resb_text-rspos.
+
+*.............Se elimina el componente
+              CLEAR ti_bapireturn.
+              CALL FUNCTION 'FSH_API_PROD_ORD_COMP_DELETE'
+                EXPORTING
+                  is_component  = es_componente
+                IMPORTING
+                  et_bapireturn = ti_bapireturn.
+
+              APPEND LINES OF ti_bapireturn TO e_ti_return.
+
+            ENDIF.
+
+          ENDIF.
+
+        ENDLOOP.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD procesar_segmento_puerta.
+
+    DATA:
+*.....Estructura de retorno
+      es_return TYPE bapiret2.
+
+    DATA:
+*.....Tabla interna de retorno
+      ti_Return TYPE bapiret2_t.
+
+*...Se realiza la asignación del campo segmento/puerta
+    me->asignar_segmento_puerta(
+      EXPORTING
+        i_c_numero_orden    = i_c_numero_orden
+        i_c_segmento_puerta = i_c_segmento_puerta
+      IMPORTING
+        e_es_return         = es_return
+    ).
+
+    IF es_return IS NOT INITIAL.
+*.....Se adiciona mensaje de retorno
+      APPEND es_return TO e_ti_return.
+    ENDIF.
+
+*...Se realiza eliminación de componentes
+    me->eliminar_componentes(
+      EXPORTING
+        i_c_numero_orden    = i_c_numero_orden
+        i_c_segmento_puerta = i_c_segmento_puerta
+     IMPORTING
+        e_ti_return = ti_return
+    ).
+
+*...Se adiciona mensaje de retorno
+    APPEND LINES OF ti_return TO e_ti_return.
+
+  ENDMETHOD.
+ENDCLASS.

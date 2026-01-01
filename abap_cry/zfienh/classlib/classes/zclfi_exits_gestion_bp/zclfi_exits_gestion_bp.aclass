@@ -1,0 +1,276 @@
+CLASS zclfi_exits_gestion_bp DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_ex_vendor_add_data_bi .
+    INTERFACES if_ex_customer_add_data_bi .
+    INTERFACES if_ex_bupa_further_checks .
+    INTERFACES if_salesarea_extension.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_exits_gestion_bp IMPLEMENTATION.
+
+
+  METHOD if_ex_bupa_further_checks~check_central.
+    "BUPA_FURTHER_CHECKS
+
+    CALL METHOD zclfie1008_validar_nit_gln=>check_central
+      EXPORTING
+        iv_activity                 = iv_activity
+        iv_partner                  = iv_partner
+        iv_category                 = iv_category
+        iv_group                    = iv_group
+        is_data                     = is_data
+        is_data_person              = is_data_person
+        is_data_organ               = is_data_organ
+        is_data_group               = is_data_group
+        is_data_x                   = is_data_x
+        is_data_person_x            = is_data_person_x
+        is_data_organ_x             = is_data_organ_x
+        is_data_group_x             = is_data_group_x
+        is_but000                   = is_but000
+        iv_testrun                  = iv_testrun
+        iv_x_save                   = iv_x_save
+        iv_check_only_external_data = iv_check_only_external_data
+      CHANGING
+        et_return                   = et_return.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~check_data_row.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~fill_ale_segments_own_data.
+
+    IF zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'I1008' ) = abap_true.
+
+      zclfii1008_integracion_afs=>completar_datos_cabecera_bp(
+        EXPORTING
+          i_nombre_segmento = i_segment_name
+          i_cliente         = abap_true
+          i_tipo_mensaje    = i_message_type
+        CHANGING
+          c_ti_datos_idoc   = t_idoc_data  ).
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~fill_bi_table_with_own_segment.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~fill_ft_table_using_data_rows.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~modify_bi_struct_from_std_seg.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~pass_non_standard_segment.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~process_ale_own_change_pointer.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~check_data_row.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~fill_ale_segments_own_data.
+
+    IF zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'I1008' ) = abap_true.
+
+      zclfii1008_integracion_afs=>completar_datos_cabecera_bp(
+        EXPORTING
+          i_nombre_segmento = i_segment_name
+          i_proveedor       = abap_true
+          i_tipo_mensaje    = i_message_type
+        CHANGING
+          c_ti_datos_idoc   = t_idoc_data  ).
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~fill_bi_table_with_own_segment.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~fill_ft_table_using_data_rows.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~modify_bi_struct_from_std_seg.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~pass_non_standard_segment.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~process_ale_own_change_pointer.
+  ENDMETHOD.
+
+
+  METHOD if_salesarea_extension~delete_salesarea.
+
+    zclfie1012_salesarea_extension=>delete_salesarea(  CHANGING c_ti_knvv = et_knvv ).
+
+
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclfi_exits_gestion_bp DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_ex_vendor_add_data_bi .
+    INTERFACES if_ex_customer_add_data_bi .
+    INTERFACES if_ex_bupa_further_checks .
+    INTERFACES if_salesarea_extension.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_exits_gestion_bp IMPLEMENTATION.
+
+
+  METHOD if_ex_bupa_further_checks~check_central.
+    "BUPA_FURTHER_CHECKS
+
+    CALL METHOD zclfie1008_validar_nit_gln=>check_central
+      EXPORTING
+        iv_activity                 = iv_activity
+        iv_partner                  = iv_partner
+        iv_category                 = iv_category
+        iv_group                    = iv_group
+        is_data                     = is_data
+        is_data_person              = is_data_person
+        is_data_organ               = is_data_organ
+        is_data_group               = is_data_group
+        is_data_x                   = is_data_x
+        is_data_person_x            = is_data_person_x
+        is_data_organ_x             = is_data_organ_x
+        is_data_group_x             = is_data_group_x
+        is_but000                   = is_but000
+        iv_testrun                  = iv_testrun
+        iv_x_save                   = iv_x_save
+        iv_check_only_external_data = iv_check_only_external_data
+      CHANGING
+        et_return                   = et_return.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~check_data_row.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~fill_ale_segments_own_data.
+
+    IF zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'I1008' ) = abap_true.
+
+      zclfii1008_integracion_afs=>completar_datos_cabecera_bp(
+        EXPORTING
+          i_nombre_segmento = i_segment_name
+          i_cliente         = abap_true
+          i_tipo_mensaje    = i_message_type
+        CHANGING
+          c_ti_datos_idoc   = t_idoc_data  ).
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~fill_bi_table_with_own_segment.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~fill_ft_table_using_data_rows.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~modify_bi_struct_from_std_seg.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~pass_non_standard_segment.
+  ENDMETHOD.
+
+
+  METHOD if_ex_customer_add_data_bi~process_ale_own_change_pointer.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~check_data_row.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~fill_ale_segments_own_data.
+
+    IF zclcxr1000_gestion_ampliacion=>ampliacion_activa( i_ricefw = 'I1008' ) = abap_true.
+
+      zclfii1008_integracion_afs=>completar_datos_cabecera_bp(
+        EXPORTING
+          i_nombre_segmento = i_segment_name
+          i_proveedor       = abap_true
+          i_tipo_mensaje    = i_message_type
+        CHANGING
+          c_ti_datos_idoc   = t_idoc_data  ).
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~fill_bi_table_with_own_segment.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~fill_ft_table_using_data_rows.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~modify_bi_struct_from_std_seg.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~pass_non_standard_segment.
+  ENDMETHOD.
+
+
+  METHOD if_ex_vendor_add_data_bi~process_ale_own_change_pointer.
+  ENDMETHOD.
+
+
+  METHOD if_salesarea_extension~delete_salesarea.
+
+    zclfie1012_salesarea_extension=>delete_salesarea(  CHANGING c_ti_knvv = et_knvv ).
+
+
+
+  ENDMETHOD.
+ENDCLASS.

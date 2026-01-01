@@ -55,7 +55,7 @@ public class SearchTools {
      * - "Look for objects with 'payment' in the name"
      *
      * @param query      search keyword (supports wildcards *, e.g., "ZCL_*", "*payment*")
-     * @param maxResults maximum results to return (default: 10, max: 100)
+     * @param maxResults maximum results to return (default: 10, no upper limit)
      * @return SearchResult with list of matching objects and their URIs
      */
     @McpTool(
@@ -74,7 +74,7 @@ public class SearchTools {
             )
             String query,
             @McpToolParam(
-                    description = "Maximum number of results to return (default: 10, max: 100). " +
+                    description = "Maximum number of results to return (default: 10, no upper limit). " +
                             "Lower values = faster response and fewer tokens.",
                     required = false
             )

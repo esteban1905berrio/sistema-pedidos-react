@@ -1,0 +1,698 @@
+CLASS zclsde1088_envio_lista_empaque DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: gtp_ti_contenido_de_archivo TYPE solix_tab."STANDARD TABLE OF x255 WITH EMPTY KEY.
+
+    DATA: go_parametros TYPE REF TO zclcxr1000_parametros,
+          go_log        TYPE REF TO zclcxr1002_log_aplicacion.
+
+    METHODS:
+      constructor,
+      envio_lista_empaque
+        IMPORTING
+          i_es_nast          TYPE nast
+        RETURNING
+          VALUE(return_code) TYPE sysubrc,
+      actualizar_nast.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    CONSTANTS: gc_clase_mensaje TYPE symsgid VALUE 'ZSD01'.
+
+    TYPES: BEGIN OF gtp_es_lista_empaque,
+             factura        TYPE vbrk-vbeln,
+             pedido         TYPE vbrp-aubel,
+             referencia     TYPE vbkd-ihrez,
+             cliente        TYPE vbrk-kunag,
+             correo_cliente TYPE string,
+           END OF gtp_es_lista_empaque,
+
+           gtp_ti_lista_empaque TYPE STANDARD TABLE OF gtp_es_lista_empaque WITH EMPTY KEY.
+
+    DATA: BEGIN OF ges_parametros_correo,
+            ruta_lista_empaque TYPE string, "Descripción: Ruta Listas de Empaque.
+            cuerpo             TYPE string, "Descripción: Texto del cuerpo del mensaje
+            asunto             TYPE string, "Descripción: Prefijo asunto del correo
+            remite             TYPE string, "Descripción: Remitente del correo
+          END OF ges_parametros_correo.
+    METHODS:
+      consultar_lista_empaque
+        IMPORTING
+          VALUE(i_numero_factura)   TYPE vbrk-vbeln
+        RETURNING
+          VALUE(r_ti_lista_empaque) TYPE zclsde1088_envio_lista_empaque=>gtp_ti_lista_empaque,
+      leer_archivo_lista_empaque
+        IMPORTING
+          VALUE(i_nombre_archivo)          TYPE file_name
+        RETURNING
+          VALUE(r_ti_contenido_de_archivo) TYPE gtp_ti_contenido_de_archivo,
+      enviar_correo
+        IMPORTING
+          VALUE(i_es_lista_empaque) TYPE gtp_es_lista_empaque
+        CHANGING
+          c_ti_lista_adjuntos       TYPE zclcxr1002_util=>gtp_tt_lista_adjuntos.
+
+ENDCLASS.
+
+
+CLASS zclsde1088_envio_lista_empaque IMPLEMENTATION.
+
+  METHOD constructor.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log =  zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'SD' i_ricefw = 'E1088'  ).
+    ENDIF.
+
+    TRY.
+
+        ges_parametros_correo-ruta_lista_empaque  = VALUE #(  go_parametros->gti_parametros[ idparam = 'RUTA_LE' ]-low OPTIONAL ).
+        ges_parametros_correo-asunto  = VALUE #(  go_parametros->gti_parametros[ idparam = 'ASUNTO_MSG' ]-low OPTIONAL ).
+        ges_parametros_correo-remite  = VALUE #(  go_parametros->gti_parametros[ idparam = 'REMITE_MSG' ]-low OPTIONAL ).
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD actualizar_nast.
+    ".Log de Mensajes
+    LOOP AT go_log->get_log( ) ASSIGNING FIELD-SYMBOL(<fs_es_msg>).
+
+      CALL FUNCTION 'NAST_PROTOCOL_UPDATE'
+        EXPORTING
+          msg_arbgb              = <fs_es_msg>-id
+          msg_nr                 = <fs_es_msg>-number
+          msg_ty                 = <fs_es_msg>-type
+          msg_v1                 = <fs_es_msg>-message_v1
+          msg_v2                 = <fs_es_msg>-message_v2
+          msg_v3                 = <fs_es_msg>-message_v3
+          msg_v4                 = <fs_es_msg>-message_v4
+        EXCEPTIONS
+          message_type_not_valid = 01
+          no_sy_message          = 02.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD envio_lista_empaque.
+
+    CONSTANTS: c_separador TYPE string VALUE '/'.
+
+    DATA: numero_factura    TYPE vbrk-vbeln,
+          nombre_archivo    TYPE file_name,
+          ti_lista_empaque  TYPE gtp_ti_lista_empaque,
+          ti_contenido_pdf  TYPE gtp_ti_contenido_de_archivo,
+          ti_lista_adjuntos TYPE zclcxr1002_util=>gtp_tt_lista_adjuntos.
+
+    numero_factura = i_es_nast-objky.
+    return_code = 0.
+
+    ti_lista_empaque = consultar_lista_empaque( i_numero_factura = numero_factura ).
+
+    LOOP AT ti_lista_empaque REFERENCE INTO DATA(r_es_lista_empaque_grp)
+                             GROUP BY ( cliente = r_es_lista_empaque_grp->cliente ).
+
+      "Agrupa listas de empaque por cliente para enviar solo un correo
+      LOOP  AT GROUP r_es_lista_empaque_grp REFERENCE INTO DATA(r_es_lista_empaque).
+
+        CLEAR: ti_contenido_pdf.
+
+        TRY.
+            nombre_archivo = |{ ges_parametros_correo-ruta_lista_empaque }{ c_separador }{ r_es_lista_empaque->referencia }.pdf|.
+
+            ti_contenido_pdf = leer_archivo_lista_empaque( i_nombre_archivo = nombre_archivo ).
+
+            IF ti_contenido_pdf IS NOT INITIAL.
+
+              SPLIT nombre_archivo AT c_separador INTO TABLE DATA(ti_nombre_archivo).
+
+              nombre_archivo = VALUE #( ti_nombre_archivo[ lines( ti_nombre_archivo ) ] OPTIONAL ).
+
+              ti_lista_adjuntos = VALUE #( BASE ti_lista_adjuntos ( tipo = 'BIN' titulo = nombre_archivo dato = ti_contenido_pdf ) ).
+
+            ELSE.
+              go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '224'
+                                  message_v1 = nombre_archivo(50) message_v2 = nombre_archivo+50(50) ) ).
+            ENDIF.
+          CATCH cx_root INTO DATA(o_cx).
+            go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+        ENDTRY.
+
+      ENDLOOP.
+
+      enviar_correo( EXPORTING
+                      i_es_lista_empaque  = r_es_lista_empaque->*
+                     CHANGING
+                      c_ti_lista_adjuntos = ti_lista_adjuntos ).
+
+    ENDLOOP.
+
+    IF ti_lista_empaque IS INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '193' type = 'E'
+                                          message_v1 = |{ numero_factura ALPHA = OUT }| ) ).
+    ENDIF.
+
+    IF go_log->get_errores( ) IS NOT INITIAL.
+      return_code = 1.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD consultar_lista_empaque.
+
+    SELECT
+    FROM vbrk AS _factura
+    INNER JOIN vbrp AS _posicion_factura ON
+    _posicion_factura~vbeln = _factura~vbeln
+    INNER JOIN vbkd AS _datos_comerciales ON
+    _datos_comerciales~vbeln = _posicion_factura~aubel
+    FIELDS _factura~vbeln AS factura, aubel AS pedido, ihrez AS referencia, _factura~kunag AS cliente
+    WHERE _factura~vbeln = @i_numero_factura
+    AND   ihrez IS NOT INITIAL
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_lista_empaque.
+
+    CHECK r_ti_lista_empaque IS NOT INITIAL.
+
+    SORT r_ti_lista_empaque BY factura pedido referencia.
+    DELETE ADJACENT DUPLICATES FROM r_ti_lista_empaque COMPARING ALL FIELDS.
+    "Consultar datos de interlocutor
+    "Si no encuentra correo a nivel de BP, lo trae desde las tablas del Cliente
+    SELECT
+    FROM @r_ti_lista_empaque AS _lista
+    INNER JOIN but000 AS _bp
+    ON _bp~partner = _lista~cliente
+    LEFT JOIN adr6 AS _direccion ON
+    _direccion~addrnumber = _bp~addrcomm
+    INNER JOIN kna1 AS _cliente ON
+    _cliente~kunnr = _lista~cliente
+    LEFT JOIN adr6 AS _direccion_cliente ON
+    _direccion_cliente~addrnumber = _cliente~adrnr
+    FIELDS _bp~partner AS partner,
+    CASE
+    WHEN _direccion~smtp_addr IS NOT NULL THEN
+        _direccion~smtp_addr
+    WHEN _direccion_cliente~smtp_addr IS NOT NULL THEN
+        _direccion_cliente~smtp_addr
+    END AS smtp_addr
+    INTO TABLE @DATA(ti_correo_cliente).
+
+    SORT ti_correo_cliente BY partner smtp_addr.
+    DELETE ADJACENT DUPLICATES FROM ti_correo_cliente COMPARING partner smtp_addr.
+
+    LOOP AT r_ti_lista_empaque REFERENCE INTO DATA(r_es_lista_empaque).
+
+      LOOP AT ti_correo_cliente INTO DATA(es_corre_cliente) WHERE partner = r_es_lista_empaque->cliente.
+
+        r_es_lista_empaque->correo_cliente = |{ r_es_lista_empaque->correo_cliente };{ es_corre_cliente-smtp_addr }|.
+
+      ENDLOOP.
+
+      r_es_lista_empaque->correo_cliente = replace( val = r_es_lista_empaque->correo_cliente sub = ';' with = space occ = 1 ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD leer_archivo_lista_empaque.
+
+    DATA: contenido_de_archivo    TYPE xstring,
+          mensaje_lectura_archivo TYPE string.
+
+    TRY.
+
+        OPEN DATASET i_nombre_archivo FOR INPUT MESSAGE mensaje_lectura_archivo IN BINARY MODE.
+
+        IF sy-subrc IS INITIAL.
+          READ DATASET i_nombre_archivo INTO contenido_de_archivo.
+          CLOSE DATASET i_nombre_archivo.
+
+          CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+            EXPORTING
+              buffer     = contenido_de_archivo
+            TABLES
+              binary_tab = r_ti_contenido_de_archivo.
+        ELSE.
+          go_log->set_es_log( i_es = VALUE #( id = '00' number = '208' type = 'E'
+                                              message_v1 = mensaje_lectura_archivo ) ).
+        ENDIF.
+      CATCH cx_sy_file_open_mode INTO DATA(o_cx).
+
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD enviar_correo.
+
+    DATA: ti_texto_cuerpo_correo    TYPE soli_tab,
+          numero_factura_formateado TYPE string,
+          caracter                  TYPE c,
+          caracter_anterior         TYPE c,
+          fin_primer_cero           TYPE flag,
+          inicio_primer_cero        TYPE flag,
+          ti_texto                  TYPE STANDARD TABLE OF tline.
+
+    IF i_es_lista_empaque-correo_cliente IS NOT INITIAL AND
+       ges_parametros_correo-remite IS NOT INITIAL.
+
+      "Leer texto del correo
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+*         client                  = SY-MANDT
+          id                      = 'ST'
+          language                = sy-langu
+          name                    = 'ZTXTSDE1088_CUERPO'
+          object                  = 'TEXT'
+        TABLES
+          lines                   = ti_texto
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7
+          OTHERS                  = 8.
+
+      IF sy-subrc <> 0.
+        go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2 ) ).
+      ELSE.
+        ti_texto_cuerpo_correo = CORRESPONDING #( ti_texto MAPPING line = tdline ).
+      ENDIF.
+
+      SPLIT i_es_lista_empaque-correo_cliente AT ';' INTO TABLE DATA(ti_correos).
+
+      SORT ti_correos.
+      DELETE ADJACENT DUPLICATES FROM ti_correos COMPARING ALL FIELDS.
+
+      "Quitar primeros Ceros
+      DO.
+        DATA(indice) = sy-index - 1.
+
+        IF indice >= strlen( i_es_lista_empaque-factura ).
+          EXIT.
+        ENDIF.
+
+        caracter = i_es_lista_empaque-factura+indice(1).
+
+        IF caracter EQ '0'.
+          inicio_primer_cero = abap_true.
+        ENDIF.
+
+        IF caracter NE '0' OR
+           fin_primer_cero = abap_true.
+          numero_factura_formateado = numero_factura_formateado && caracter.
+        ENDIF.
+
+        IF caracter NE '0' AND inicio_primer_cero = abap_true.
+          fin_primer_cero = abap_true.
+        ENDIF.
+
+      ENDDO.
+
+      zclcxr1002_util=>enviar_correo_av(
+        EXPORTING
+          i_ti_destinatarios       = VALUE #( FOR correo IN ti_correos ( tipo_dest = 'TO' email = correo ) )
+          i_ti_texto_cuerpo_correo = ti_texto_cuerpo_correo
+          i_asunto                 = |{ ges_parametros_correo-asunto } { numero_factura_formateado }|
+          i_ti_lista_adjuntos      = c_ti_lista_adjuntos
+        IMPORTING
+            e_es_msg_error         = DATA(es_msg_error) ).
+
+      IF es_msg_error IS NOT INITIAL.
+        go_log->set_es_log( i_es = CORRESPONDING #( es_msg_error )  ).
+      ENDIF.
+
+    ELSE.
+
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '198' type = 'E' )  ).
+
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclsde1088_envio_lista_empaque DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES: gtp_ti_contenido_de_archivo TYPE solix_tab."STANDARD TABLE OF x255 WITH EMPTY KEY.
+
+    DATA: go_parametros TYPE REF TO zclcxr1000_parametros,
+          go_log        TYPE REF TO zclcxr1002_log_aplicacion.
+
+    METHODS:
+      constructor,
+      envio_lista_empaque
+        IMPORTING
+          i_es_nast          TYPE nast
+        RETURNING
+          VALUE(return_code) TYPE sysubrc,
+      actualizar_nast.
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    CONSTANTS: gc_clase_mensaje TYPE symsgid VALUE 'ZSD01'.
+
+    TYPES: BEGIN OF gtp_es_lista_empaque,
+             factura        TYPE vbrk-vbeln,
+             pedido         TYPE vbrp-aubel,
+             referencia     TYPE vbkd-ihrez,
+             cliente        TYPE vbrk-kunag,
+             correo_cliente TYPE string,
+           END OF gtp_es_lista_empaque,
+
+           gtp_ti_lista_empaque TYPE STANDARD TABLE OF gtp_es_lista_empaque WITH EMPTY KEY.
+
+    DATA: BEGIN OF ges_parametros_correo,
+            ruta_lista_empaque TYPE string, "Descripción: Ruta Listas de Empaque.
+            cuerpo             TYPE string, "Descripción: Texto del cuerpo del mensaje
+            asunto             TYPE string, "Descripción: Prefijo asunto del correo
+            remite             TYPE string, "Descripción: Remitente del correo
+          END OF ges_parametros_correo.
+    METHODS:
+      consultar_lista_empaque
+        IMPORTING
+          VALUE(i_numero_factura)   TYPE vbrk-vbeln
+        RETURNING
+          VALUE(r_ti_lista_empaque) TYPE zclsde1088_envio_lista_empaque=>gtp_ti_lista_empaque,
+      leer_archivo_lista_empaque
+        IMPORTING
+          VALUE(i_nombre_archivo)          TYPE file_name
+        RETURNING
+          VALUE(r_ti_contenido_de_archivo) TYPE gtp_ti_contenido_de_archivo,
+      enviar_correo
+        IMPORTING
+          VALUE(i_es_lista_empaque) TYPE gtp_es_lista_empaque
+        CHANGING
+          c_ti_lista_adjuntos       TYPE zclcxr1002_util=>gtp_tt_lista_adjuntos.
+
+ENDCLASS.
+
+
+CLASS zclsde1088_envio_lista_empaque IMPLEMENTATION.
+
+  METHOD constructor.
+
+    zclcxr1002_log_aplicacion=>liberar( ).
+    go_log =  zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'SD' i_ricefw = 'E1088'  ).
+    ENDIF.
+
+    TRY.
+
+        ges_parametros_correo-ruta_lista_empaque  = VALUE #(  go_parametros->gti_parametros[ idparam = 'RUTA_LE' ]-low OPTIONAL ).
+        ges_parametros_correo-asunto  = VALUE #(  go_parametros->gti_parametros[ idparam = 'ASUNTO_MSG' ]-low OPTIONAL ).
+        ges_parametros_correo-remite  = VALUE #(  go_parametros->gti_parametros[ idparam = 'REMITE_MSG' ]-low OPTIONAL ).
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD actualizar_nast.
+    ".Log de Mensajes
+    LOOP AT go_log->get_log( ) ASSIGNING FIELD-SYMBOL(<fs_es_msg>).
+
+      CALL FUNCTION 'NAST_PROTOCOL_UPDATE'
+        EXPORTING
+          msg_arbgb              = <fs_es_msg>-id
+          msg_nr                 = <fs_es_msg>-number
+          msg_ty                 = <fs_es_msg>-type
+          msg_v1                 = <fs_es_msg>-message_v1
+          msg_v2                 = <fs_es_msg>-message_v2
+          msg_v3                 = <fs_es_msg>-message_v3
+          msg_v4                 = <fs_es_msg>-message_v4
+        EXCEPTIONS
+          message_type_not_valid = 01
+          no_sy_message          = 02.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD envio_lista_empaque.
+
+    CONSTANTS: c_separador TYPE string VALUE '/'.
+
+    DATA: numero_factura    TYPE vbrk-vbeln,
+          nombre_archivo    TYPE file_name,
+          ti_lista_empaque  TYPE gtp_ti_lista_empaque,
+          ti_contenido_pdf  TYPE gtp_ti_contenido_de_archivo,
+          ti_lista_adjuntos TYPE zclcxr1002_util=>gtp_tt_lista_adjuntos.
+
+    numero_factura = i_es_nast-objky.
+    return_code = 0.
+
+    ti_lista_empaque = consultar_lista_empaque( i_numero_factura = numero_factura ).
+
+    LOOP AT ti_lista_empaque REFERENCE INTO DATA(r_es_lista_empaque_grp)
+                             GROUP BY ( cliente = r_es_lista_empaque_grp->cliente ).
+
+      "Agrupa listas de empaque por cliente para enviar solo un correo
+      LOOP  AT GROUP r_es_lista_empaque_grp REFERENCE INTO DATA(r_es_lista_empaque).
+
+        CLEAR: ti_contenido_pdf.
+
+        TRY.
+            nombre_archivo = |{ ges_parametros_correo-ruta_lista_empaque }{ c_separador }{ r_es_lista_empaque->referencia }.pdf|.
+
+            ti_contenido_pdf = leer_archivo_lista_empaque( i_nombre_archivo = nombre_archivo ).
+
+            IF ti_contenido_pdf IS NOT INITIAL.
+
+              SPLIT nombre_archivo AT c_separador INTO TABLE DATA(ti_nombre_archivo).
+
+              nombre_archivo = VALUE #( ti_nombre_archivo[ lines( ti_nombre_archivo ) ] OPTIONAL ).
+
+              ti_lista_adjuntos = VALUE #( BASE ti_lista_adjuntos ( tipo = 'BIN' titulo = nombre_archivo dato = ti_contenido_pdf ) ).
+
+            ELSE.
+              go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje type = 'E' number = '224'
+                                  message_v1 = nombre_archivo(50) message_v2 = nombre_archivo+50(50) ) ).
+            ENDIF.
+          CATCH cx_root INTO DATA(o_cx).
+            go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+        ENDTRY.
+
+      ENDLOOP.
+
+      enviar_correo( EXPORTING
+                      i_es_lista_empaque  = r_es_lista_empaque->*
+                     CHANGING
+                      c_ti_lista_adjuntos = ti_lista_adjuntos ).
+
+    ENDLOOP.
+
+    IF ti_lista_empaque IS INITIAL.
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '193' type = 'E'
+                                          message_v1 = |{ numero_factura ALPHA = OUT }| ) ).
+    ENDIF.
+
+    IF go_log->get_errores( ) IS NOT INITIAL.
+      return_code = 1.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD consultar_lista_empaque.
+
+    SELECT
+    FROM vbrk AS _factura
+    INNER JOIN vbrp AS _posicion_factura ON
+    _posicion_factura~vbeln = _factura~vbeln
+    INNER JOIN vbkd AS _datos_comerciales ON
+    _datos_comerciales~vbeln = _posicion_factura~aubel
+    FIELDS _factura~vbeln AS factura, aubel AS pedido, ihrez AS referencia, _factura~kunag AS cliente
+    WHERE _factura~vbeln = @i_numero_factura
+    AND   ihrez IS NOT INITIAL
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_lista_empaque.
+
+    CHECK r_ti_lista_empaque IS NOT INITIAL.
+
+    SORT r_ti_lista_empaque BY factura pedido referencia.
+    DELETE ADJACENT DUPLICATES FROM r_ti_lista_empaque COMPARING ALL FIELDS.
+    "Consultar datos de interlocutor
+    "Si no encuentra correo a nivel de BP, lo trae desde las tablas del Cliente
+    SELECT
+    FROM @r_ti_lista_empaque AS _lista
+    INNER JOIN but000 AS _bp
+    ON _bp~partner = _lista~cliente
+    LEFT JOIN adr6 AS _direccion ON
+    _direccion~addrnumber = _bp~addrcomm
+    INNER JOIN kna1 AS _cliente ON
+    _cliente~kunnr = _lista~cliente
+    LEFT JOIN adr6 AS _direccion_cliente ON
+    _direccion_cliente~addrnumber = _cliente~adrnr
+    FIELDS _bp~partner AS partner,
+    CASE
+    WHEN _direccion~smtp_addr IS NOT NULL THEN
+        _direccion~smtp_addr
+    WHEN _direccion_cliente~smtp_addr IS NOT NULL THEN
+        _direccion_cliente~smtp_addr
+    END AS smtp_addr
+    INTO TABLE @DATA(ti_correo_cliente).
+
+    SORT ti_correo_cliente BY partner smtp_addr.
+    DELETE ADJACENT DUPLICATES FROM ti_correo_cliente COMPARING partner smtp_addr.
+
+    LOOP AT r_ti_lista_empaque REFERENCE INTO DATA(r_es_lista_empaque).
+
+      LOOP AT ti_correo_cliente INTO DATA(es_corre_cliente) WHERE partner = r_es_lista_empaque->cliente.
+
+        r_es_lista_empaque->correo_cliente = |{ r_es_lista_empaque->correo_cliente };{ es_corre_cliente-smtp_addr }|.
+
+      ENDLOOP.
+
+      r_es_lista_empaque->correo_cliente = replace( val = r_es_lista_empaque->correo_cliente sub = ';' with = space occ = 1 ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD leer_archivo_lista_empaque.
+
+    DATA: contenido_de_archivo    TYPE xstring,
+          mensaje_lectura_archivo TYPE string.
+
+    TRY.
+
+        OPEN DATASET i_nombre_archivo FOR INPUT MESSAGE mensaje_lectura_archivo IN BINARY MODE.
+
+        IF sy-subrc IS INITIAL.
+          READ DATASET i_nombre_archivo INTO contenido_de_archivo.
+          CLOSE DATASET i_nombre_archivo.
+
+          CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+            EXPORTING
+              buffer     = contenido_de_archivo
+            TABLES
+              binary_tab = r_ti_contenido_de_archivo.
+        ELSE.
+          go_log->set_es_log( i_es = VALUE #( id = '00' number = '208' type = 'E'
+                                              message_v1 = mensaje_lectura_archivo ) ).
+        ENDIF.
+      CATCH cx_sy_file_open_mode INTO DATA(o_cx).
+
+        go_log->set_o_cx_log( i_o_cx_log = o_cx ).
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD enviar_correo.
+
+    DATA: ti_texto_cuerpo_correo    TYPE soli_tab,
+          numero_factura_formateado TYPE string,
+          caracter                  TYPE c,
+          caracter_anterior         TYPE c,
+          fin_primer_cero           TYPE flag,
+          inicio_primer_cero        TYPE flag,
+          ti_texto                  TYPE STANDARD TABLE OF tline.
+
+    IF i_es_lista_empaque-correo_cliente IS NOT INITIAL AND
+       ges_parametros_correo-remite IS NOT INITIAL.
+
+      "Leer texto del correo
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+*         client                  = SY-MANDT
+          id                      = 'ST'
+          language                = sy-langu
+          name                    = 'ZTXTSDE1088_CUERPO'
+          object                  = 'TEXT'
+        TABLES
+          lines                   = ti_texto
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7
+          OTHERS                  = 8.
+
+      IF sy-subrc <> 0.
+        go_log->set_es_log( i_es = VALUE #( id = sy-msgid number = sy-msgno type = sy-msgty
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2 ) ).
+      ELSE.
+        ti_texto_cuerpo_correo = CORRESPONDING #( ti_texto MAPPING line = tdline ).
+      ENDIF.
+
+      SPLIT i_es_lista_empaque-correo_cliente AT ';' INTO TABLE DATA(ti_correos).
+
+      SORT ti_correos.
+      DELETE ADJACENT DUPLICATES FROM ti_correos COMPARING ALL FIELDS.
+
+      "Quitar primeros Ceros
+      DO.
+        DATA(indice) = sy-index - 1.
+
+        IF indice >= strlen( i_es_lista_empaque-factura ).
+          EXIT.
+        ENDIF.
+
+        caracter = i_es_lista_empaque-factura+indice(1).
+
+        IF caracter EQ '0'.
+          inicio_primer_cero = abap_true.
+        ENDIF.
+
+        IF caracter NE '0' OR
+           fin_primer_cero = abap_true.
+          numero_factura_formateado = numero_factura_formateado && caracter.
+        ENDIF.
+
+        IF caracter NE '0' AND inicio_primer_cero = abap_true.
+          fin_primer_cero = abap_true.
+        ENDIF.
+
+      ENDDO.
+
+      zclcxr1002_util=>enviar_correo_av(
+        EXPORTING
+          i_ti_destinatarios       = VALUE #( FOR correo IN ti_correos ( tipo_dest = 'TO' email = correo ) )
+          i_ti_texto_cuerpo_correo = ti_texto_cuerpo_correo
+          i_asunto                 = |{ ges_parametros_correo-asunto } { numero_factura_formateado }|
+          i_ti_lista_adjuntos      = c_ti_lista_adjuntos
+        IMPORTING
+            e_es_msg_error         = DATA(es_msg_error) ).
+
+      IF es_msg_error IS NOT INITIAL.
+        go_log->set_es_log( i_es = CORRESPONDING #( es_msg_error )  ).
+      ENDIF.
+
+    ELSE.
+
+      go_log->set_es_log( i_es = VALUE #( id = gc_clase_mensaje number = '198' type = 'E' )  ).
+
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.

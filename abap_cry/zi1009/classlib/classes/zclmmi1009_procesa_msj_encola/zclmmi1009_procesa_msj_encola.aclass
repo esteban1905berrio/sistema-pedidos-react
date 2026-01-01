@@ -1,0 +1,842 @@
+CLASS zclmmi1009_procesa_msj_encola DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    CONSTANTS: gc_mensaje_encolado TYPE bapiret2-type VALUE 'C'.
+
+    TYPES: gtp_ti_log_mensajes TYPE zttmmi1009_2,
+           gtp_ti_tipo_mensaje TYPE STANDARD TABLE OF bapiret2-type WITH EMPTY KEY.
+
+    TYPES:
+      gtp_r_erdat  TYPE RANGE OF erdat,
+      gtp_r_ricefw TYPE RANGE OF zzedricefw.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_r_ricefw TYPE gtp_r_ricefw OPTIONAL,
+      iniciar_proceso_de_mensajes
+        IMPORTING
+          VALUE(i_r_fecha_creacion) TYPE gtp_r_erdat OPTIONAL
+          VALUE(i_r_material)       TYPE STANDARD TABLE
+          VALUE(i_r_tipo_material)  TYPE STANDARD TABLE
+          VALUE(i_ti_tipo_mensaje)  TYPE gtp_ti_tipo_mensaje OPTIONAL,
+      consultar_mensajes
+        IMPORTING
+          VALUE(i_r_fecha_creacion) TYPE gtp_r_erdat OPTIONAL
+          VALUE(i_r_material)       TYPE STANDARD TABLE
+          VALUE(i_r_tipo_material)  TYPE STANDARD TABLE
+          VALUE(i_ti_tipo_mensaje)  TYPE gtp_ti_tipo_mensaje OPTIONAL
+        RETURNING
+          VALUE(r_ti_msj_procesar)  TYPE gtp_ti_log_mensajes,
+      consultar_mensaje_encolado
+        IMPORTING
+          VALUE(i_r_fecha_creacion) TYPE gtp_r_erdat OPTIONAL
+        RETURNING
+          VALUE(r_ti_msj_encolado)  TYPE gtp_ti_log_mensajes,
+      consultar_mensaje_error
+        IMPORTING
+          VALUE(i_r_fecha_creacion) TYPE gtp_r_erdat OPTIONAL
+        RETURNING
+          VALUE(r_ti_msj_error)     TYPE gtp_ti_log_mensajes,
+      proceso_paralelo_mensajes
+        CHANGING
+          c_ti_mensajes TYPE gtp_ti_log_mensajes,
+      procesar_mensajes
+        CHANGING
+          c_ti_mensajes TYPE zttmmi1009_2,
+      set_ricefw
+        IMPORTING
+          i_r_ricefw TYPE gtp_r_ricefw,
+      ejecucion_finalizada
+        IMPORTING
+          p_task TYPE clike .
+
+
+
+  PROTECTED SECTION.
+
+    DATA: go_log                         TYPE REF TO zclcxr1002_log_aplicacion,
+          g_cantidad_max_procesos_activo TYPE i VALUE 3.
+
+    METHODS:
+      consultar_log_mensajes
+        IMPORTING
+          VALUE(i_r_ricefw)         TYPE string
+          VALUE(i_r_fecha_creacion) TYPE string
+        EXPORTING
+          VALUE(e_ti_mensajes_bd)   TYPE gtp_ti_log_mensajes.
+
+  PRIVATE SECTION.
+
+    DATA: gti_mensajes            TYPE gtp_ti_log_mensajes,
+          gti_mensajes_bd         TYPE gtp_ti_log_mensajes,
+          g_numero_proceso_actual TYPE i,
+          g_procesos_terminados   TYPE i,
+          g_procesos_enviados     TYPE i,
+          g_procesos_recibidos    TYPE i,
+          g_r_ricefw              TYPE gtp_r_ricefw,
+          go_parametros           TYPE REF TO zclcxr1000_parametros.
+
+    METHODS:
+      consultar_parametros,
+      determinar_estado_mensaje
+        IMPORTING
+          VALUE(i_msgguid)   TYPE ztcxr1001_1-msgguid
+        RETURNING
+          VALUE(r_es_estado) TYPE ztcxr1001_3.
+
+
+ENDCLASS.
+
+
+
+CLASS zclmmi1009_procesa_msj_encola IMPLEMENTATION.
+  METHOD consultar_mensajes.
+
+    DATA: go_principal TYPE REF TO lcl_principal,
+          r_status     TYPE RANGE OF ztcxr1001_1-status.
+
+    go_principal = NEW lcl_principal( ).
+    go_principal->start_of_selection( i_r_erdat = i_r_fecha_creacion
+                                      i_r_matnr = i_r_material
+                                      i_r_mtart = i_r_tipo_material
+                                      i_error = abap_false ).
+
+    IF line_exists( i_ti_tipo_mensaje[ table_line = 'E' ] ).
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = '@5C@' ) TO r_status.
+    ENDIF.
+
+    IF line_exists( i_ti_tipo_mensaje[ table_line = gc_mensaje_encolado ] ).
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = '@5D@' ) TO r_status.
+    ENDIF.
+
+    "Mensajes diferentes a procesados con exito
+    r_ti_msj_procesar = VALUE #( FOR es_msg IN go_principal->gti_outdata WHERE ( status IN r_status )
+                                 ( CORRESPONDING #( es_msg ) ) ).
+
+  ENDMETHOD.
+
+  METHOD consultar_mensaje_error.
+
+    IF gti_mensajes_bd IS INITIAL.
+      consultar_log_mensajes( EXPORTING
+                                i_r_ricefw = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'RICEFW' dref = REF #( g_r_ricefw ) ) )  )
+                                i_r_fecha_creacion = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'ERDAT' dref = REF #( i_r_fecha_creacion ) ) )  )
+                              IMPORTING
+                                e_ti_mensajes_bd = gti_mensajes_bd
+                            ).
+    ENDIF.
+
+    SORT gti_mensajes_bd DESCENDING BY matnr nroejecucion nropaso type ASCENDING.
+
+    LOOP AT gti_mensajes_bd REFERENCE INTO  DATA(r_es_msj_error)
+                              GROUP BY ( ricefw  = r_es_msj_error->ricefw
+                                         msgguid = r_es_msj_error->msgguid ).
+
+      IF r_es_msj_error->type = 'E'.
+        APPEND r_es_msj_error->* TO r_ti_msj_error.
+        CONTINUE.
+      ENDIF.
+
+    ENDLOOP.
+
+    DELETE ADJACENT DUPLICATES FROM r_ti_msj_error COMPARING matnr.
+
+  ENDMETHOD.
+
+  METHOD consultar_mensaje_encolado.
+
+    IF gti_mensajes_bd IS INITIAL.
+      TRY.
+          consultar_log_mensajes( EXPORTING
+                                    i_r_ricefw = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'RICEFW' dref = REF #( g_r_ricefw ) ) )  )
+                                    i_r_fecha_creacion = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'ERDAT' dref = REF #( i_r_fecha_creacion ) ) )  )
+                                  IMPORTING
+                                    e_ti_mensajes_bd = gti_mensajes_bd
+                                ).
+        CATCH cx_shdb_exception.
+          "handle exception
+      ENDTRY.
+    ENDIF.
+
+    SORT gti_mensajes_bd DESCENDING BY matnr nroejecucion nropaso type erdat ASCENDING.
+
+    ".Eliminamos los mensajes que estan en warning que no son paso = 2      "adicion. Jose Miguel Valencia 21.02.2025
+    DELETE gti_mensajes_bd WHERE nropaso NE 2.
+
+    "Depurar mensajes con utimo mensaje  TYPE = 'W' ID = ZCX01 NUMBER = 999
+    LOOP AT gti_mensajes_bd REFERENCE INTO  DATA(r_es_msj_encolado)
+                              GROUP BY ( ricefw  = r_es_msj_encolado->ricefw
+                                         msgguid = r_es_msj_encolado->msgguid ).
+
+      IF r_es_msj_encolado->type = zclcxr1001_monitor_integracion=>gc_id_mensaje_encolado-tipo AND
+         r_es_msj_encolado->id = zclcxr1001_monitor_integracion=>gc_id_mensaje_encolado-id AND
+         r_es_msj_encolado->nromsg = zclcxr1001_monitor_integracion=>gc_id_mensaje_encolado-numero_msj.
+        APPEND r_es_msj_encolado->* TO r_ti_msj_encolado.
+        CONTINUE.
+      ENDIF.
+
+    ENDLOOP.
+
+
+  ENDMETHOD.
+
+  METHOD set_ricefw.
+    g_r_ricefw = i_r_ricefw.
+  ENDMETHOD.
+
+  METHOD iniciar_proceso_de_mensajes.
+    DATA: fecha_inicio_lectura_msj TYPE d,
+          dias_inicio_lectura_msj  TYPE i.
+
+    "Consultar parametro de días previos para leer los mensajes
+    IF i_r_fecha_creacion IS INITIAL.
+      dias_inicio_lectura_msj = VALUE #( go_parametros->gti_parametros[ idparam = 'DIAS_COLA' ]-low OPTIONAL ).
+      fecha_inicio_lectura_msj = sy-datum - abs( dias_inicio_lectura_msj ).
+      i_r_fecha_creacion = VALUE #( ( sign = 'I' option = 'GE' low = fecha_inicio_lectura_msj ) ).
+    ENDIF.
+
+    DATA(ti_mensajes) = consultar_mensajes( i_r_fecha_creacion = i_r_fecha_creacion
+                                            i_r_material       = i_r_material
+                                            i_r_tipo_material  = i_r_tipo_material
+                                            i_ti_tipo_mensaje  = i_ti_tipo_mensaje ).
+
+
+
+    proceso_paralelo_mensajes( CHANGING c_ti_mensajes = ti_mensajes ).
+
+
+  ENDMETHOD.
+
+  METHOD constructor.
+
+    IF i_r_ricefw IS SUPPLIED.
+      set_ricefw( i_r_ricefw = i_r_ricefw ).
+    ENDIF.
+
+    consultar_parametros( ).
+
+  ENDMETHOD.
+
+  METHOD procesar_mensajes.
+
+    DATA: r_msgid                  TYPE RANGE OF ztcxr1001_1-msgguid,
+          r_aedat                  TYPE RANGE OF ztcxr1001_1-aedat,
+          r_erdat                  TYPE RANGE OF ztcxr1001_1-erdat,
+          es_ultimo_estado_mensaje TYPE ztcxr1001_3,
+          es_informacion_mensaje   TYPE ztcxr1001_1.
+
+    IF c_ti_mensajes IS INITIAL.
+      MESSAGE s031(zcx01).
+      EXIT.
+    ENDIF.
+
+
+    LOOP AT c_ti_mensajes REFERENCE INTO DATA(r_es_mensaje).
+
+      CLEAR: es_informacion_mensaje, es_ultimo_estado_mensaje, r_msgid.
+
+      r_msgid = VALUE #( sign = 'I' option = 'EQ' ( low = r_es_mensaje->msgguid ) ).
+
+      TRY.
+
+          SUBMIT zcxr1001_1
+          WITH so_msgid IN r_msgid
+          WITH so_fmod  IN r_aedat
+          WITH so_fecha IN r_erdat
+          WITH pa_pdir  = abap_true"Procesar directamente
+          WITH pa_tdmsg = abap_false"Reprocesar unicamente ultimo mensaje
+          AND RETURN.
+
+          MESSAGE s077(zcx01) WITH r_es_mensaje->msgguid INTO r_es_mensaje->message.
+          r_es_mensaje->message_v1 = r_es_mensaje->msgguid.
+          r_es_mensaje->type = 'I'.
+          r_es_mensaje->id = 'ZCX01'.
+          r_es_mensaje->nromsg = '077'.
+
+        CATCH zcxr1001_excepciones_monitor.
+
+      ENDTRY.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD proceso_paralelo_mensajes.
+
+    DATA: nombre_proceso TYPE string,
+          ti_mensajes    TYPE zttmmi1009_2.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    CLEAR: gti_mensajes, g_numero_proceso_actual, g_procesos_terminados.
+
+    LOOP AT c_ti_mensajes REFERENCE INTO DATA(r_es_mensaje).
+
+      ADD 1 TO g_numero_proceso_actual.
+
+      nombre_proceso = |PROCESO_PRODUCTO_{ g_numero_proceso_actual }|.
+
+      ti_mensajes = VALUE #( ( CORRESPONDING #( r_es_mensaje->* ) ) ).
+
+      CALL FUNCTION 'ZMMI1009_PROCESA_MENSAJE'
+        STARTING NEW TASK nombre_proceso
+        CALLING ejecucion_finalizada ON END OF TASK
+        CHANGING
+          c_ti_mensajes         = ti_mensajes
+        EXCEPTIONS
+          communication_failure = 1
+          system_failure        = 2
+          OTHERS                = 3.
+
+      IF sy-subrc IS NOT INITIAL.
+        go_log->set_es_log( i_es = VALUE #( id = sy-msgid type = sy-msgty number = sy-msgno
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2 message_v3 = sy-msgv3
+                                            message_v4 = sy-msgv4   ) ).
+      ELSE.
+        ADD 1 TO g_procesos_enviados.
+      ENDIF.
+
+      IF g_cantidad_max_procesos_activo = g_numero_proceso_actual.
+        WAIT UNTIL g_procesos_terminados = g_numero_proceso_actual.
+        CLEAR: g_numero_proceso_actual, g_procesos_terminados.
+      ENDIF.
+
+    ENDLOOP.
+
+    WAIT UNTIL g_procesos_recibidos = g_procesos_enviados.
+
+    MESSAGE s615(cacs_se).
+
+
+  ENDMETHOD.
+
+  METHOD ejecucion_finalizada.
+
+    ADD 1 TO g_procesos_terminados.
+    ADD 1 TO g_procesos_recibidos.
+
+    RECEIVE RESULTS FROM FUNCTION 'ZMMI1009_PROCESA_MENSAJE'
+       CHANGING
+            c_ti_mensajes = gti_mensajes
+       EXCEPTIONS
+            communication_failure = 1
+            system_failure        = 2
+            OTHERS                = 3.
+
+    IF sy-subrc IS INITIAL.
+
+    ELSE.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD consultar_log_mensajes
+                BY DATABASE PROCEDURE FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING ztmmi1009_2 ztcxr1001_1 ztcxr1001_3.
+
+    declare client varchar(3) := session_context ('CLIENT');
+
+    e_ti_mensajes_bd =
+    SELECT
+         log_especifico.matnr, satnr,
+         log_general.ricefw,
+         log_general.msgguid,
+         msgtype,
+         msgstate,
+         log_general.nroejecucion,
+         log_general_c.nropaso,
+         log_general.consec,
+         log_general.type,
+         log_general.id,
+         log_general.nromsg,
+         log_general.message,
+         log_general.message_v1,
+         log_general.message_v2,
+         log_general.message_v3,
+         log_general.message_v4,
+         log_general.linea,
+         log_general.erdat,
+         log_general.erzet,
+         ob_system, ob_ns, ob_name,
+         ib_system, ib_ns, ib_name, tcode,
+         idcola, adminuser, msg_size,
+         payload, json, status, tipo_dato, aedat, aenam
+      FROM ztmmi1009_2 AS log_especifico
+      INNER JOIN ztcxr1001_1 AS log_general_c
+      ON  log_especifico.matnr = log_especifico.satnr --Solo generico
+      AND log_especifico.mandt = log_general_c.mandt
+      AND log_especifico.msgguid = log_general_c.msgguid
+      AND log_especifico.erdat = log_general_c.erdat
+      INNER JOIN ztcxr1001_3 AS log_general
+      ON  log_general.mandt = log_general_c.mandt
+      AND log_general.ricefw = log_general_c.ricefw
+      AND log_general.msgguid = log_general_c.msgguid
+      AND log_general.erdat = log_general_c.erdat
+      WHERE log_especifico.mandt = :client;
+
+      e_ti_mensajes_bd = APPLY_FILTER( :e_ti_mensajes_bd, :i_r_ricefw );
+      e_ti_mensajes_bd = APPLY_FILTER( :e_ti_mensajes_bd, :i_r_fecha_creacion );
+
+  ENDMETHOD.
+
+  METHOD consultar_parametros.
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'I1009'  ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD determinar_estado_mensaje.
+
+    SELECT *
+    FROM ztcxr1001_3
+    WHERE msgguid = @i_msgguid
+    INTO TABLE @DATA(ti_log_mensaje).
+
+    SORT ti_log_mensaje DESCENDING BY nroejecucion nropaso type ASCENDING.
+
+    LOOP AT ti_log_mensaje REFERENCE INTO  DATA(r_es_msj_error)
+                             GROUP BY ( ricefw  = r_es_msj_error->ricefw
+                                        msgguid = r_es_msj_error->msgguid ).
+
+      r_es_estado = r_es_msj_error->*.
+      EXIT.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclmmi1009_procesa_msj_encola DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_amdp_marker_hdb.
+
+    CONSTANTS: gc_mensaje_encolado TYPE bapiret2-type VALUE 'C'.
+
+    TYPES: gtp_ti_log_mensajes TYPE zttmmi1009_2,
+           gtp_ti_tipo_mensaje TYPE STANDARD TABLE OF bapiret2-type WITH EMPTY KEY.
+
+    TYPES:
+      gtp_r_erdat  TYPE RANGE OF erdat,
+      gtp_r_ricefw TYPE RANGE OF zzedricefw.
+
+    METHODS:
+      constructor
+        IMPORTING
+          i_r_ricefw TYPE gtp_r_ricefw OPTIONAL,
+      iniciar_proceso_de_mensajes
+        IMPORTING
+          VALUE(i_r_fecha_creacion) TYPE gtp_r_erdat OPTIONAL
+          VALUE(i_r_material)       TYPE STANDARD TABLE
+          VALUE(i_r_tipo_material)  TYPE STANDARD TABLE
+          VALUE(i_ti_tipo_mensaje)  TYPE gtp_ti_tipo_mensaje OPTIONAL,
+      consultar_mensajes
+        IMPORTING
+          VALUE(i_r_fecha_creacion) TYPE gtp_r_erdat OPTIONAL
+          VALUE(i_r_material)       TYPE STANDARD TABLE
+          VALUE(i_r_tipo_material)  TYPE STANDARD TABLE
+          VALUE(i_ti_tipo_mensaje)  TYPE gtp_ti_tipo_mensaje OPTIONAL
+        RETURNING
+          VALUE(r_ti_msj_procesar)  TYPE gtp_ti_log_mensajes,
+      consultar_mensaje_encolado
+        IMPORTING
+          VALUE(i_r_fecha_creacion) TYPE gtp_r_erdat OPTIONAL
+        RETURNING
+          VALUE(r_ti_msj_encolado)  TYPE gtp_ti_log_mensajes,
+      consultar_mensaje_error
+        IMPORTING
+          VALUE(i_r_fecha_creacion) TYPE gtp_r_erdat OPTIONAL
+        RETURNING
+          VALUE(r_ti_msj_error)     TYPE gtp_ti_log_mensajes,
+      proceso_paralelo_mensajes
+        CHANGING
+          c_ti_mensajes TYPE gtp_ti_log_mensajes,
+      procesar_mensajes
+        CHANGING
+          c_ti_mensajes TYPE zttmmi1009_2,
+      set_ricefw
+        IMPORTING
+          i_r_ricefw TYPE gtp_r_ricefw,
+      ejecucion_finalizada
+        IMPORTING
+          p_task TYPE clike .
+
+
+
+  PROTECTED SECTION.
+
+    DATA: go_log                         TYPE REF TO zclcxr1002_log_aplicacion,
+          g_cantidad_max_procesos_activo TYPE i VALUE 3.
+
+    METHODS:
+      consultar_log_mensajes
+        IMPORTING
+          VALUE(i_r_ricefw)         TYPE string
+          VALUE(i_r_fecha_creacion) TYPE string
+        EXPORTING
+          VALUE(e_ti_mensajes_bd)   TYPE gtp_ti_log_mensajes.
+
+  PRIVATE SECTION.
+
+    DATA: gti_mensajes            TYPE gtp_ti_log_mensajes,
+          gti_mensajes_bd         TYPE gtp_ti_log_mensajes,
+          g_numero_proceso_actual TYPE i,
+          g_procesos_terminados   TYPE i,
+          g_procesos_enviados     TYPE i,
+          g_procesos_recibidos    TYPE i,
+          g_r_ricefw              TYPE gtp_r_ricefw,
+          go_parametros           TYPE REF TO zclcxr1000_parametros.
+
+    METHODS:
+      consultar_parametros,
+      determinar_estado_mensaje
+        IMPORTING
+          VALUE(i_msgguid)   TYPE ztcxr1001_1-msgguid
+        RETURNING
+          VALUE(r_es_estado) TYPE ztcxr1001_3.
+
+
+ENDCLASS.
+
+
+
+CLASS zclmmi1009_procesa_msj_encola IMPLEMENTATION.
+  METHOD consultar_mensajes.
+
+    DATA: go_principal TYPE REF TO lcl_principal,
+          r_status     TYPE RANGE OF ztcxr1001_1-status.
+
+    go_principal = NEW lcl_principal( ).
+    go_principal->start_of_selection( i_r_erdat = i_r_fecha_creacion
+                                      i_r_matnr = i_r_material
+                                      i_r_mtart = i_r_tipo_material
+                                      i_error = abap_false ).
+
+    IF line_exists( i_ti_tipo_mensaje[ table_line = 'E' ] ).
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = '@5C@' ) TO r_status.
+    ENDIF.
+
+    IF line_exists( i_ti_tipo_mensaje[ table_line = gc_mensaje_encolado ] ).
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = '@5D@' ) TO r_status.
+    ENDIF.
+
+    "Mensajes diferentes a procesados con exito
+    r_ti_msj_procesar = VALUE #( FOR es_msg IN go_principal->gti_outdata WHERE ( status IN r_status )
+                                 ( CORRESPONDING #( es_msg ) ) ).
+
+  ENDMETHOD.
+
+  METHOD consultar_mensaje_error.
+
+    IF gti_mensajes_bd IS INITIAL.
+      consultar_log_mensajes( EXPORTING
+                                i_r_ricefw = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'RICEFW' dref = REF #( g_r_ricefw ) ) )  )
+                                i_r_fecha_creacion = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'ERDAT' dref = REF #( i_r_fecha_creacion ) ) )  )
+                              IMPORTING
+                                e_ti_mensajes_bd = gti_mensajes_bd
+                            ).
+    ENDIF.
+
+    SORT gti_mensajes_bd DESCENDING BY matnr nroejecucion nropaso type ASCENDING.
+
+    LOOP AT gti_mensajes_bd REFERENCE INTO  DATA(r_es_msj_error)
+                              GROUP BY ( ricefw  = r_es_msj_error->ricefw
+                                         msgguid = r_es_msj_error->msgguid ).
+
+      IF r_es_msj_error->type = 'E'.
+        APPEND r_es_msj_error->* TO r_ti_msj_error.
+        CONTINUE.
+      ENDIF.
+
+    ENDLOOP.
+
+    DELETE ADJACENT DUPLICATES FROM r_ti_msj_error COMPARING matnr.
+
+  ENDMETHOD.
+
+  METHOD consultar_mensaje_encolado.
+
+    IF gti_mensajes_bd IS INITIAL.
+      TRY.
+          consultar_log_mensajes( EXPORTING
+                                    i_r_ricefw = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'RICEFW' dref = REF #( g_r_ricefw ) ) )  )
+                                    i_r_fecha_creacion = cl_shdb_seltab=>combine_seltabs( it_named_seltabs = VALUE #( ( name = 'ERDAT' dref = REF #( i_r_fecha_creacion ) ) )  )
+                                  IMPORTING
+                                    e_ti_mensajes_bd = gti_mensajes_bd
+                                ).
+        CATCH cx_shdb_exception.
+          "handle exception
+      ENDTRY.
+    ENDIF.
+
+    SORT gti_mensajes_bd DESCENDING BY matnr nroejecucion nropaso type erdat ASCENDING.
+
+    ".Eliminamos los mensajes que estan en warning que no son paso = 2      "adicion. Jose Miguel Valencia 21.02.2025
+    DELETE gti_mensajes_bd WHERE nropaso NE 2.
+
+    "Depurar mensajes con utimo mensaje  TYPE = 'W' ID = ZCX01 NUMBER = 999
+    LOOP AT gti_mensajes_bd REFERENCE INTO  DATA(r_es_msj_encolado)
+                              GROUP BY ( ricefw  = r_es_msj_encolado->ricefw
+                                         msgguid = r_es_msj_encolado->msgguid ).
+
+      IF r_es_msj_encolado->type = zclcxr1001_monitor_integracion=>gc_id_mensaje_encolado-tipo AND
+         r_es_msj_encolado->id = zclcxr1001_monitor_integracion=>gc_id_mensaje_encolado-id AND
+         r_es_msj_encolado->nromsg = zclcxr1001_monitor_integracion=>gc_id_mensaje_encolado-numero_msj.
+        APPEND r_es_msj_encolado->* TO r_ti_msj_encolado.
+        CONTINUE.
+      ENDIF.
+
+    ENDLOOP.
+
+
+  ENDMETHOD.
+
+  METHOD set_ricefw.
+    g_r_ricefw = i_r_ricefw.
+  ENDMETHOD.
+
+  METHOD iniciar_proceso_de_mensajes.
+    DATA: fecha_inicio_lectura_msj TYPE d,
+          dias_inicio_lectura_msj  TYPE i.
+
+    "Consultar parametro de días previos para leer los mensajes
+    IF i_r_fecha_creacion IS INITIAL.
+      dias_inicio_lectura_msj = VALUE #( go_parametros->gti_parametros[ idparam = 'DIAS_COLA' ]-low OPTIONAL ).
+      fecha_inicio_lectura_msj = sy-datum - abs( dias_inicio_lectura_msj ).
+      i_r_fecha_creacion = VALUE #( ( sign = 'I' option = 'GE' low = fecha_inicio_lectura_msj ) ).
+    ENDIF.
+
+    DATA(ti_mensajes) = consultar_mensajes( i_r_fecha_creacion = i_r_fecha_creacion
+                                            i_r_material       = i_r_material
+                                            i_r_tipo_material  = i_r_tipo_material
+                                            i_ti_tipo_mensaje  = i_ti_tipo_mensaje ).
+
+
+
+    proceso_paralelo_mensajes( CHANGING c_ti_mensajes = ti_mensajes ).
+
+
+  ENDMETHOD.
+
+  METHOD constructor.
+
+    IF i_r_ricefw IS SUPPLIED.
+      set_ricefw( i_r_ricefw = i_r_ricefw ).
+    ENDIF.
+
+    consultar_parametros( ).
+
+  ENDMETHOD.
+
+  METHOD procesar_mensajes.
+
+    DATA: r_msgid                  TYPE RANGE OF ztcxr1001_1-msgguid,
+          r_aedat                  TYPE RANGE OF ztcxr1001_1-aedat,
+          r_erdat                  TYPE RANGE OF ztcxr1001_1-erdat,
+          es_ultimo_estado_mensaje TYPE ztcxr1001_3,
+          es_informacion_mensaje   TYPE ztcxr1001_1.
+
+    IF c_ti_mensajes IS INITIAL.
+      MESSAGE s031(zcx01).
+      EXIT.
+    ENDIF.
+
+
+    LOOP AT c_ti_mensajes REFERENCE INTO DATA(r_es_mensaje).
+
+      CLEAR: es_informacion_mensaje, es_ultimo_estado_mensaje, r_msgid.
+
+      r_msgid = VALUE #( sign = 'I' option = 'EQ' ( low = r_es_mensaje->msgguid ) ).
+
+      TRY.
+
+          SUBMIT zcxr1001_1
+          WITH so_msgid IN r_msgid
+          WITH so_fmod  IN r_aedat
+          WITH so_fecha IN r_erdat
+          WITH pa_pdir  = abap_true"Procesar directamente
+          WITH pa_tdmsg = abap_false"Reprocesar unicamente ultimo mensaje
+          AND RETURN.
+
+          MESSAGE s077(zcx01) WITH r_es_mensaje->msgguid INTO r_es_mensaje->message.
+          r_es_mensaje->message_v1 = r_es_mensaje->msgguid.
+          r_es_mensaje->type = 'I'.
+          r_es_mensaje->id = 'ZCX01'.
+          r_es_mensaje->nromsg = '077'.
+
+        CATCH zcxr1001_excepciones_monitor.
+
+      ENDTRY.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD proceso_paralelo_mensajes.
+
+    DATA: nombre_proceso TYPE string,
+          ti_mensajes    TYPE zttmmi1009_2.
+
+    go_log = zclcxr1002_log_aplicacion=>get_instancia( ).
+
+    CLEAR: gti_mensajes, g_numero_proceso_actual, g_procesos_terminados.
+
+    LOOP AT c_ti_mensajes REFERENCE INTO DATA(r_es_mensaje).
+
+      ADD 1 TO g_numero_proceso_actual.
+
+      nombre_proceso = |PROCESO_PRODUCTO_{ g_numero_proceso_actual }|.
+
+      ti_mensajes = VALUE #( ( CORRESPONDING #( r_es_mensaje->* ) ) ).
+
+      CALL FUNCTION 'ZMMI1009_PROCESA_MENSAJE'
+        STARTING NEW TASK nombre_proceso
+        CALLING ejecucion_finalizada ON END OF TASK
+        CHANGING
+          c_ti_mensajes         = ti_mensajes
+        EXCEPTIONS
+          communication_failure = 1
+          system_failure        = 2
+          OTHERS                = 3.
+
+      IF sy-subrc IS NOT INITIAL.
+        go_log->set_es_log( i_es = VALUE #( id = sy-msgid type = sy-msgty number = sy-msgno
+                                            message_v1 = sy-msgv1 message_v2 = sy-msgv2 message_v3 = sy-msgv3
+                                            message_v4 = sy-msgv4   ) ).
+      ELSE.
+        ADD 1 TO g_procesos_enviados.
+      ENDIF.
+
+      IF g_cantidad_max_procesos_activo = g_numero_proceso_actual.
+        WAIT UNTIL g_procesos_terminados = g_numero_proceso_actual.
+        CLEAR: g_numero_proceso_actual, g_procesos_terminados.
+      ENDIF.
+
+    ENDLOOP.
+
+    WAIT UNTIL g_procesos_recibidos = g_procesos_enviados.
+
+    MESSAGE s615(cacs_se).
+
+
+  ENDMETHOD.
+
+  METHOD ejecucion_finalizada.
+
+    ADD 1 TO g_procesos_terminados.
+    ADD 1 TO g_procesos_recibidos.
+
+    RECEIVE RESULTS FROM FUNCTION 'ZMMI1009_PROCESA_MENSAJE'
+       CHANGING
+            c_ti_mensajes = gti_mensajes
+       EXCEPTIONS
+            communication_failure = 1
+            system_failure        = 2
+            OTHERS                = 3.
+
+    IF sy-subrc IS INITIAL.
+
+    ELSE.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD consultar_log_mensajes
+                BY DATABASE PROCEDURE FOR HDB
+                LANGUAGE SQLSCRIPT
+                OPTIONS READ-ONLY
+                USING ztmmi1009_2 ztcxr1001_1 ztcxr1001_3.
+
+    declare client varchar(3) := session_context ('CLIENT');
+
+    e_ti_mensajes_bd =
+    SELECT
+         log_especifico.matnr, satnr,
+         log_general.ricefw,
+         log_general.msgguid,
+         msgtype,
+         msgstate,
+         log_general.nroejecucion,
+         log_general_c.nropaso,
+         log_general.consec,
+         log_general.type,
+         log_general.id,
+         log_general.nromsg,
+         log_general.message,
+         log_general.message_v1,
+         log_general.message_v2,
+         log_general.message_v3,
+         log_general.message_v4,
+         log_general.linea,
+         log_general.erdat,
+         log_general.erzet,
+         ob_system, ob_ns, ob_name,
+         ib_system, ib_ns, ib_name, tcode,
+         idcola, adminuser, msg_size,
+         payload, json, status, tipo_dato, aedat, aenam
+      FROM ztmmi1009_2 AS log_especifico
+      INNER JOIN ztcxr1001_1 AS log_general_c
+      ON  log_especifico.matnr = log_especifico.satnr --Solo generico
+      AND log_especifico.mandt = log_general_c.mandt
+      AND log_especifico.msgguid = log_general_c.msgguid
+      AND log_especifico.erdat = log_general_c.erdat
+      INNER JOIN ztcxr1001_3 AS log_general
+      ON  log_general.mandt = log_general_c.mandt
+      AND log_general.ricefw = log_general_c.ricefw
+      AND log_general.msgguid = log_general_c.msgguid
+      AND log_general.erdat = log_general_c.erdat
+      WHERE log_especifico.mandt = :client;
+
+      e_ti_mensajes_bd = APPLY_FILTER( :e_ti_mensajes_bd, :i_r_ricefw );
+      e_ti_mensajes_bd = APPLY_FILTER( :e_ti_mensajes_bd, :i_r_fecha_creacion );
+
+  ENDMETHOD.
+
+  METHOD consultar_parametros.
+
+    IF go_parametros IS NOT BOUND.
+      go_parametros = NEW zclcxr1000_parametros( i_modulo = 'MM' i_ricefw = 'I1009'  ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD determinar_estado_mensaje.
+
+    SELECT *
+    FROM ztcxr1001_3
+    WHERE msgguid = @i_msgguid
+    INTO TABLE @DATA(ti_log_mensaje).
+
+    SORT ti_log_mensaje DESCENDING BY nroejecucion nropaso type ASCENDING.
+
+    LOOP AT ti_log_mensaje REFERENCE INTO  DATA(r_es_msj_error)
+                             GROUP BY ( ricefw  = r_es_msj_error->ricefw
+                                        msgguid = r_es_msj_error->msgguid ).
+
+      r_es_estado = r_es_msj_error->*.
+      EXIT.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.

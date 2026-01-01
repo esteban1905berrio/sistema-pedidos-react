@@ -1,0 +1,44 @@
+CLASS zclfi_im_ukm_vector_calculate DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_vector_calculate .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_im_ukm_vector_calculate IMPLEMENTATION.
+
+  METHOD if_vector_calculate~calculate.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfi_im_ukm_vector_calculate DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_vector_calculate .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_im_ukm_vector_calculate IMPLEMENTATION.
+
+  METHOD if_vector_calculate~calculate.
+
+  ENDMETHOD.
+
+ENDCLASS.

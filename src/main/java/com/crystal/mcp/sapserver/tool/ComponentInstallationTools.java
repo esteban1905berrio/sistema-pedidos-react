@@ -68,8 +68,8 @@ public class ComponentInstallationTools {
         }
 
         boolean dry = dryRun != null ? dryRun : false;
-        boolean skip = skipExisting != null ? skipExisting : true;
-        boolean force = forceOverwrite != null ? forceOverwrite : false;
+        boolean skip = skipExisting != null ? skipExisting : false;  // Default: don't skip
+        boolean force = forceOverwrite != null ? forceOverwrite : true;  // Default: overwrite existing
 
         InstallationResult result = componentInstallationService.installComponents(
                 sourcePath,

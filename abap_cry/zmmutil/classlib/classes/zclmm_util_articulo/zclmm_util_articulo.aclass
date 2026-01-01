@@ -1,0 +1,2540 @@
+CLASS zclmm_util_articulo DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF gtp_segmento,
+        matnr TYPE lips-matnr, "Material
+        werks TYPE lips-werks, "Centro
+        charg TYPE vepo-charg, "Lote
+      END OF gtp_segmento .
+    TYPES:
+      gtp_ti_segmento TYPE STANDARD TABLE OF gtp_segmento .
+    TYPES:
+      BEGIN OF gtp_segmentacion,
+        matnr    TYPE lips-matnr, "Material
+        werks    TYPE lips-werks, "Centro
+        charg    TYPE vepo-charg, "Lote
+        sgt_csgr TYPE sgt_cats-sgt_csgr, "Estruct.segmentación
+        sgt_cnrc TYPE sgt_cats-sgt_cnrc, "Campo segmentación
+        sgt_fnam TYPE sgt_cats-sgt_fnam, "Caracteristica
+        sgt_foff TYPE sgt_cats-sgt_foff, "Posición campo
+        sgt_flen TYPE sgt_cats-sgt_flen, "Longitud campo
+        valor    TYPE string, "Valor
+      END OF gtp_segmentacion .
+    TYPES:
+      gtp_ti_segmentacion  TYPE STANDARD TABLE OF gtp_segmentacion WITH EMPTY KEY .
+    TYPES:
+      gtp_r_caracteristica TYPE RANGE OF sgt_cats-sgt_fnam .
+    TYPES:
+      BEGIN OF gtp_ean128,
+        ean128     TYPE zed_ean128,      "EAN de empaque 128
+        um_alterna TYPE marm-meinh, "Unidad de medida alternativa(MARM_MEINH)
+        umrez      TYPE marm-umrez,
+        segmento   TYPE string,
+        mensaje    TYPE string,
+      END OF gtp_ean128 .
+    TYPES:
+      BEGIN OF gtp_ean11,
+        matnr      TYPE matnr,       "Número de material
+        ean11      TYPE mean-ean11,  "Número de artículo europeo (EAN)
+        variante   TYPE matnr,    "variante
+        um_alterna TYPE marm-meinh,  "Unidad de medida alternativa(MARM_MEINH)
+        umrez      TYPE marm-umrez,
+        lote       TYPE string,
+        segmento   TYPE string,
+        mensaje    TYPE string,
+      END OF gtp_ean11 .
+    TYPES:
+      BEGIN OF gtp_es_material,
+        material TYPE mara-satnr, "material generico
+        variante TYPE mara-matnr,
+        ean11    TYPE mean-ean11,
+      END OF  gtp_es_material .
+    TYPES:
+      gtp_ti_marm TYPE STANDARD TABLE OF marm WITH NON-UNIQUE KEY matnr meinh .
+    TYPES:
+      BEGIN OF gtp_matnr,
+        material TYPE mara-matnr,   "Número de material
+      END OF gtp_matnr .
+    TYPES:
+      gtp_tt_matnr TYPE STANDARD TABLE OF gtp_matnr WITH NON-UNIQUE KEY material .
+    TYPES:
+      BEGIN OF gtp_info_materiales,
+        material            TYPE zcmm_3-matnr,
+        descr_material      TYPE zcmm_3-descripcion,
+        tipo_material       TYPE zcmm_3-mtart,
+        gr_articulos        TYPE zcmm_3-matkl,
+        uni_med_base        TYPE zcmm_3-meins,
+        cod_ean11           TYPE zcmm_3-ean11,
+        mat_generico        TYPE zcmm_3-satnr,
+        categoria_mat       TYPE zcmm_3-attyp,
+        contenido_neto      TYPE zcmm_3-inhal,
+        id_conv_material    TYPE zcmm_3-idconvmaterial,
+        color_atinn         TYPE zcmm_3-coloratinn,
+        color               TYPE zcmm_3-color,
+        descr_color         TYPE zcmm_3-descripcioncolor,
+        talla_atinn         TYPE zcmm_3-size1atinn,
+        talla               TYPE zcmm_3-size1,
+        descr_talla         TYPE zcmm_3-descripciontalla,
+        size2_atinn         TYPE zcmm_3-size2atinn,
+        size2               TYPE zcmm_3-size2,
+        marca               TYPE zcmm_3-brandid,
+        descr_marca         TYPE zcmm_3-brand_descr,
+        id_conv_cliente     TYPE zimm_3-idconvcliente,
+        tipo_conversion     TYPE zimm_3-tipoconversion,
+        color_cli_nom_car   TYPE zimm_3-colornombrecaract,
+        color_cli_vlr_car   TYPE zimm_3-colorvalorcaract,
+        color_cli_car       TYPE zimm_3-colorcaracteristica,
+        color_cli_descr_car TYPE zimm_3-colordescripcioncaract,
+        talla_cli_nom_car   TYPE zimm_3-tallanombrecaract,
+        talla_cli_vlr_car   TYPE zimm_3-tallavalorcaract,
+        talla_cli_car       TYPE zimm_3-tallacaracteristica,
+        talla_cli_descr_car TYPE zimm_3-talladescripcioncaract,
+      END OF gtp_info_materiales .
+    TYPES:
+      gtp_tt_info_materiales TYPE STANDARD TABLE OF gtp_info_materiales WITH NON-UNIQUE KEY material .
+
+    CONSTANTS gc_unu TYPE char03 VALUE 'UNU' ##NO_TEXT.
+    CONSTANTS gc_bag TYPE char03 VALUE 'BAG' ##NO_TEXT.
+    CONSTANTS gc_paa TYPE char03 VALUE 'PAA' ##NO_TEXT.
+    CONSTANTS gc_pap TYPE char03 VALUE 'PAP' ##NO_TEXT.
+    CONSTANTS gc_vg TYPE char02 VALUE 'VG' ##NO_TEXT.
+    CONSTANTS gc_g TYPE char01 VALUE 'G' ##NO_TEXT.
+    CONSTANTS gc_v TYPE char02 VALUE 'V' ##NO_TEXT.
+    CONSTANTS gc_t TYPE char02 VALUE 'T' ##NO_TEXT.
+
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Generar EAN128 a partir de los sigientes datos<br/>
+    "! <ol>
+    "! <li>Material</li>
+    "! <li>EAN13</li>
+    "! <li>Unidad de medida</li>
+    "! <li>Segmento</li>
+    "! </ol>
+    "! </p>
+    "! <strong>Identificador:</strong> NA
+    "! <br/>
+    "! <strong>Autor:</strong>
+    "! Sebastian Londono
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+    "!
+    "! @parameter i_matnr |
+    "! @parameter i_meins |
+    "! @parameter i_ean11 |
+    "! @parameter r_es_ean128 |
+    CLASS-METHODS generar_ean128
+      IMPORTING
+        VALUE(i_matnr)     TYPE matnr
+        !i_meins           TYPE meins
+        VALUE(i_ean11)     TYPE ean11 OPTIONAL
+        !i_segmento        TYPE string OPTIONAL
+      RETURNING
+        VALUE(r_es_ean128) TYPE gtp_ean128 .
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Obtener EAN13 a partir de EAN128<br/>
+    "! </p>
+    "! <strong>Identificador:</strong> NA
+    "! <br/>
+    "! <strong>Autor:</strong>
+    "! Sebastian Londono
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+    "!
+    "! @parameter i_ean128 | EAN 128
+    "! @parameter r_es_ean13 | Datos del EAN13
+    CLASS-METHODS obtener_ean13_desde_ean128
+      IMPORTING
+        !i_ean128         TYPE string
+      RETURNING
+        VALUE(r_es_ean13) TYPE gtp_ean11 .
+    CLASS-METHODS obtener_datos_material
+      IMPORTING
+        !i_ti_range_matnr      TYPE range_t_matnr
+        !ip_tipo               TYPE char2
+        !ip_spras              TYPE spras DEFAULT 'S'
+      RETURNING
+        VALUE(r_ti_materiales) TYPE zttmm_1 .
+    CLASS-METHODS obtener_variante_desde_matriz
+      IMPORTING
+        !i_ti_generico_matriz  TYPE zttmm_2
+      EXPORTING
+        !e_ti_mensajes_retorno TYPE bapiret2_t
+      RETURNING
+        VALUE(r_ti_variantes)  TYPE zttmm_1 .
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Obtener caracteristicas de los materiales segun el lote<br/>
+    "! <ol>
+    "! <li>Material</li>
+    "! <li>Centro</li>
+    "! <li>Unidad de medida</li>
+    "! <li>Lote</li>
+    "! <li>Caracteristicas</li>
+    "! </ol>
+    "! </p>
+    "! <strong>Identificador:</strong> NA
+    "! <br/>
+    "! <strong>Autor:</strong>
+    "! Santiago Giraldo
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 09.08.2021  \ S4DK900668 \ Santiago Giraldo \ Creacion Inicial \
+    "!
+    "! @parameter i_r_parametros | Caracteristicas del stock
+    "! @parameter i_ti_segmento | Material obtener caracteristica
+    "! @parameter r_ti_segmentacion | Tabla con caracteristicas del material
+    CLASS-METHODS obtener_segmentacion_stock
+      IMPORTING
+        !i_r_parametros          TYPE gtp_r_caracteristica OPTIONAL
+        !i_ti_segmento           TYPE gtp_ti_segmento
+      RETURNING
+        VALUE(r_ti_segmentacion) TYPE gtp_ti_segmentacion .
+    CLASS-METHODS obtener_caracteristicas
+      IMPORTING
+        !i_ti_range_matnr           TYPE range_t_matnr
+        !i_ti_range_atinn           TYPE zttmmr1032_2 OPTIONAL
+      RETURNING
+        VALUE(r_ti_caracteristicas) TYPE zttmmr1032_1 .
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Obtiene las características de talla, color, marca y algunos campos
+    "! específicos del material, adicionalmente si se pasa el id de conversión
+    "! de cliente trae los datos de talla color del cliente.<br/>
+    "! </p>
+    "! <strong>Identificador:</strong> NA
+    "! <br/>
+    "! <strong>Autor:</strong>
+    "! René Duque
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 01.10.2021  \ S4DK900668 \ Santiago Giraldo \ Creacion Inicial \
+    "!
+    "! @parameter i_ti_materiales | Tabla con los materiales
+    "! @parameter i_idioma | Idioma de consulta
+    "! @parameter i_id_conv_cliente | Id de conversión de cliente
+    "! @parameter r_ti_info_materiales | Información de los materiales
+    CLASS-METHODS obtener_talla_color
+      IMPORTING
+        !i_ti_materiales            TYPE gtp_tt_matnr OPTIONAL
+        !i_idioma                   TYPE sy-langu DEFAULT 'S'
+        !i_id_conv_cliente          TYPE fsh_sc_cid OPTIONAL
+      RETURNING
+        VALUE(r_ti_info_materiales) TYPE gtp_tt_info_materiales .
+    CLASS-METHODS: obtener_variante_matriz_diam
+      IMPORTING
+        !i_ti_generico_matriz  TYPE zttmm_2
+      EXPORTING
+        !e_ti_mensajes_retorno TYPE bapiret2_t
+      RETURNING
+        VALUE(r_ti_variantes)  TYPE zttmm_1,
+      obtener_caracteristica_cliente
+        IMPORTING
+          i_vkorg                TYPE likp-vkorg
+          i_vtweg                TYPE lips-vtweg
+          i_kunag                TYPE likp-kunag
+          i_matnr                TYPE mara-matnr
+          i_satnr                TYPE mara-satnr
+        EXPORTING
+          e_ti_caract_cliente_vv TYPE rihclobjdat_tab
+          e_ti_caract_cliente_gv TYPE rihclobjdat_tab
+          e_ti_caract_cliente_vg TYPE rihclobjdat_tab
+          e_ti_caract_cliente_gg TYPE rihclobjdat_tab.
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA gti_marm TYPE gtp_ti_marm .
+    CLASS-DATA:
+      gti_material TYPE STANDARD TABLE OF gtp_es_material .
+
+    CLASS-METHODS obtener_datos_segmentacion
+      IMPORTING
+        !i_r_parametros          TYPE gtp_r_caracteristica OPTIONAL
+        !i_ti_segmento           TYPE gtp_ti_segmento
+      RETURNING
+        VALUE(r_ti_segmentacion) TYPE gtp_ti_segmentacion .
+    CLASS-METHODS ean13_desde_ean128_general
+      IMPORTING
+        !i_ean128         TYPE string
+      RETURNING
+        VALUE(r_es_ean13) TYPE gtp_ean11 .
+    CLASS-METHODS ean13_desde_ean128_lote
+      IMPORTING
+        !i_ean128         TYPE string
+      RETURNING
+        VALUE(r_es_ean13) TYPE gtp_ean11 .
+    CLASS-METHODS leer_ean
+      IMPORTING
+        !i_ean11         TYPE mean-ean11
+      RETURNING
+        VALUE(r_ti_mean) LIKE gti_material .
+    CLASS-METHODS leer_um_material
+      IMPORTING
+        !i_variante   TYPE mara-matnr
+      RETURNING
+        VALUE(r_marm) TYPE gtp_ti_marm .
+ENDCLASS.
+
+
+
+CLASS ZCLMM_UTIL_ARTICULO IMPLEMENTATION.
+
+
+  METHOD generar_ean128.
+
+    CONSTANTS: c_c1(5) TYPE c VALUE '01',
+               c_c2(4) TYPE c VALUE '30',
+               c_c3    TYPE char2 VALUE '99'.
+
+    FIELD-SYMBOLS: <fs_es_marm>     TYPE marm.
+
+    DATA:
+      ean11       TYPE ean11,
+      ean14       TYPE ean11,
+      cantidad(3) TYPE n,
+      ean128(24)  TYPE c,
+      menge       TYPE ekpo-menge,
+      final_ean   TYPE string,
+      segmento    TYPE string.
+
+    CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+      EXPORTING
+        input        = i_matnr
+      IMPORTING
+        output       = i_matnr
+      EXCEPTIONS
+        length_error = 1
+        OTHERS       = 2.
+
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    "Recuperar EAN
+    IF i_ean11 IS INITIAL.
+      SELECT SINGLE ean11
+      FROM mean
+      WHERE matnr = @i_matnr
+      INTO @i_ean11.
+    ENDIF.
+
+    "Validamos si existe el registro del material en la MARM
+    IF NOT line_exists( gti_marm[ matnr = i_matnr  meinh = i_meins ] ).
+      "..Obtenemos la Unidad de Medida del material
+      SELECT *
+        FROM marm
+       WHERE matnr EQ @i_matnr
+       APPENDING TABLE @gti_marm.
+    ENDIF.
+
+    TRY.
+        "Obtenemos la Unidad de Medida del material
+        r_es_ean128-umrez       = gti_marm[ matnr = i_matnr meinh = i_meins ]-umrez.
+
+        LOOP AT gti_marm ASSIGNING <fs_es_marm> WHERE matnr EQ i_matnr.
+
+          "....Verificamos la unidad de medida
+          CASE <fs_es_marm>-meinh.
+            WHEN gc_unu OR gc_paa OR gc_pap.
+              CALL FUNCTION 'MD_CONVERT_MATERIAL_UNIT'
+                EXPORTING
+                  i_matnr              = i_matnr
+                  i_in_me              = gc_bag
+                  i_out_me             = <fs_es_marm>-meinh
+                  i_menge              = 1
+                IMPORTING
+                  e_menge              = menge
+                EXCEPTIONS
+                  error_in_application = 1
+                  error                = 2
+                  OTHERS               = 3.
+
+              CHECK sy-subrc EQ 0.
+
+          ENDCASE.
+        ENDLOOP.
+
+        IF menge EQ 0.
+          CALL FUNCTION 'MD_CONVERT_MATERIAL_UNIT'
+            EXPORTING
+              i_matnr              = i_matnr
+              i_in_me              = gc_bag
+              i_out_me             = i_meins
+              i_menge              = 1
+            IMPORTING
+              e_menge              = menge
+            EXCEPTIONS
+              error_in_application = 1
+              error                = 2
+              OTHERS               = 3.
+        ENDIF.
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+
+    " Obtener EAN 128.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = i_ean11
+      IMPORTING
+        output = ean11.
+
+    ean11 = ean11+5(13).
+    ean11 = ean11(12).
+    ean14 = |9{ ean11 }|.
+
+    CALL FUNCTION 'EAN_DETERMINE_CHECKDIGIT'
+      EXPORTING
+        i_ean = ean14
+      IMPORTING
+        e_ean = ean14.
+
+    IF i_segmento IS NOT INITIAL.
+      segmento = i_segmento(2).
+    ENDIF.
+
+    IF menge > 0.
+      WRITE menge TO cantidad NO-GROUPING DECIMALS 0.
+      SHIFT cantidad RIGHT DELETING TRAILING space.
+      OVERLAY cantidad WITH '00'.
+    ENDIF.
+
+    final_ean = COND #( WHEN segmento IS INITIAL OR segmento = 'CI'  THEN
+                            |{ c_c2 }{ cantidad+1(2) }|
+                        ELSE
+                            |{ c_c3 }{ segmento }|
+                      ).
+
+    ean128 = |{ c_c1 }{ ean14 }{ final_ean }|.
+
+    "Informacion del EAN128
+    r_es_ean128-ean128      = ean128.
+    TRY.
+        "Obtenemos la informacion de la cantidad por bols
+        r_es_ean128-um_alterna  = gc_bag.
+        r_es_ean128-umrez       = gti_marm[ matnr = i_matnr meinh = gc_bag ]-umrez.
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD obtener_ean13_desde_ean128.
+
+    IF strlen( i_ean128 ) <= 14.
+      r_es_ean13-mensaje = ''.
+    ENDIF.
+
+    IF i_ean128(1) = '1'.
+      r_es_ean13 = ean13_desde_ean128_lote( i_ean128 = i_ean128 ).
+    ELSE.
+      r_es_ean13 = ean13_desde_ean128_general( i_ean128 = i_ean128 ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_datos_material.
+
+    CHECK lines( i_ti_range_matnr ) > 0 AND ip_tipo <> space.
+
+*    SELECT a~satnr, a~matnr, a~mtart, a~matkl, a~meins, a~spart, a~attyp, a~inhme, a~inhal,
+*           d~maktx, d~maktg,
+*           a~color_atinn, a~size1_atinn, a~color, a~size1,
+*           b~atwtb AS des_color, c~atwtb AS des_talla,
+*           a~brand_id, a~bismt, a~mtpos_mara, a~fsh_mg_at1, a~fsh_mg_at2, a~fsh_mg_at3, a~fashgrd
+*    FROM @i_ti_range_matnr AS m
+*      INNER JOIN mara AS a ON m~low = a~matnr
+*      LEFT JOIN wrf_charvalt AS b ON a~color_atinn = b~atinn AND a~color = b~atwrt AND b~spras = @ip_spras
+*      LEFT JOIN wrf_charvalt AS c ON a~size1_atinn = c~atinn AND a~size1 = c~atwrt AND c~spras = @ip_spras
+*      LEFT JOIN makt AS d ON d~matnr = a~matnr
+**    WHERE ( ( @ip_tipo = @gc_g  AND a~matnr IN @i_ti_range_matnr AND a~attyp = '01' )   " Info de Genericos
+**       OR   ( @ip_tipo = @gc_v  AND a~matnr IN @i_ti_range_matnr AND a~attyp = '02' )   " Info de Variantes
+**       OR   ( @ip_tipo = @gc_t  AND a~matnr IN @i_ti_range_matnr )                      " Info de Todos
+**       OR   ( @ip_tipo = @gc_vg AND a~satnr IN @i_ti_range_matnr AND a~attyp = '02' ) ) " Info de Variantes del Generico
+**      AND      d~spras = @ip_spras
+*    WHERE ( ( @ip_tipo = @gc_g  AND a~attyp = '01' )   " Info de Genericos
+*       OR   ( @ip_tipo = @gc_v  AND a~attyp = '02' )   " Info de Variantes
+*       OR   ( @ip_tipo = @gc_t  )                      " Info de Todos
+*       OR   ( @ip_tipo = @gc_vg AND a~attyp = '02' ) ) " Info de Variantes del Generico
+*      AND      d~spras = @ip_spras
+*
+*    INTO TABLE @r_ti_materiales.
+
+    CASE ip_tipo.
+      WHEN gc_vg.
+
+        SELECT a~satnr, a~matnr, a~mtart, a~matkl, a~meins, a~spart, a~attyp, a~inhme, a~inhal,
+           d~maktx, d~maktg,
+           a~color_atinn, a~size1_atinn, a~color, a~size1,
+           b~atwtb AS des_color, c~atwtb AS des_talla,
+           a~brand_id, a~bismt, a~mtpos_mara, a~fsh_mg_at1, a~fsh_mg_at2, a~fsh_mg_at3, a~fashgrd, a~free_char
+        FROM @i_ti_range_matnr AS m
+          INNER JOIN mara AS a ON m~low = a~satnr
+          LEFT JOIN wrf_charvalt AS b ON a~color_atinn = b~atinn AND a~color = b~atwrt AND b~spras = @ip_spras
+          LEFT JOIN wrf_charvalt AS c ON a~size1_atinn = c~atinn AND a~size1 = c~atwrt AND c~spras = @ip_spras
+          LEFT JOIN makt AS d ON d~matnr = a~matnr
+        WHERE ( ( @ip_tipo = @gc_g  AND ( a~attyp = '01' OR a~attyp = '00' ) )   " Info de Genericos
+           OR   ( @ip_tipo = @gc_v  AND a~attyp = '02' )   " Info de Variantes
+           OR   ( @ip_tipo = @gc_t  )                      " Info de Todos
+           OR   ( @ip_tipo = @gc_vg AND a~attyp = '02' ) ) " Info de Variantes del Generico
+          AND      d~spras = @ip_spras
+        INTO TABLE @r_ti_materiales.
+
+      WHEN OTHERS.
+
+        SELECT a~satnr, a~matnr, a~mtart, a~matkl, a~meins, a~spart, a~attyp, a~inhme, a~inhal,
+           d~maktx, d~maktg,
+           a~color_atinn, a~size1_atinn, a~color, a~size1,
+           b~atwtb AS des_color, c~atwtb AS des_talla,
+           a~brand_id, a~bismt, a~mtpos_mara, a~fsh_mg_at1, a~fsh_mg_at2, a~fsh_mg_at3, a~fashgrd, a~free_char
+        FROM @i_ti_range_matnr AS m
+          INNER JOIN mara AS a ON m~low = a~matnr
+          LEFT JOIN wrf_charvalt AS b ON a~color_atinn = b~atinn AND a~color = b~atwrt AND b~spras = @ip_spras
+          LEFT JOIN wrf_charvalt AS c ON a~size1_atinn = c~atinn AND a~size1 = c~atwrt AND c~spras = @ip_spras
+          LEFT JOIN makt AS d ON d~matnr = a~matnr
+*NOTA: lo siguiente se agrega debido a que al material tener varios idiomas duplica los registros consultados
+         WHERE d~spras = @ip_spras "Adicion 13May2025 Sebastian Restrepo Villa
+*        WHERE ( ( @ip_tipo = @gc_g  AND a~matnr IN @i_ti_range_matnr AND a~attyp = '01' )   " Info de Genericos
+*           OR   ( @ip_tipo = @gc_v  AND a~matnr IN @i_ti_range_matnr AND a~attyp = '02' )   " Info de Variantes
+*           OR   ( @ip_tipo = @gc_t  AND a~matnr IN @i_ti_range_matnr )                      " Info de Todos
+*           OR   ( @ip_tipo = @gc_vg AND a~satnr IN @i_ti_range_matnr AND a~attyp = '02' ) ) " Info de Variantes del Generico
+*          AND      d~spras = @ip_spras
+*        WHERE ( ( @ip_tipo = @gc_g  AND ( a~attyp = '01' or a~attyp = '00' ) )   " Info de Genericos
+*           OR   ( @ip_tipo = @gc_v  AND a~attyp = '02' )   " Info de Variantes
+*           OR   ( @ip_tipo = @gc_t  )                      " Info de Todos
+*           OR   ( @ip_tipo = @gc_vg AND a~attyp = '02' ) ) " Info de Variantes del Generico
+*          AND      d~spras = @ip_spras
+
+        INTO TABLE @r_ti_materiales.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_variante_desde_matriz.
+
+    DATA: r_matnr TYPE range_t_matnr.
+
+    r_matnr = VALUE #( FOR s_generico IN i_ti_generico_matriz WHERE ( satnr NE space )
+                            ( sign = 'I' option = 'EQ' low = s_generico-satnr ) ).
+
+    DATA(ti_variantes) = obtener_datos_material( i_ti_range_matnr = r_matnr ip_tipo = 'VG' ).
+
+    LOOP AT i_ti_generico_matriz INTO DATA(es_generico).
+
+      DATA(long_matriz) = strlen( es_generico-matriz ).
+
+      CASE long_matriz.
+        WHEN 6.
+*       Solo Color
+          READ TABLE ti_variantes INTO DATA(es_variantes) WITH KEY satnr = es_generico-satnr color = es_generico-matriz(6) size1 = space.
+          IF sy-subrc = 0.
+            APPEND es_variantes TO r_ti_variantes.
+            CLEAR: es_variantes.
+          ELSE.
+            e_ti_mensajes_retorno = VALUE #( ( id = 'ZMM01' number = '135' type = 'E' message_v1 = es_generico-satnr
+                                               message_v2 = es_generico-matriz(6) ) ).
+          ENDIF.
+
+        WHEN 8.
+*       Talla y Color
+          READ TABLE ti_variantes INTO es_variantes WITH KEY satnr = es_generico-satnr color = es_generico-matriz+2(6) size1 = es_generico-matriz(2).
+          IF sy-subrc = 0.
+            APPEND es_variantes TO r_ti_variantes.
+            CLEAR: es_variantes.
+          ELSE.
+            e_ti_mensajes_retorno = VALUE #( ( id = 'ZMM01' number = '135' type = 'E' message_v1 = es_generico-satnr
+                                               message_v2 = es_generico-matriz(6) message_v3 = es_generico-matriz(2) ) ).
+          ENDIF.
+
+      ENDCASE.
+
+    ENDLOOP.
+
+    IF r_ti_variantes IS INITIAL.
+      e_ti_mensajes_retorno = VALUE #( ( id = '5@' number = '013' type = 'E' ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_segmentacion_stock.
+
+    r_ti_segmentacion = obtener_datos_segmentacion( i_r_parametros = i_r_parametros i_ti_segmento = i_ti_segmento ).
+
+    LOOP AT r_ti_segmentacion ASSIGNING FIELD-SYMBOL(<fs_segmentacion>).
+      TRY.
+          <fs_segmentacion>-valor = <fs_segmentacion>-valor+<fs_segmentacion>-sgt_foff(<fs_segmentacion>-sgt_flen).
+        CATCH cx_sy_range_out_of_bounds.
+          DELETE r_ti_segmentacion INDEX sy-tabix.
+      ENDTRY.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_datos_segmentacion.
+
+    SELECT marc~matnr, marc~werks, mcha~charg, cats~sgt_csgr, cats~sgt_cnrc, cats~sgt_fnam, cats~sgt_foff, cats~sgt_flen, mcha~sgt_scat AS valor
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_segmentacion
+    FROM marc
+    INNER JOIN sgt_cats AS cats ON cats~sgt_csgr EQ marc~sgt_covs AND cats~sgt_appl EQ 'S'
+    INNER JOIN mcha ON marc~matnr EQ mcha~matnr AND marc~werks EQ mcha~werks
+    FOR ALL ENTRIES IN @i_ti_segmento
+    WHERE marc~matnr    EQ @i_ti_segmento-matnr
+      AND marc~werks    EQ @i_ti_segmento-werks
+      AND cats~sgt_fnam IN @i_r_parametros
+      AND mcha~charg    EQ @i_ti_segmento-charg.
+
+  ENDMETHOD.
+
+
+  METHOD ean13_desde_ean128_general.
+
+    FIELD-SYMBOLS: <fs_es_marm>     TYPE marm.
+
+    DATA: ean11    TYPE mean-ean11.
+    TRY.
+        "Ean 11
+        r_es_ean13-ean11 = i_ean128+3(12).
+      CATCH cx_sy_range_out_of_bounds.
+        RETURN.
+    ENDTRY.
+    "...Obtenemos el digito de chequeo
+    CALL FUNCTION 'EAN_DETERMINE_CHECKDIGIT'
+      EXPORTING
+        i_ean = r_es_ean13-ean11
+      IMPORTING
+        e_ean = r_es_ean13-ean11.
+
+    "Verificamos si existe EAN13
+    CHECK r_es_ean13-ean11 IS NOT INITIAL.
+
+    ean11 = r_es_ean13-ean11.
+    SHIFT ean11 LEFT DELETING LEADING '0'.
+
+    IF NOT line_exists( gti_material[ ean11 = ean11 ] ).
+      "..Obtenemos la informaicon del EAN
+      APPEND LINES OF leer_ean( i_ean11 = ean11 ) TO gti_material.
+    ENDIF.
+
+    "Verificamos si existe informacion del EAN
+    CHECK gti_material IS NOT INITIAL.
+
+    TRY.
+
+        DATA(l_es_material) = gti_material[ ean11 = ean11 ].
+
+        r_es_ean13 = VALUE #( ean11 = ean11 matnr = l_es_material-material variante  = l_es_material-variante
+                              segmento = COND #( WHEN strlen( i_ean128 ) >= 20 AND i_ean128+16(2) = '99' THEN
+                                                    i_ean128+18(2)
+                                                 ELSE
+                                                  space )
+                             ).
+
+        "....Validamos si existe el registro del material en la MARM
+        IF NOT line_exists( gti_marm[ matnr = l_es_material-variante meinh = gc_bag ] ) .
+          APPEND LINES OF leer_um_material( l_es_material-variante ) TO gti_marm.
+        ENDIF.
+
+        "...Obtenemos la Unidad de Medida alternativa del material
+        ASSIGN gti_marm[ matnr = l_es_material-variante meinh = gc_bag ] TO <fs_es_marm>.
+
+        IF sy-subrc EQ 0.
+          r_es_ean13-um_alterna = <fs_es_marm>-meinh. "Unidad de medida alternativa(MARM_MEINH)
+          r_es_ean13-umrez      = <fs_es_marm>-umrez. "Cantidad
+        ENDIF.
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD ean13_desde_ean128_lote.
+
+    DATA: material        TYPE matnr18,
+          longitud_ean128 TYPE i.
+
+
+    SPLIT i_ean128 AT ' ' INTO DATA(material_18) DATA(lote).
+
+    material = material_18+1.
+
+    material = |{ material ALPHA = IN }|.
+
+    SELECT SINGLE matnr, ean11, satnr, attyp FROM mara
+    WHERE matnr = @material
+    INTO @DATA(es_material).
+
+    CHECK sy-subrc IS INITIAL.
+
+    r_es_ean13 = VALUE #( ean11    = es_material-ean11
+                          matnr    = COND #( WHEN es_material-attyp EQ '02' THEN
+                                                es_material-satnr
+                                            ELSE
+                                                es_material-matnr )
+                          variante = COND #( WHEN es_material-attyp EQ '02' THEN
+                                                es_material-matnr
+                                             ELSE
+                                                space )
+                          segmento = space lote = lote+1 ).
+*    material = i_ean128(10).
+*    longitud_ean128 = strlen( i_ean128 ).
+*
+*    CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+*      EXPORTING
+*        input        = material
+*      IMPORTING
+*        output       = material
+*      EXCEPTIONS
+*        length_error = 1
+*        OTHERS       = 2.
+*    IF sy-subrc <> 0.
+*      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+*        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+*    ENDIF.
+*
+*    r_es_ean13-matnr = material.
+*
+*    "Verificamos si existe EAN13
+*    CHECK r_es_ean13-matnr IS NOT INITIAL.
+*
+*    material = r_es_ean13-matnr.
+*
+*    SELECT SINGLE matnr FROM mara
+*    WHERE matnr = @material
+*    INTO @material.
+*
+*    "Verificamos si existe informacion del EAN
+*    CHECK sy-subrc IS INITIAL.
+*
+*    TRY.
+*        longitud_ean128 = longitud_ean128 - 12.
+*        r_es_ean13 = VALUE #( ean11 = space matnr = material variante  = space
+*                              segmento = space lote = lote+1 "i_ean128+11(longitud_ean128)
+*                            ).
+*
+*        "....Validamos si existe el registro del material en la MARM
+*        IF NOT line_exists( gti_marm[ matnr = material meinh = gc_bag ] ) .
+*          APPEND LINES OF leer_um_material( material ) TO gti_marm.
+*        ENDIF.
+*
+*        "...Obtenemos la Unidad de Medida alternativa del material
+*        ASSIGN gti_marm[ matnr = material meinh = gc_bag ] TO FIELD-SYMBOL(<fs_es_marm>).
+*
+*        IF sy-subrc EQ 0.
+*          r_es_ean13-um_alterna = <fs_es_marm>-meinh. "Unidad de medida alternativa(MARM_MEINH)
+*          r_es_ean13-umrez      = <fs_es_marm>-umrez. "Cantidad
+*        ENDIF.
+*
+*      CATCH cx_sy_itab_line_not_found.
+*
+*    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD leer_ean.
+    SELECT mg~satnr AS material, mg~matnr AS variante, ean11
+       FROM mean
+       INNER JOIN mgw_generic_var AS mg
+       ON mg~matnr = mean~matnr
+       WHERE ean11 EQ @i_ean11
+       APPENDING TABLE @r_ti_mean.
+
+  ENDMETHOD.
+
+
+  METHOD leer_um_material.
+
+    SELECT *
+       FROM marm
+       WHERE matnr EQ @i_variante
+       APPENDING TABLE @r_marm.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_caracteristicas.
+
+    TYPES ti_range_cuobn TYPE RANGE OF cuobn.
+
+    CHECK lines( i_ti_range_matnr ) GT 0.
+
+*...Se convierte el rango de materiales al tipo de dato CUOBN.
+    DATA(ti_cuobn) = CORRESPONDING ti_range_cuobn( i_ti_range_matnr ).
+
+    SELECT a~objek, b~atinn, b~klart, b~atwrt, c~atwtb
+      FROM inob AS a
+     INNER JOIN ausp AS b
+        ON a~cuobj EQ b~objek
+     INNER JOIN wrf_charvalt AS c
+        ON b~atinn EQ c~atinn
+       AND b~atwrt EQ c~atwrt
+      INTO TABLE @r_ti_caracteristicas
+     WHERE a~objek IN @ti_cuobn
+       AND b~atinn IN @i_ti_range_atinn
+       AND c~spras EQ @sy-langu.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_talla_color.
+
+    DATA r_material         TYPE RANGE OF matnr.
+    DATA r_id_conv_cliente  TYPE RANGE OF fsh_sc_vctp2-fsh_sc_cid.
+
+
+    r_material = VALUE #( FOR <fs_material> IN i_ti_materiales
+                          sign   = 'I'
+                          option = 'EQ'
+                          (  low = <fs_material>-material )
+                        ).
+******************************************************************************************************************************
+*NOTA:  Esta es la version anterior que usaba la CDS el problema es que esa CDS al cargarse consumia mas
+*       de 6gb de memoria de base de datos por ende se cambia la logoca para usar los datos directamente desde las tablas
+******************************************************************************************************************************
+    IF 'perro' = 'gato'.
+
+      "Verificar el id de conversión de cliente
+      "Si tiene dato, busca en la asociación para los datos de cliente,
+      "en caso contrario solo busca los datos del material
+      IF i_id_conv_cliente <> space.
+
+        SELECT FROM zcmm_3
+        FIELDS matnr            AS material,
+               descripcion      AS descr_material,
+               mtart            AS tipo_material,
+               matkl            AS gr_articulos,
+               meins            AS uni_med_base,
+               ean11            AS cod_ean11,
+               satnr            AS mat_generico,
+               attyp            AS categoria_mat,
+               inhal            AS contenido_neto,
+               idconvmaterial   AS id_conv_material,
+               coloratinn       AS color_atinn,
+               color            AS color,
+               descripcioncolor AS descr_color,
+               size1atinn       AS talla_atinn,
+               size1            AS talla,
+               descripciontalla AS descr_talla,
+               size2atinn       AS size2_atinn,
+               size2            AS size2,
+               brandid          AS marca,
+               brand_descr      AS descr_marca,
+               \_caractcliente-idconvcliente          AS id_conv_cliente,
+               \_caractcliente-tipoconversion         AS tipo_conversion,
+               \_caractcliente-colornombrecaract      AS color_cli_nom_car,
+               \_caractcliente-colorvalorcaract       AS color_cli_vlr_car,
+               \_caractcliente-colorcaracteristica    AS color_cli_car,
+               \_caractcliente-colordescripcioncaract AS color_cli_descr_car,
+               \_caractcliente-tallanombrecaract      AS talla_cli_nom_car,
+               \_caractcliente-tallavalorcaract       AS talla_cli_vlr_car,
+               \_caractcliente-tallacaracteristica    AS talla_cli_car,
+               \_caractcliente-talladescripcioncaract AS talla_cli_descr_car
+         WHERE matnr IN @r_material
+           AND idioma = @i_idioma
+           AND \_caractcliente-idconvcliente = @i_id_conv_cliente
+         ORDER BY material
+          INTO TABLE @r_ti_info_materiales.
+
+      ELSE.
+
+        SELECT FROM zcmm_3
+        FIELDS matnr            AS material,
+               descripcion      AS descr_material,
+               mtart            AS tipo_material,
+               matkl            AS gr_articulos,
+               meins            AS uni_med_base,
+               ean11            AS cod_ean11,
+               satnr            AS mat_generico,
+               attyp            AS categoria_mat,
+               inhal            AS contenido_neto,
+               idconvmaterial   AS id_conv_material,
+               coloratinn       AS color_atinn,
+               color            AS color,
+               descripcioncolor AS descr_color,
+               size1atinn       AS talla_atinn,
+               size1            AS talla,
+               descripciontalla AS descr_talla,
+               size2atinn       AS size2_atinn,
+               size2            AS size2,
+               brandid          AS marca,
+               brand_descr      AS descr_marca
+         WHERE matnr IN @r_material
+           AND idioma = @i_idioma
+         ORDER BY material
+          INTO TABLE @r_ti_info_materiales.
+
+      ENDIF.
+    ELSE.
+
+      IF i_id_conv_cliente IS INITIAL .
+        SELECT mara~matnr               AS material,
+               makt~maktx               AS descr_material,
+               mara~mtart               AS tipo_material,
+               mara~matkl               AS gr_articulos,
+               mara~meins               AS uni_med_base,
+               ean~ean11                AS cod_ean11,
+               mara~satnr               AS mat_generico,
+               mara~attyp               AS categoria_mat,
+               mara~inhal               AS contenido_neto,
+               mara~fsh_sc_mid          AS id_conv_material,
+               mara~color_atinn         AS color_atinn,
+               mara~color               AS color,
+               color~atwtb              AS descr_color,
+               mara~size1_atinn         AS talla_atinn,
+               mara~size1               AS talla,
+               talla~atwtb              AS descr_talla,
+               mara~size2_atinn         AS size2_atinn,
+               mara~size2               AS size2,
+               mara~brand_id            AS marca,
+               textbrands~brand_descr   AS descr_marca
+
+*             Conversion~fsh_sc_cid           as id_conv_cliente,
+*             Conversion~fsh_sc_vctyp         as tipo_conversion,
+*             CaractColorCliente~fsh_sc_bezg  as color_cli_nom_car,
+*             CaractColorCliente~fsh_sc_stxt  as color_cli_vlr_car,
+**             CaractColorCliente~fsh_sc_entx8 as ColorCaracteristica8,
+*             CaractColorCliente~fsh_sc_entx  as color_cli_car,
+*             CaractColorCliente~fsh_sc_note  as color_cli_descr_car,
+*             CaractTallaCliente~fsh_sc_bezg  as talla_cli_nom_car,
+*             CaractTallaCliente~fsh_sc_stxt  as talla_cli_vlr_car,
+**             CaractColorCliente~fsh_sc_entx8 as TallaCaracteristica8,
+*             CaractTallaCliente~fsh_sc_entx  as talla_cli_car,
+*             CaractTallaCliente~fsh_sc_note  as talla_cli_descr_car
+
+*             makt~spras               AS idioma,
+*             mara~ersda               AS ersda,
+*             mara~mbrsh               AS mbrsh,
+*             mara~bismt               AS bismt,
+*             ean~eantp                AS meantp,
+*             ean~hpean                AS mhpean,
+*             mara~volum               AS volum,
+*             mara~voleh               AS voleh,
+*             mara~ean11               AS ean11,
+*             mara~laeda               AS laeda,
+*             mara~sgt_csgr            AS sgt_csgr,
+*             mara~sgt_covsa           AS sgt_covsa,
+*             mara~brgew               AS brgew,
+*             mara~gewei               AS gewei,
+*             mara~laeng               AS laeng,
+*             mara~breit               AS breit,
+*             mara~hoehe               AS hoehe,
+*             mara~meabm               AS meabm,
+*             mara~taklv               AS taklv,
+*             mara~inhme               AS inhme,
+*             mara~mtpos_mara          AS mtposmara,
+*             mara~mhdrz               AS mhdrz,
+*             mara~mstae               AS mstae,
+*             mara~fsh_mg_at1          AS fshmgat1,
+*             attrib1~attribute1_text  AS attrib1text,
+*             mara~fsh_mg_at2          AS fshmgat2,
+*             attrib2~attribute2_text  AS attrib2text,
+*             mara~fsh_mg_at3          AS fshmgat3,
+*             attrib3~attribute3_text  AS attrib3text,
+*             mara~fashgrd             AS fashgrd,
+*             textfashgrd~vtext        AS fashgrd_text,
+*             textgrart~wgbez          AS descrgrarticulo,
+*             caractdefus~srtpo        AS posclasificacion,
+*             caractdefus~cstfld01     AS sizeforcarelabel,
+
+             FROM mara
+            INNER JOIN      makt                                    ON  makt~matnr = mara~matnr
+                                                                    AND makt~spras = @i_idioma
+
+            LEFT OUTER JOIN wrf_charvalt     AS color               ON  color~atinn = mara~color_atinn
+                                                                    AND color~atwrt = mara~color
+                                                                    AND color~spras = @i_idioma
+
+            LEFT OUTER JOIN wrf_charvalt     AS talla               ON  talla~atinn = mara~size1_atinn
+                                                                    AND talla~atwrt = mara~size1
+                                                                    AND talla~spras = @i_idioma
+
+*          LEFT OUTER JOIN wrf_charval      AS caractdefus         ON  caractdefus~atinn = mara~size1_atinn
+*                                                                  AND caractdefus~atwrt = mara~size1
+
+            LEFT OUTER JOIN wrf_brands_t     AS textbrands          ON  textbrands~brand_id = mara~brand_id
+                                                                    AND textbrands~language = @i_idioma
+
+*          LEFT OUTER JOIN t6wfgt           AS textfashgrd         ON  textfashgrd~fashgrd = mara~fashgrd
+*                                                                  AND textfashgrd~spras   = @i_idioma
+
+*          LEFT OUTER JOIN fsh_mg_attrib1_t AS attrib1             ON  attrib1~attribute_1 = mara~fsh_mg_at1
+*                                                                  AND attrib1~spras       = @i_idioma
+*
+*          LEFT OUTER JOIN fsh_mg_attrib2_t AS attrib2             ON  attrib2~attribute_2 = mara~fsh_mg_at2
+*                                                                  AND attrib2~spras       = @i_idioma
+*
+*          LEFT OUTER JOIN fsh_mg_attrib3_t AS attrib3             ON  attrib3~attribute_3 = mara~fsh_mg_at3
+*                                                                  AND attrib3~spras       = @i_idioma
+
+            LEFT OUTER JOIN mean             AS ean                 ON  ean~matnr = mara~matnr
+                                                                    AND ean~meinh = mara~meins
+                                                                    AND ean~hpean = 'X'
+
+*          LEFT OUTER JOIN t023t            AS textgrart           ON  textgrart~spras = @i_idioma
+*                                                                  AND textgrart~matkl = mara~matkl
+
+           WHERE mara~matnr               IN @r_material
+             AND makt~spras               EQ @i_idioma
+            INTO TABLE @r_ti_info_materiales.
+      ELSE.
+        SELECT mara~matnr               AS material,
+               makt~maktx               AS descr_material,
+               mara~mtart               AS tipo_material,
+               mara~matkl               AS gr_articulos,
+               mara~meins               AS uni_med_base,
+               ean~ean11                AS cod_ean11,
+               mara~satnr               AS mat_generico,
+               mara~attyp               AS categoria_mat,
+               mara~inhal               AS contenido_neto,
+               mara~fsh_sc_mid          AS id_conv_material,
+               mara~color_atinn         AS color_atinn,
+               mara~color               AS color,
+               color~atwtb              AS descr_color,
+               mara~size1_atinn         AS talla_atinn,
+               mara~size1               AS talla,
+               talla~atwtb              AS descr_talla,
+               mara~size2_atinn         AS size2_atinn,
+               mara~size2               AS size2,
+               mara~brand_id            AS marca,
+               textbrands~brand_descr   AS descr_marca,
+
+               conversion~fsh_sc_cid           AS id_conv_cliente,
+               conversion~fsh_sc_vctyp         AS tipo_conversion,
+               caractcolorcliente~fsh_sc_bezg  AS color_cli_nom_car,
+               caractcolorcliente~fsh_sc_stxt  AS color_cli_vlr_car,
+*             CaractColorCliente~fsh_sc_entx8 as ColorCaracteristica8,
+               caractcolorcliente~fsh_sc_entx  AS color_cli_car,
+               caractcolorcliente~fsh_sc_note  AS color_cli_descr_car,
+               caracttallacliente~fsh_sc_bezg  AS talla_cli_nom_car,
+               caracttallacliente~fsh_sc_stxt  AS talla_cli_vlr_car,
+*             CaractColorCliente~fsh_sc_entx8 as TallaCaracteristica8,
+               caracttallacliente~fsh_sc_entx  AS talla_cli_car,
+               caracttallacliente~fsh_sc_note  AS talla_cli_descr_car
+
+*             makt~spras               AS idioma,
+*             mara~ersda               AS ersda,
+*             mara~mbrsh               AS mbrsh,
+*             mara~bismt               AS bismt,
+*             ean~eantp                AS meantp,
+*             ean~hpean                AS mhpean,
+*             mara~volum               AS volum,
+*             mara~voleh               AS voleh,
+*             mara~ean11               AS ean11,
+*             mara~laeda               AS laeda,
+*             mara~sgt_csgr            AS sgt_csgr,
+*             mara~sgt_covsa           AS sgt_covsa,
+*             mara~brgew               AS brgew,
+*             mara~gewei               AS gewei,
+*             mara~laeng               AS laeng,
+*             mara~breit               AS breit,
+*             mara~hoehe               AS hoehe,
+*             mara~meabm               AS meabm,
+*             mara~taklv               AS taklv,
+*             mara~inhme               AS inhme,
+*             mara~mtpos_mara          AS mtposmara,
+*             mara~mhdrz               AS mhdrz,
+*             mara~mstae               AS mstae,
+*             mara~fsh_mg_at1          AS fshmgat1,
+*             attrib1~attribute1_text  AS attrib1text,
+*             mara~fsh_mg_at2          AS fshmgat2,
+*             attrib2~attribute2_text  AS attrib2text,
+*             mara~fsh_mg_at3          AS fshmgat3,
+*             attrib3~attribute3_text  AS attrib3text,
+*             mara~fashgrd             AS fashgrd,
+*             textfashgrd~vtext        AS fashgrd_text,
+*             textgrart~wgbez          AS descrgrarticulo,
+*             caractdefus~srtpo        AS posclasificacion,
+*             caractdefus~cstfld01     AS sizeforcarelabel,
+
+             FROM mara
+            INNER JOIN      makt                                    ON  makt~matnr = mara~matnr
+                                                                    AND makt~spras = @i_idioma
+
+            LEFT OUTER JOIN wrf_charvalt     AS color               ON  color~atinn = mara~color_atinn
+                                                                    AND color~atwrt = mara~color
+                                                                    AND color~spras = @i_idioma
+
+            LEFT OUTER JOIN wrf_charvalt     AS talla               ON  talla~atinn = mara~size1_atinn
+                                                                    AND talla~atwrt = mara~size1
+                                                                    AND talla~spras = @i_idioma
+
+*          LEFT OUTER JOIN wrf_charval      AS caractdefus         ON  caractdefus~atinn = mara~size1_atinn
+*                                                                  AND caractdefus~atwrt = mara~size1
+
+            LEFT OUTER JOIN wrf_brands_t     AS textbrands          ON  textbrands~brand_id = mara~brand_id
+                                                                    AND textbrands~language = @i_idioma
+
+*          LEFT OUTER JOIN t6wfgt           AS textfashgrd         ON  textfashgrd~fashgrd = mara~fashgrd
+*                                                                  AND textfashgrd~spras   = @i_idioma
+
+*          LEFT OUTER JOIN fsh_mg_attrib1_t AS attrib1             ON  attrib1~attribute_1 = mara~fsh_mg_at1
+*                                                                  AND attrib1~spras       = @i_idioma
+*
+*          LEFT OUTER JOIN fsh_mg_attrib2_t AS attrib2             ON  attrib2~attribute_2 = mara~fsh_mg_at2
+*                                                                  AND attrib2~spras       = @i_idioma
+*
+*          LEFT OUTER JOIN fsh_mg_attrib3_t AS attrib3             ON  attrib3~attribute_3 = mara~fsh_mg_at3
+*                                                                  AND attrib3~spras       = @i_idioma
+
+            LEFT OUTER JOIN mean             AS ean                 ON  ean~matnr = mara~matnr
+                                                                    AND ean~meinh = mara~meins
+                                                                    AND ean~hpean = 'X'
+
+*          LEFT OUTER JOIN t023t            AS textgrart           ON  textgrart~spras = @i_idioma
+*                                                                  AND textgrart~matkl = mara~matkl
+
+            LEFT OUTER JOIN fsh_sc_vctp2     AS conversion          ON  conversion~fsh_sc_mid            = mara~fsh_sc_mid
+
+            LEFT OUTER JOIN fsh_sc_vconv     AS caractcolorcliente  ON  caractcolorcliente~fsh_sc_vctyp  = conversion~fsh_sc_vctyp
+                                                                    AND caractcolorcliente~fsh_sc_bezg   = mara~color_atinn
+                                                                    AND caractcolorcliente~fsh_sc_stxt   = mara~color
+
+            LEFT OUTER JOIN fsh_sc_vconv     AS caracttallacliente  ON  caracttallacliente~fsh_sc_vctyp  = conversion~fsh_sc_vctyp
+                                                                    AND caracttallacliente~fsh_sc_bezg   = mara~size1_atinn
+                                                                    AND caracttallacliente~fsh_sc_stxt   = mara~size1
+
+           WHERE mara~matnr               IN @r_material
+             AND makt~spras               EQ @i_idioma
+             AND conversion~fsh_sc_cid    EQ @i_id_conv_cliente
+            INTO TABLE @r_ti_info_materiales.
+      ENDIF.
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD obtener_variante_matriz_diam.
+
+    DATA: r_matnr TYPE range_t_matnr.
+
+    r_matnr = VALUE #( FOR s_generico IN i_ti_generico_matriz WHERE ( satnr NE space )
+                            ( sign = 'I' option = 'EQ' low = s_generico-satnr ) ).
+
+    DATA(ti_variantes) = obtener_datos_material( i_ti_range_matnr = r_matnr ip_tipo = 'VG' ).
+
+    LOOP AT i_ti_generico_matriz INTO DATA(es_generico).
+
+      DATA(long_matriz) = strlen( es_generico-matriz ).
+
+      CASE long_matriz.
+        WHEN 6.
+*       Solo Color
+*          READ TABLE ti_variantes INTO DATA(es_variantes) WITH KEY satnr = es_generico-satnr color = es_generico-matriz(6) size1 = space.
+          LOOP AT ti_variantes INTO DATA(es_variantes) WHERE satnr = es_generico-satnr.
+            APPEND es_variantes TO r_ti_variantes.
+          ENDLOOP.
+
+          IF sy-subrc <> 0.
+            e_ti_mensajes_retorno = VALUE #( ( id = 'ZMM01' number = '135' type = 'E' message_v1 = es_generico-satnr
+                                                 message_v2 = es_generico-matriz(6) ) ).
+          ENDIF.
+
+        WHEN 8.
+*       Talla y Color
+          READ TABLE ti_variantes INTO es_variantes WITH KEY satnr = es_generico-satnr color = es_generico-matriz+2(6) size1 = es_generico-matriz(2).
+          IF sy-subrc = 0.
+            APPEND es_variantes TO r_ti_variantes.
+            CLEAR: es_variantes.
+          ELSE.
+            e_ti_mensajes_retorno = VALUE #( ( id = 'ZMM01' number = '135' type = 'E' message_v1 = es_generico-satnr
+                                               message_v2 = es_generico-matriz(6) message_v3 = es_generico-matriz(2) ) ).
+          ENDIF.
+
+      ENDCASE.
+
+    ENDLOOP.
+
+    IF r_ti_variantes IS INITIAL.
+      e_ti_mensajes_retorno = VALUE #( ( id = '5@' number = '013' type = 'E' ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_caracteristica_cliente.
+
+    CONSTANTS: c_variante  TYPE klah-class VALUE 'OPS_VARIANTE',
+               c_generico  TYPE klah-class VALUE 'OPS_GENERICO',
+               c_clase_mov TYPE klah-klart VALUE '052'.
+
+    DATA: ti_class TYPE STANDARD TABLE OF sclass,
+          objeto   TYPE ausp-objek.
+
+    CLEAR: e_ti_caract_cliente_vv,
+           e_ti_caract_cliente_gv,
+           e_ti_caract_cliente_vg,
+           e_ti_caract_cliente_gg.
+
+    CHECK i_vkorg IS NOT INITIAL AND i_vtweg IS NOT INITIAL AND i_kunag IS NOT INITIAL AND i_matnr IS NOT INITIAL.
+
+    objeto = |{ i_vkorg }{ i_vtweg }{ i_kunag }{ i_matnr }|.
+
+    CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+      EXPORTING
+        class              = c_variante
+        classtype          = c_clase_mov
+        object             = objeto
+      TABLES
+        t_class            = ti_class
+        t_objectdata       = e_ti_caract_cliente_vv
+      EXCEPTIONS
+        no_classification  = 1
+        no_classtypes      = 2
+        invalid_class_type = 3
+        OTHERS             = 4.
+
+    DELETE e_ti_caract_cliente_vv WHERE ausp1 = '?'.
+
+    CLEAR: ti_class.
+    CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+      EXPORTING
+        class              = c_generico
+        classtype          = c_clase_mov
+        object             = objeto
+      TABLES
+        t_class            = ti_class
+        t_objectdata       = e_ti_caract_cliente_gv
+      EXCEPTIONS
+        no_classification  = 1
+        no_classtypes      = 2
+        invalid_class_type = 3
+        OTHERS             = 4.
+
+    DELETE e_ti_caract_cliente_gv WHERE ausp1 = '?'.
+    CLEAR: ti_class.
+    objeto = |{ i_vkorg }{ i_vtweg }{ i_kunag }{ i_satnr }|.
+
+    CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+      EXPORTING
+        class              = c_variante
+        classtype          = c_clase_mov
+        object             = objeto
+      TABLES
+        t_class            = ti_class
+        t_objectdata       = e_ti_caract_cliente_vg
+      EXCEPTIONS
+        no_classification  = 1
+        no_classtypes      = 2
+        invalid_class_type = 3
+        OTHERS             = 4.
+
+    DELETE e_ti_caract_cliente_vg WHERE ausp1 = '?'.
+    CLEAR: ti_class.
+    CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+      EXPORTING
+        class              = c_generico
+        classtype          = c_clase_mov
+        object             = objeto
+      TABLES
+        t_class            = ti_class
+        t_objectdata       = e_ti_caract_cliente_gg
+      EXCEPTIONS
+        no_classification  = 1
+        no_classtypes      = 2
+        invalid_class_type = 3
+        OTHERS             = 4.
+
+    DELETE e_ti_caract_cliente_gg WHERE ausp1 = '?'.
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zclmm_util_articulo DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF gtp_segmento,
+        matnr TYPE lips-matnr, "Material
+        werks TYPE lips-werks, "Centro
+        charg TYPE vepo-charg, "Lote
+      END OF gtp_segmento .
+    TYPES:
+      gtp_ti_segmento TYPE STANDARD TABLE OF gtp_segmento .
+    TYPES:
+      BEGIN OF gtp_segmentacion,
+        matnr    TYPE lips-matnr, "Material
+        werks    TYPE lips-werks, "Centro
+        charg    TYPE vepo-charg, "Lote
+        sgt_csgr TYPE sgt_cats-sgt_csgr, "Estruct.segmentación
+        sgt_cnrc TYPE sgt_cats-sgt_cnrc, "Campo segmentación
+        sgt_fnam TYPE sgt_cats-sgt_fnam, "Caracteristica
+        sgt_foff TYPE sgt_cats-sgt_foff, "Posición campo
+        sgt_flen TYPE sgt_cats-sgt_flen, "Longitud campo
+        valor    TYPE string, "Valor
+      END OF gtp_segmentacion .
+    TYPES:
+      gtp_ti_segmentacion  TYPE STANDARD TABLE OF gtp_segmentacion WITH EMPTY KEY .
+    TYPES:
+      gtp_r_caracteristica TYPE RANGE OF sgt_cats-sgt_fnam .
+    TYPES:
+      BEGIN OF gtp_ean128,
+        ean128     TYPE zed_ean128,      "EAN de empaque 128
+        um_alterna TYPE marm-meinh, "Unidad de medida alternativa(MARM_MEINH)
+        umrez      TYPE marm-umrez,
+        segmento   TYPE string,
+        mensaje    TYPE string,
+      END OF gtp_ean128 .
+    TYPES:
+      BEGIN OF gtp_ean11,
+        matnr      TYPE matnr,       "Número de material
+        ean11      TYPE mean-ean11,  "Número de artículo europeo (EAN)
+        variante   TYPE matnr,    "variante
+        um_alterna TYPE marm-meinh,  "Unidad de medida alternativa(MARM_MEINH)
+        umrez      TYPE marm-umrez,
+        lote       TYPE string,
+        segmento   TYPE string,
+        mensaje    TYPE string,
+      END OF gtp_ean11 .
+    TYPES:
+      BEGIN OF gtp_es_material,
+        material TYPE mara-satnr, "material generico
+        variante TYPE mara-matnr,
+        ean11    TYPE mean-ean11,
+      END OF  gtp_es_material .
+    TYPES:
+      gtp_ti_marm TYPE STANDARD TABLE OF marm WITH NON-UNIQUE KEY matnr meinh .
+    TYPES:
+      BEGIN OF gtp_matnr,
+        material TYPE mara-matnr,   "Número de material
+      END OF gtp_matnr .
+    TYPES:
+      gtp_tt_matnr TYPE STANDARD TABLE OF gtp_matnr WITH NON-UNIQUE KEY material .
+    TYPES:
+      BEGIN OF gtp_info_materiales,
+        material            TYPE zcmm_3-matnr,
+        descr_material      TYPE zcmm_3-descripcion,
+        tipo_material       TYPE zcmm_3-mtart,
+        gr_articulos        TYPE zcmm_3-matkl,
+        uni_med_base        TYPE zcmm_3-meins,
+        cod_ean11           TYPE zcmm_3-ean11,
+        mat_generico        TYPE zcmm_3-satnr,
+        categoria_mat       TYPE zcmm_3-attyp,
+        contenido_neto      TYPE zcmm_3-inhal,
+        id_conv_material    TYPE zcmm_3-idconvmaterial,
+        color_atinn         TYPE zcmm_3-coloratinn,
+        color               TYPE zcmm_3-color,
+        descr_color         TYPE zcmm_3-descripcioncolor,
+        talla_atinn         TYPE zcmm_3-size1atinn,
+        talla               TYPE zcmm_3-size1,
+        descr_talla         TYPE zcmm_3-descripciontalla,
+        size2_atinn         TYPE zcmm_3-size2atinn,
+        size2               TYPE zcmm_3-size2,
+        marca               TYPE zcmm_3-brandid,
+        descr_marca         TYPE zcmm_3-brand_descr,
+        id_conv_cliente     TYPE zimm_3-idconvcliente,
+        tipo_conversion     TYPE zimm_3-tipoconversion,
+        color_cli_nom_car   TYPE zimm_3-colornombrecaract,
+        color_cli_vlr_car   TYPE zimm_3-colorvalorcaract,
+        color_cli_car       TYPE zimm_3-colorcaracteristica,
+        color_cli_descr_car TYPE zimm_3-colordescripcioncaract,
+        talla_cli_nom_car   TYPE zimm_3-tallanombrecaract,
+        talla_cli_vlr_car   TYPE zimm_3-tallavalorcaract,
+        talla_cli_car       TYPE zimm_3-tallacaracteristica,
+        talla_cli_descr_car TYPE zimm_3-talladescripcioncaract,
+      END OF gtp_info_materiales .
+    TYPES:
+      gtp_tt_info_materiales TYPE STANDARD TABLE OF gtp_info_materiales WITH NON-UNIQUE KEY material .
+
+    CONSTANTS gc_unu TYPE char03 VALUE 'UNU' ##NO_TEXT.
+    CONSTANTS gc_bag TYPE char03 VALUE 'BAG' ##NO_TEXT.
+    CONSTANTS gc_paa TYPE char03 VALUE 'PAA' ##NO_TEXT.
+    CONSTANTS gc_pap TYPE char03 VALUE 'PAP' ##NO_TEXT.
+    CONSTANTS gc_vg TYPE char02 VALUE 'VG' ##NO_TEXT.
+    CONSTANTS gc_g TYPE char01 VALUE 'G' ##NO_TEXT.
+    CONSTANTS gc_v TYPE char02 VALUE 'V' ##NO_TEXT.
+    CONSTANTS gc_t TYPE char02 VALUE 'T' ##NO_TEXT.
+
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Generar EAN128 a partir de los sigientes datos<br/>
+    "! <ol>
+    "! <li>Material</li>
+    "! <li>EAN13</li>
+    "! <li>Unidad de medida</li>
+    "! <li>Segmento</li>
+    "! </ol>
+    "! </p>
+    "! <strong>Identificador:</strong> NA
+    "! <br/>
+    "! <strong>Autor:</strong>
+    "! Sebastian Londono
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+    "!
+    "! @parameter i_matnr |
+    "! @parameter i_meins |
+    "! @parameter i_ean11 |
+    "! @parameter r_es_ean128 |
+    CLASS-METHODS generar_ean128
+      IMPORTING
+        VALUE(i_matnr)     TYPE matnr
+        !i_meins           TYPE meins
+        VALUE(i_ean11)     TYPE ean11 OPTIONAL
+        !i_segmento        TYPE string OPTIONAL
+      RETURNING
+        VALUE(r_es_ean128) TYPE gtp_ean128 .
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Obtener EAN13 a partir de EAN128<br/>
+    "! </p>
+    "! <strong>Identificador:</strong> NA
+    "! <br/>
+    "! <strong>Autor:</strong>
+    "! Sebastian Londono
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 20.01.2021  \ S4DK900668 \ Sebastian Londono \ Creacion Inicial \
+    "!
+    "! @parameter i_ean128 | EAN 128
+    "! @parameter r_es_ean13 | Datos del EAN13
+    CLASS-METHODS obtener_ean13_desde_ean128
+      IMPORTING
+        !i_ean128         TYPE string
+      RETURNING
+        VALUE(r_es_ean13) TYPE gtp_ean11 .
+    CLASS-METHODS obtener_datos_material
+      IMPORTING
+        !i_ti_range_matnr      TYPE range_t_matnr
+        !ip_tipo               TYPE char2
+        !ip_spras              TYPE spras DEFAULT 'S'
+      RETURNING
+        VALUE(r_ti_materiales) TYPE zttmm_1 .
+    CLASS-METHODS obtener_variante_desde_matriz
+      IMPORTING
+        !i_ti_generico_matriz  TYPE zttmm_2
+      EXPORTING
+        !e_ti_mensajes_retorno TYPE bapiret2_t
+      RETURNING
+        VALUE(r_ti_variantes)  TYPE zttmm_1 .
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Obtener caracteristicas de los materiales segun el lote<br/>
+    "! <ol>
+    "! <li>Material</li>
+    "! <li>Centro</li>
+    "! <li>Unidad de medida</li>
+    "! <li>Lote</li>
+    "! <li>Caracteristicas</li>
+    "! </ol>
+    "! </p>
+    "! <strong>Identificador:</strong> NA
+    "! <br/>
+    "! <strong>Autor:</strong>
+    "! Santiago Giraldo
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 09.08.2021  \ S4DK900668 \ Santiago Giraldo \ Creacion Inicial \
+    "!
+    "! @parameter i_r_parametros | Caracteristicas del stock
+    "! @parameter i_ti_segmento | Material obtener caracteristica
+    "! @parameter r_ti_segmentacion | Tabla con caracteristicas del material
+    CLASS-METHODS obtener_segmentacion_stock
+      IMPORTING
+        !i_r_parametros          TYPE gtp_r_caracteristica OPTIONAL
+        !i_ti_segmento           TYPE gtp_ti_segmento
+      RETURNING
+        VALUE(r_ti_segmentacion) TYPE gtp_ti_segmentacion .
+    CLASS-METHODS obtener_caracteristicas
+      IMPORTING
+        !i_ti_range_matnr           TYPE range_t_matnr
+        !i_ti_range_atinn           TYPE zttmmr1032_2 OPTIONAL
+      RETURNING
+        VALUE(r_ti_caracteristicas) TYPE zttmmr1032_1 .
+    "! <strong>Descripción:</strong>
+    "! <p>
+    "! Obtiene las características de talla, color, marca y algunos campos
+    "! específicos del material, adicionalmente si se pasa el id de conversión
+    "! de cliente trae los datos de talla color del cliente.<br/>
+    "! </p>
+    "! <strong>Identificador:</strong> NA
+    "! <br/>
+    "! <strong>Autor:</strong>
+    "! René Duque
+    "! <br/>
+    "! <strong>Historial de cambios:
+    "! <br/><br/>
+    "! \___Fecha___\____CR#____\________Autor________\_____Modificación_____\
+    "! </strong><br/>
+    "! \ 01.10.2021  \ S4DK900668 \ Santiago Giraldo \ Creacion Inicial \
+    "!
+    "! @parameter i_ti_materiales | Tabla con los materiales
+    "! @parameter i_idioma | Idioma de consulta
+    "! @parameter i_id_conv_cliente | Id de conversión de cliente
+    "! @parameter r_ti_info_materiales | Información de los materiales
+    CLASS-METHODS obtener_talla_color
+      IMPORTING
+        !i_ti_materiales            TYPE gtp_tt_matnr OPTIONAL
+        !i_idioma                   TYPE sy-langu DEFAULT 'S'
+        !i_id_conv_cliente          TYPE fsh_sc_cid OPTIONAL
+      RETURNING
+        VALUE(r_ti_info_materiales) TYPE gtp_tt_info_materiales .
+    CLASS-METHODS: obtener_variante_matriz_diam
+      IMPORTING
+        !i_ti_generico_matriz  TYPE zttmm_2
+      EXPORTING
+        !e_ti_mensajes_retorno TYPE bapiret2_t
+      RETURNING
+        VALUE(r_ti_variantes)  TYPE zttmm_1,
+      obtener_caracteristica_cliente
+        IMPORTING
+          i_vkorg                TYPE likp-vkorg
+          i_vtweg                TYPE lips-vtweg
+          i_kunag                TYPE likp-kunag
+          i_matnr                TYPE mara-matnr
+          i_satnr                TYPE mara-satnr
+        EXPORTING
+          e_ti_caract_cliente_vv TYPE rihclobjdat_tab
+          e_ti_caract_cliente_gv TYPE rihclobjdat_tab
+          e_ti_caract_cliente_vg TYPE rihclobjdat_tab
+          e_ti_caract_cliente_gg TYPE rihclobjdat_tab.
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+
+    CLASS-DATA gti_marm TYPE gtp_ti_marm .
+    CLASS-DATA:
+      gti_material TYPE STANDARD TABLE OF gtp_es_material .
+
+    CLASS-METHODS obtener_datos_segmentacion
+      IMPORTING
+        !i_r_parametros          TYPE gtp_r_caracteristica OPTIONAL
+        !i_ti_segmento           TYPE gtp_ti_segmento
+      RETURNING
+        VALUE(r_ti_segmentacion) TYPE gtp_ti_segmentacion .
+    CLASS-METHODS ean13_desde_ean128_general
+      IMPORTING
+        !i_ean128         TYPE string
+      RETURNING
+        VALUE(r_es_ean13) TYPE gtp_ean11 .
+    CLASS-METHODS ean13_desde_ean128_lote
+      IMPORTING
+        !i_ean128         TYPE string
+      RETURNING
+        VALUE(r_es_ean13) TYPE gtp_ean11 .
+    CLASS-METHODS leer_ean
+      IMPORTING
+        !i_ean11         TYPE mean-ean11
+      RETURNING
+        VALUE(r_ti_mean) LIKE gti_material .
+    CLASS-METHODS leer_um_material
+      IMPORTING
+        !i_variante   TYPE mara-matnr
+      RETURNING
+        VALUE(r_marm) TYPE gtp_ti_marm .
+ENDCLASS.
+
+
+
+CLASS ZCLMM_UTIL_ARTICULO IMPLEMENTATION.
+
+
+  METHOD generar_ean128.
+
+    CONSTANTS: c_c1(5) TYPE c VALUE '01',
+               c_c2(4) TYPE c VALUE '30',
+               c_c3    TYPE char2 VALUE '99'.
+
+    FIELD-SYMBOLS: <fs_es_marm>     TYPE marm.
+
+    DATA:
+      ean11       TYPE ean11,
+      ean14       TYPE ean11,
+      cantidad(3) TYPE n,
+      ean128(24)  TYPE c,
+      menge       TYPE ekpo-menge,
+      final_ean   TYPE string,
+      segmento    TYPE string.
+
+    CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+      EXPORTING
+        input        = i_matnr
+      IMPORTING
+        output       = i_matnr
+      EXCEPTIONS
+        length_error = 1
+        OTHERS       = 2.
+
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    "Recuperar EAN
+    IF i_ean11 IS INITIAL.
+      SELECT SINGLE ean11
+      FROM mean
+      WHERE matnr = @i_matnr
+      INTO @i_ean11.
+    ENDIF.
+
+    "Validamos si existe el registro del material en la MARM
+    IF NOT line_exists( gti_marm[ matnr = i_matnr  meinh = i_meins ] ).
+      "..Obtenemos la Unidad de Medida del material
+      SELECT *
+        FROM marm
+       WHERE matnr EQ @i_matnr
+       APPENDING TABLE @gti_marm.
+    ENDIF.
+
+    TRY.
+        "Obtenemos la Unidad de Medida del material
+        r_es_ean128-umrez       = gti_marm[ matnr = i_matnr meinh = i_meins ]-umrez.
+
+        LOOP AT gti_marm ASSIGNING <fs_es_marm> WHERE matnr EQ i_matnr.
+
+          "....Verificamos la unidad de medida
+          CASE <fs_es_marm>-meinh.
+            WHEN gc_unu OR gc_paa OR gc_pap.
+              CALL FUNCTION 'MD_CONVERT_MATERIAL_UNIT'
+                EXPORTING
+                  i_matnr              = i_matnr
+                  i_in_me              = gc_bag
+                  i_out_me             = <fs_es_marm>-meinh
+                  i_menge              = 1
+                IMPORTING
+                  e_menge              = menge
+                EXCEPTIONS
+                  error_in_application = 1
+                  error                = 2
+                  OTHERS               = 3.
+
+              CHECK sy-subrc EQ 0.
+
+          ENDCASE.
+        ENDLOOP.
+
+        IF menge EQ 0.
+          CALL FUNCTION 'MD_CONVERT_MATERIAL_UNIT'
+            EXPORTING
+              i_matnr              = i_matnr
+              i_in_me              = gc_bag
+              i_out_me             = i_meins
+              i_menge              = 1
+            IMPORTING
+              e_menge              = menge
+            EXCEPTIONS
+              error_in_application = 1
+              error                = 2
+              OTHERS               = 3.
+        ENDIF.
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+
+    " Obtener EAN 128.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        input  = i_ean11
+      IMPORTING
+        output = ean11.
+
+    ean11 = ean11+5(13).
+    ean11 = ean11(12).
+    ean14 = |9{ ean11 }|.
+
+    CALL FUNCTION 'EAN_DETERMINE_CHECKDIGIT'
+      EXPORTING
+        i_ean = ean14
+      IMPORTING
+        e_ean = ean14.
+
+    IF i_segmento IS NOT INITIAL.
+      segmento = i_segmento(2).
+    ENDIF.
+
+    IF menge > 0.
+      WRITE menge TO cantidad NO-GROUPING DECIMALS 0.
+      SHIFT cantidad RIGHT DELETING TRAILING space.
+      OVERLAY cantidad WITH '00'.
+    ENDIF.
+
+    final_ean = COND #( WHEN segmento IS INITIAL OR segmento = 'CI'  THEN
+                            |{ c_c2 }{ cantidad+1(2) }|
+                        ELSE
+                            |{ c_c3 }{ segmento }|
+                      ).
+
+    ean128 = |{ c_c1 }{ ean14 }{ final_ean }|.
+
+    "Informacion del EAN128
+    r_es_ean128-ean128      = ean128.
+    TRY.
+        "Obtenemos la informacion de la cantidad por bols
+        r_es_ean128-um_alterna  = gc_bag.
+        r_es_ean128-umrez       = gti_marm[ matnr = i_matnr meinh = gc_bag ]-umrez.
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD obtener_ean13_desde_ean128.
+
+    IF strlen( i_ean128 ) <= 14.
+      r_es_ean13-mensaje = ''.
+    ENDIF.
+
+    IF i_ean128(1) = '1'.
+      r_es_ean13 = ean13_desde_ean128_lote( i_ean128 = i_ean128 ).
+    ELSE.
+      r_es_ean13 = ean13_desde_ean128_general( i_ean128 = i_ean128 ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_datos_material.
+
+    CHECK lines( i_ti_range_matnr ) > 0 AND ip_tipo <> space.
+
+*    SELECT a~satnr, a~matnr, a~mtart, a~matkl, a~meins, a~spart, a~attyp, a~inhme, a~inhal,
+*           d~maktx, d~maktg,
+*           a~color_atinn, a~size1_atinn, a~color, a~size1,
+*           b~atwtb AS des_color, c~atwtb AS des_talla,
+*           a~brand_id, a~bismt, a~mtpos_mara, a~fsh_mg_at1, a~fsh_mg_at2, a~fsh_mg_at3, a~fashgrd
+*    FROM @i_ti_range_matnr AS m
+*      INNER JOIN mara AS a ON m~low = a~matnr
+*      LEFT JOIN wrf_charvalt AS b ON a~color_atinn = b~atinn AND a~color = b~atwrt AND b~spras = @ip_spras
+*      LEFT JOIN wrf_charvalt AS c ON a~size1_atinn = c~atinn AND a~size1 = c~atwrt AND c~spras = @ip_spras
+*      LEFT JOIN makt AS d ON d~matnr = a~matnr
+**    WHERE ( ( @ip_tipo = @gc_g  AND a~matnr IN @i_ti_range_matnr AND a~attyp = '01' )   " Info de Genericos
+**       OR   ( @ip_tipo = @gc_v  AND a~matnr IN @i_ti_range_matnr AND a~attyp = '02' )   " Info de Variantes
+**       OR   ( @ip_tipo = @gc_t  AND a~matnr IN @i_ti_range_matnr )                      " Info de Todos
+**       OR   ( @ip_tipo = @gc_vg AND a~satnr IN @i_ti_range_matnr AND a~attyp = '02' ) ) " Info de Variantes del Generico
+**      AND      d~spras = @ip_spras
+*    WHERE ( ( @ip_tipo = @gc_g  AND a~attyp = '01' )   " Info de Genericos
+*       OR   ( @ip_tipo = @gc_v  AND a~attyp = '02' )   " Info de Variantes
+*       OR   ( @ip_tipo = @gc_t  )                      " Info de Todos
+*       OR   ( @ip_tipo = @gc_vg AND a~attyp = '02' ) ) " Info de Variantes del Generico
+*      AND      d~spras = @ip_spras
+*
+*    INTO TABLE @r_ti_materiales.
+
+    CASE ip_tipo.
+      WHEN gc_vg.
+
+        SELECT a~satnr, a~matnr, a~mtart, a~matkl, a~meins, a~spart, a~attyp, a~inhme, a~inhal,
+           d~maktx, d~maktg,
+           a~color_atinn, a~size1_atinn, a~color, a~size1,
+           b~atwtb AS des_color, c~atwtb AS des_talla,
+           a~brand_id, a~bismt, a~mtpos_mara, a~fsh_mg_at1, a~fsh_mg_at2, a~fsh_mg_at3, a~fashgrd, a~free_char
+        FROM @i_ti_range_matnr AS m
+          INNER JOIN mara AS a ON m~low = a~satnr
+          LEFT JOIN wrf_charvalt AS b ON a~color_atinn = b~atinn AND a~color = b~atwrt AND b~spras = @ip_spras
+          LEFT JOIN wrf_charvalt AS c ON a~size1_atinn = c~atinn AND a~size1 = c~atwrt AND c~spras = @ip_spras
+          LEFT JOIN makt AS d ON d~matnr = a~matnr
+        WHERE ( ( @ip_tipo = @gc_g  AND ( a~attyp = '01' OR a~attyp = '00' ) )   " Info de Genericos
+           OR   ( @ip_tipo = @gc_v  AND a~attyp = '02' )   " Info de Variantes
+           OR   ( @ip_tipo = @gc_t  )                      " Info de Todos
+           OR   ( @ip_tipo = @gc_vg AND a~attyp = '02' ) ) " Info de Variantes del Generico
+          AND      d~spras = @ip_spras
+        INTO TABLE @r_ti_materiales.
+
+      WHEN OTHERS.
+
+        SELECT a~satnr, a~matnr, a~mtart, a~matkl, a~meins, a~spart, a~attyp, a~inhme, a~inhal,
+           d~maktx, d~maktg,
+           a~color_atinn, a~size1_atinn, a~color, a~size1,
+           b~atwtb AS des_color, c~atwtb AS des_talla,
+           a~brand_id, a~bismt, a~mtpos_mara, a~fsh_mg_at1, a~fsh_mg_at2, a~fsh_mg_at3, a~fashgrd, a~free_char
+        FROM @i_ti_range_matnr AS m
+          INNER JOIN mara AS a ON m~low = a~matnr
+          LEFT JOIN wrf_charvalt AS b ON a~color_atinn = b~atinn AND a~color = b~atwrt AND b~spras = @ip_spras
+          LEFT JOIN wrf_charvalt AS c ON a~size1_atinn = c~atinn AND a~size1 = c~atwrt AND c~spras = @ip_spras
+          LEFT JOIN makt AS d ON d~matnr = a~matnr
+*NOTA: lo siguiente se agrega debido a que al material tener varios idiomas duplica los registros consultados
+         WHERE d~spras = @ip_spras "Adicion 13May2025 Sebastian Restrepo Villa
+*        WHERE ( ( @ip_tipo = @gc_g  AND a~matnr IN @i_ti_range_matnr AND a~attyp = '01' )   " Info de Genericos
+*           OR   ( @ip_tipo = @gc_v  AND a~matnr IN @i_ti_range_matnr AND a~attyp = '02' )   " Info de Variantes
+*           OR   ( @ip_tipo = @gc_t  AND a~matnr IN @i_ti_range_matnr )                      " Info de Todos
+*           OR   ( @ip_tipo = @gc_vg AND a~satnr IN @i_ti_range_matnr AND a~attyp = '02' ) ) " Info de Variantes del Generico
+*          AND      d~spras = @ip_spras
+*        WHERE ( ( @ip_tipo = @gc_g  AND ( a~attyp = '01' or a~attyp = '00' ) )   " Info de Genericos
+*           OR   ( @ip_tipo = @gc_v  AND a~attyp = '02' )   " Info de Variantes
+*           OR   ( @ip_tipo = @gc_t  )                      " Info de Todos
+*           OR   ( @ip_tipo = @gc_vg AND a~attyp = '02' ) ) " Info de Variantes del Generico
+*          AND      d~spras = @ip_spras
+
+        INTO TABLE @r_ti_materiales.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_variante_desde_matriz.
+
+    DATA: r_matnr TYPE range_t_matnr.
+
+    r_matnr = VALUE #( FOR s_generico IN i_ti_generico_matriz WHERE ( satnr NE space )
+                            ( sign = 'I' option = 'EQ' low = s_generico-satnr ) ).
+
+    DATA(ti_variantes) = obtener_datos_material( i_ti_range_matnr = r_matnr ip_tipo = 'VG' ).
+
+    LOOP AT i_ti_generico_matriz INTO DATA(es_generico).
+
+      DATA(long_matriz) = strlen( es_generico-matriz ).
+
+      CASE long_matriz.
+        WHEN 6.
+*       Solo Color
+          READ TABLE ti_variantes INTO DATA(es_variantes) WITH KEY satnr = es_generico-satnr color = es_generico-matriz(6) size1 = space.
+          IF sy-subrc = 0.
+            APPEND es_variantes TO r_ti_variantes.
+            CLEAR: es_variantes.
+          ELSE.
+            e_ti_mensajes_retorno = VALUE #( ( id = 'ZMM01' number = '135' type = 'E' message_v1 = es_generico-satnr
+                                               message_v2 = es_generico-matriz(6) ) ).
+          ENDIF.
+
+        WHEN 8.
+*       Talla y Color
+          READ TABLE ti_variantes INTO es_variantes WITH KEY satnr = es_generico-satnr color = es_generico-matriz+2(6) size1 = es_generico-matriz(2).
+          IF sy-subrc = 0.
+            APPEND es_variantes TO r_ti_variantes.
+            CLEAR: es_variantes.
+          ELSE.
+            e_ti_mensajes_retorno = VALUE #( ( id = 'ZMM01' number = '135' type = 'E' message_v1 = es_generico-satnr
+                                               message_v2 = es_generico-matriz(6) message_v3 = es_generico-matriz(2) ) ).
+          ENDIF.
+
+      ENDCASE.
+
+    ENDLOOP.
+
+    IF r_ti_variantes IS INITIAL.
+      e_ti_mensajes_retorno = VALUE #( ( id = '5@' number = '013' type = 'E' ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_segmentacion_stock.
+
+    r_ti_segmentacion = obtener_datos_segmentacion( i_r_parametros = i_r_parametros i_ti_segmento = i_ti_segmento ).
+
+    LOOP AT r_ti_segmentacion ASSIGNING FIELD-SYMBOL(<fs_segmentacion>).
+      TRY.
+          <fs_segmentacion>-valor = <fs_segmentacion>-valor+<fs_segmentacion>-sgt_foff(<fs_segmentacion>-sgt_flen).
+        CATCH cx_sy_range_out_of_bounds.
+          DELETE r_ti_segmentacion INDEX sy-tabix.
+      ENDTRY.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_datos_segmentacion.
+
+    SELECT marc~matnr, marc~werks, mcha~charg, cats~sgt_csgr, cats~sgt_cnrc, cats~sgt_fnam, cats~sgt_foff, cats~sgt_flen, mcha~sgt_scat AS valor
+    INTO CORRESPONDING FIELDS OF TABLE @r_ti_segmentacion
+    FROM marc
+    INNER JOIN sgt_cats AS cats ON cats~sgt_csgr EQ marc~sgt_covs AND cats~sgt_appl EQ 'S'
+    INNER JOIN mcha ON marc~matnr EQ mcha~matnr AND marc~werks EQ mcha~werks
+    FOR ALL ENTRIES IN @i_ti_segmento
+    WHERE marc~matnr    EQ @i_ti_segmento-matnr
+      AND marc~werks    EQ @i_ti_segmento-werks
+      AND cats~sgt_fnam IN @i_r_parametros
+      AND mcha~charg    EQ @i_ti_segmento-charg.
+
+  ENDMETHOD.
+
+
+  METHOD ean13_desde_ean128_general.
+
+    FIELD-SYMBOLS: <fs_es_marm>     TYPE marm.
+
+    DATA: ean11    TYPE mean-ean11.
+    TRY.
+        "Ean 11
+        r_es_ean13-ean11 = i_ean128+3(12).
+      CATCH cx_sy_range_out_of_bounds.
+        RETURN.
+    ENDTRY.
+    "...Obtenemos el digito de chequeo
+    CALL FUNCTION 'EAN_DETERMINE_CHECKDIGIT'
+      EXPORTING
+        i_ean = r_es_ean13-ean11
+      IMPORTING
+        e_ean = r_es_ean13-ean11.
+
+    "Verificamos si existe EAN13
+    CHECK r_es_ean13-ean11 IS NOT INITIAL.
+
+    ean11 = r_es_ean13-ean11.
+    SHIFT ean11 LEFT DELETING LEADING '0'.
+
+    IF NOT line_exists( gti_material[ ean11 = ean11 ] ).
+      "..Obtenemos la informaicon del EAN
+      APPEND LINES OF leer_ean( i_ean11 = ean11 ) TO gti_material.
+    ENDIF.
+
+    "Verificamos si existe informacion del EAN
+    CHECK gti_material IS NOT INITIAL.
+
+    TRY.
+
+        DATA(l_es_material) = gti_material[ ean11 = ean11 ].
+
+        r_es_ean13 = VALUE #( ean11 = ean11 matnr = l_es_material-material variante  = l_es_material-variante
+                              segmento = COND #( WHEN strlen( i_ean128 ) >= 20 AND i_ean128+16(2) = '99' THEN
+                                                    i_ean128+18(2)
+                                                 ELSE
+                                                  space )
+                             ).
+
+        "....Validamos si existe el registro del material en la MARM
+        IF NOT line_exists( gti_marm[ matnr = l_es_material-variante meinh = gc_bag ] ) .
+          APPEND LINES OF leer_um_material( l_es_material-variante ) TO gti_marm.
+        ENDIF.
+
+        "...Obtenemos la Unidad de Medida alternativa del material
+        ASSIGN gti_marm[ matnr = l_es_material-variante meinh = gc_bag ] TO <fs_es_marm>.
+
+        IF sy-subrc EQ 0.
+          r_es_ean13-um_alterna = <fs_es_marm>-meinh. "Unidad de medida alternativa(MARM_MEINH)
+          r_es_ean13-umrez      = <fs_es_marm>-umrez. "Cantidad
+        ENDIF.
+
+      CATCH cx_sy_itab_line_not_found.
+
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD ean13_desde_ean128_lote.
+
+    DATA: material        TYPE matnr18,
+          longitud_ean128 TYPE i.
+
+
+    SPLIT i_ean128 AT ' ' INTO DATA(material_18) DATA(lote).
+
+    material = material_18+1.
+
+    material = |{ material ALPHA = IN }|.
+
+    SELECT SINGLE matnr, ean11, satnr, attyp FROM mara
+    WHERE matnr = @material
+    INTO @DATA(es_material).
+
+    CHECK sy-subrc IS INITIAL.
+
+    r_es_ean13 = VALUE #( ean11    = es_material-ean11
+                          matnr    = COND #( WHEN es_material-attyp EQ '02' THEN
+                                                es_material-satnr
+                                            ELSE
+                                                es_material-matnr )
+                          variante = COND #( WHEN es_material-attyp EQ '02' THEN
+                                                es_material-matnr
+                                             ELSE
+                                                space )
+                          segmento = space lote = lote+1 ).
+*    material = i_ean128(10).
+*    longitud_ean128 = strlen( i_ean128 ).
+*
+*    CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+*      EXPORTING
+*        input        = material
+*      IMPORTING
+*        output       = material
+*      EXCEPTIONS
+*        length_error = 1
+*        OTHERS       = 2.
+*    IF sy-subrc <> 0.
+*      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+*        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+*    ENDIF.
+*
+*    r_es_ean13-matnr = material.
+*
+*    "Verificamos si existe EAN13
+*    CHECK r_es_ean13-matnr IS NOT INITIAL.
+*
+*    material = r_es_ean13-matnr.
+*
+*    SELECT SINGLE matnr FROM mara
+*    WHERE matnr = @material
+*    INTO @material.
+*
+*    "Verificamos si existe informacion del EAN
+*    CHECK sy-subrc IS INITIAL.
+*
+*    TRY.
+*        longitud_ean128 = longitud_ean128 - 12.
+*        r_es_ean13 = VALUE #( ean11 = space matnr = material variante  = space
+*                              segmento = space lote = lote+1 "i_ean128+11(longitud_ean128)
+*                            ).
+*
+*        "....Validamos si existe el registro del material en la MARM
+*        IF NOT line_exists( gti_marm[ matnr = material meinh = gc_bag ] ) .
+*          APPEND LINES OF leer_um_material( material ) TO gti_marm.
+*        ENDIF.
+*
+*        "...Obtenemos la Unidad de Medida alternativa del material
+*        ASSIGN gti_marm[ matnr = material meinh = gc_bag ] TO FIELD-SYMBOL(<fs_es_marm>).
+*
+*        IF sy-subrc EQ 0.
+*          r_es_ean13-um_alterna = <fs_es_marm>-meinh. "Unidad de medida alternativa(MARM_MEINH)
+*          r_es_ean13-umrez      = <fs_es_marm>-umrez. "Cantidad
+*        ENDIF.
+*
+*      CATCH cx_sy_itab_line_not_found.
+*
+*    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD leer_ean.
+    SELECT mg~satnr AS material, mg~matnr AS variante, ean11
+       FROM mean
+       INNER JOIN mgw_generic_var AS mg
+       ON mg~matnr = mean~matnr
+       WHERE ean11 EQ @i_ean11
+       APPENDING TABLE @r_ti_mean.
+
+  ENDMETHOD.
+
+
+  METHOD leer_um_material.
+
+    SELECT *
+       FROM marm
+       WHERE matnr EQ @i_variante
+       APPENDING TABLE @r_marm.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_caracteristicas.
+
+    TYPES ti_range_cuobn TYPE RANGE OF cuobn.
+
+    CHECK lines( i_ti_range_matnr ) GT 0.
+
+*...Se convierte el rango de materiales al tipo de dato CUOBN.
+    DATA(ti_cuobn) = CORRESPONDING ti_range_cuobn( i_ti_range_matnr ).
+
+    SELECT a~objek, b~atinn, b~klart, b~atwrt, c~atwtb
+      FROM inob AS a
+     INNER JOIN ausp AS b
+        ON a~cuobj EQ b~objek
+     INNER JOIN wrf_charvalt AS c
+        ON b~atinn EQ c~atinn
+       AND b~atwrt EQ c~atwrt
+      INTO TABLE @r_ti_caracteristicas
+     WHERE a~objek IN @ti_cuobn
+       AND b~atinn IN @i_ti_range_atinn
+       AND c~spras EQ @sy-langu.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_talla_color.
+
+    DATA r_material         TYPE RANGE OF matnr.
+    DATA r_id_conv_cliente  TYPE RANGE OF fsh_sc_vctp2-fsh_sc_cid.
+
+
+    r_material = VALUE #( FOR <fs_material> IN i_ti_materiales
+                          sign   = 'I'
+                          option = 'EQ'
+                          (  low = <fs_material>-material )
+                        ).
+******************************************************************************************************************************
+*NOTA:  Esta es la version anterior que usaba la CDS el problema es que esa CDS al cargarse consumia mas
+*       de 6gb de memoria de base de datos por ende se cambia la logoca para usar los datos directamente desde las tablas
+******************************************************************************************************************************
+    IF 'perro' = 'gato'.
+
+      "Verificar el id de conversión de cliente
+      "Si tiene dato, busca en la asociación para los datos de cliente,
+      "en caso contrario solo busca los datos del material
+      IF i_id_conv_cliente <> space.
+
+        SELECT FROM zcmm_3
+        FIELDS matnr            AS material,
+               descripcion      AS descr_material,
+               mtart            AS tipo_material,
+               matkl            AS gr_articulos,
+               meins            AS uni_med_base,
+               ean11            AS cod_ean11,
+               satnr            AS mat_generico,
+               attyp            AS categoria_mat,
+               inhal            AS contenido_neto,
+               idconvmaterial   AS id_conv_material,
+               coloratinn       AS color_atinn,
+               color            AS color,
+               descripcioncolor AS descr_color,
+               size1atinn       AS talla_atinn,
+               size1            AS talla,
+               descripciontalla AS descr_talla,
+               size2atinn       AS size2_atinn,
+               size2            AS size2,
+               brandid          AS marca,
+               brand_descr      AS descr_marca,
+               \_caractcliente-idconvcliente          AS id_conv_cliente,
+               \_caractcliente-tipoconversion         AS tipo_conversion,
+               \_caractcliente-colornombrecaract      AS color_cli_nom_car,
+               \_caractcliente-colorvalorcaract       AS color_cli_vlr_car,
+               \_caractcliente-colorcaracteristica    AS color_cli_car,
+               \_caractcliente-colordescripcioncaract AS color_cli_descr_car,
+               \_caractcliente-tallanombrecaract      AS talla_cli_nom_car,
+               \_caractcliente-tallavalorcaract       AS talla_cli_vlr_car,
+               \_caractcliente-tallacaracteristica    AS talla_cli_car,
+               \_caractcliente-talladescripcioncaract AS talla_cli_descr_car
+         WHERE matnr IN @r_material
+           AND idioma = @i_idioma
+           AND \_caractcliente-idconvcliente = @i_id_conv_cliente
+         ORDER BY material
+          INTO TABLE @r_ti_info_materiales.
+
+      ELSE.
+
+        SELECT FROM zcmm_3
+        FIELDS matnr            AS material,
+               descripcion      AS descr_material,
+               mtart            AS tipo_material,
+               matkl            AS gr_articulos,
+               meins            AS uni_med_base,
+               ean11            AS cod_ean11,
+               satnr            AS mat_generico,
+               attyp            AS categoria_mat,
+               inhal            AS contenido_neto,
+               idconvmaterial   AS id_conv_material,
+               coloratinn       AS color_atinn,
+               color            AS color,
+               descripcioncolor AS descr_color,
+               size1atinn       AS talla_atinn,
+               size1            AS talla,
+               descripciontalla AS descr_talla,
+               size2atinn       AS size2_atinn,
+               size2            AS size2,
+               brandid          AS marca,
+               brand_descr      AS descr_marca
+         WHERE matnr IN @r_material
+           AND idioma = @i_idioma
+         ORDER BY material
+          INTO TABLE @r_ti_info_materiales.
+
+      ENDIF.
+    ELSE.
+
+      IF i_id_conv_cliente IS INITIAL .
+        SELECT mara~matnr               AS material,
+               makt~maktx               AS descr_material,
+               mara~mtart               AS tipo_material,
+               mara~matkl               AS gr_articulos,
+               mara~meins               AS uni_med_base,
+               ean~ean11                AS cod_ean11,
+               mara~satnr               AS mat_generico,
+               mara~attyp               AS categoria_mat,
+               mara~inhal               AS contenido_neto,
+               mara~fsh_sc_mid          AS id_conv_material,
+               mara~color_atinn         AS color_atinn,
+               mara~color               AS color,
+               color~atwtb              AS descr_color,
+               mara~size1_atinn         AS talla_atinn,
+               mara~size1               AS talla,
+               talla~atwtb              AS descr_talla,
+               mara~size2_atinn         AS size2_atinn,
+               mara~size2               AS size2,
+               mara~brand_id            AS marca,
+               textbrands~brand_descr   AS descr_marca
+
+*             Conversion~fsh_sc_cid           as id_conv_cliente,
+*             Conversion~fsh_sc_vctyp         as tipo_conversion,
+*             CaractColorCliente~fsh_sc_bezg  as color_cli_nom_car,
+*             CaractColorCliente~fsh_sc_stxt  as color_cli_vlr_car,
+**             CaractColorCliente~fsh_sc_entx8 as ColorCaracteristica8,
+*             CaractColorCliente~fsh_sc_entx  as color_cli_car,
+*             CaractColorCliente~fsh_sc_note  as color_cli_descr_car,
+*             CaractTallaCliente~fsh_sc_bezg  as talla_cli_nom_car,
+*             CaractTallaCliente~fsh_sc_stxt  as talla_cli_vlr_car,
+**             CaractColorCliente~fsh_sc_entx8 as TallaCaracteristica8,
+*             CaractTallaCliente~fsh_sc_entx  as talla_cli_car,
+*             CaractTallaCliente~fsh_sc_note  as talla_cli_descr_car
+
+*             makt~spras               AS idioma,
+*             mara~ersda               AS ersda,
+*             mara~mbrsh               AS mbrsh,
+*             mara~bismt               AS bismt,
+*             ean~eantp                AS meantp,
+*             ean~hpean                AS mhpean,
+*             mara~volum               AS volum,
+*             mara~voleh               AS voleh,
+*             mara~ean11               AS ean11,
+*             mara~laeda               AS laeda,
+*             mara~sgt_csgr            AS sgt_csgr,
+*             mara~sgt_covsa           AS sgt_covsa,
+*             mara~brgew               AS brgew,
+*             mara~gewei               AS gewei,
+*             mara~laeng               AS laeng,
+*             mara~breit               AS breit,
+*             mara~hoehe               AS hoehe,
+*             mara~meabm               AS meabm,
+*             mara~taklv               AS taklv,
+*             mara~inhme               AS inhme,
+*             mara~mtpos_mara          AS mtposmara,
+*             mara~mhdrz               AS mhdrz,
+*             mara~mstae               AS mstae,
+*             mara~fsh_mg_at1          AS fshmgat1,
+*             attrib1~attribute1_text  AS attrib1text,
+*             mara~fsh_mg_at2          AS fshmgat2,
+*             attrib2~attribute2_text  AS attrib2text,
+*             mara~fsh_mg_at3          AS fshmgat3,
+*             attrib3~attribute3_text  AS attrib3text,
+*             mara~fashgrd             AS fashgrd,
+*             textfashgrd~vtext        AS fashgrd_text,
+*             textgrart~wgbez          AS descrgrarticulo,
+*             caractdefus~srtpo        AS posclasificacion,
+*             caractdefus~cstfld01     AS sizeforcarelabel,
+
+             FROM mara
+            INNER JOIN      makt                                    ON  makt~matnr = mara~matnr
+                                                                    AND makt~spras = @i_idioma
+
+            LEFT OUTER JOIN wrf_charvalt     AS color               ON  color~atinn = mara~color_atinn
+                                                                    AND color~atwrt = mara~color
+                                                                    AND color~spras = @i_idioma
+
+            LEFT OUTER JOIN wrf_charvalt     AS talla               ON  talla~atinn = mara~size1_atinn
+                                                                    AND talla~atwrt = mara~size1
+                                                                    AND talla~spras = @i_idioma
+
+*          LEFT OUTER JOIN wrf_charval      AS caractdefus         ON  caractdefus~atinn = mara~size1_atinn
+*                                                                  AND caractdefus~atwrt = mara~size1
+
+            LEFT OUTER JOIN wrf_brands_t     AS textbrands          ON  textbrands~brand_id = mara~brand_id
+                                                                    AND textbrands~language = @i_idioma
+
+*          LEFT OUTER JOIN t6wfgt           AS textfashgrd         ON  textfashgrd~fashgrd = mara~fashgrd
+*                                                                  AND textfashgrd~spras   = @i_idioma
+
+*          LEFT OUTER JOIN fsh_mg_attrib1_t AS attrib1             ON  attrib1~attribute_1 = mara~fsh_mg_at1
+*                                                                  AND attrib1~spras       = @i_idioma
+*
+*          LEFT OUTER JOIN fsh_mg_attrib2_t AS attrib2             ON  attrib2~attribute_2 = mara~fsh_mg_at2
+*                                                                  AND attrib2~spras       = @i_idioma
+*
+*          LEFT OUTER JOIN fsh_mg_attrib3_t AS attrib3             ON  attrib3~attribute_3 = mara~fsh_mg_at3
+*                                                                  AND attrib3~spras       = @i_idioma
+
+            LEFT OUTER JOIN mean             AS ean                 ON  ean~matnr = mara~matnr
+                                                                    AND ean~meinh = mara~meins
+                                                                    AND ean~hpean = 'X'
+
+*          LEFT OUTER JOIN t023t            AS textgrart           ON  textgrart~spras = @i_idioma
+*                                                                  AND textgrart~matkl = mara~matkl
+
+           WHERE mara~matnr               IN @r_material
+             AND makt~spras               EQ @i_idioma
+            INTO TABLE @r_ti_info_materiales.
+      ELSE.
+        SELECT mara~matnr               AS material,
+               makt~maktx               AS descr_material,
+               mara~mtart               AS tipo_material,
+               mara~matkl               AS gr_articulos,
+               mara~meins               AS uni_med_base,
+               ean~ean11                AS cod_ean11,
+               mara~satnr               AS mat_generico,
+               mara~attyp               AS categoria_mat,
+               mara~inhal               AS contenido_neto,
+               mara~fsh_sc_mid          AS id_conv_material,
+               mara~color_atinn         AS color_atinn,
+               mara~color               AS color,
+               color~atwtb              AS descr_color,
+               mara~size1_atinn         AS talla_atinn,
+               mara~size1               AS talla,
+               talla~atwtb              AS descr_talla,
+               mara~size2_atinn         AS size2_atinn,
+               mara~size2               AS size2,
+               mara~brand_id            AS marca,
+               textbrands~brand_descr   AS descr_marca,
+
+               conversion~fsh_sc_cid           AS id_conv_cliente,
+               conversion~fsh_sc_vctyp         AS tipo_conversion,
+               caractcolorcliente~fsh_sc_bezg  AS color_cli_nom_car,
+               caractcolorcliente~fsh_sc_stxt  AS color_cli_vlr_car,
+*             CaractColorCliente~fsh_sc_entx8 as ColorCaracteristica8,
+               caractcolorcliente~fsh_sc_entx  AS color_cli_car,
+               caractcolorcliente~fsh_sc_note  AS color_cli_descr_car,
+               caracttallacliente~fsh_sc_bezg  AS talla_cli_nom_car,
+               caracttallacliente~fsh_sc_stxt  AS talla_cli_vlr_car,
+*             CaractColorCliente~fsh_sc_entx8 as TallaCaracteristica8,
+               caracttallacliente~fsh_sc_entx  AS talla_cli_car,
+               caracttallacliente~fsh_sc_note  AS talla_cli_descr_car
+
+*             makt~spras               AS idioma,
+*             mara~ersda               AS ersda,
+*             mara~mbrsh               AS mbrsh,
+*             mara~bismt               AS bismt,
+*             ean~eantp                AS meantp,
+*             ean~hpean                AS mhpean,
+*             mara~volum               AS volum,
+*             mara~voleh               AS voleh,
+*             mara~ean11               AS ean11,
+*             mara~laeda               AS laeda,
+*             mara~sgt_csgr            AS sgt_csgr,
+*             mara~sgt_covsa           AS sgt_covsa,
+*             mara~brgew               AS brgew,
+*             mara~gewei               AS gewei,
+*             mara~laeng               AS laeng,
+*             mara~breit               AS breit,
+*             mara~hoehe               AS hoehe,
+*             mara~meabm               AS meabm,
+*             mara~taklv               AS taklv,
+*             mara~inhme               AS inhme,
+*             mara~mtpos_mara          AS mtposmara,
+*             mara~mhdrz               AS mhdrz,
+*             mara~mstae               AS mstae,
+*             mara~fsh_mg_at1          AS fshmgat1,
+*             attrib1~attribute1_text  AS attrib1text,
+*             mara~fsh_mg_at2          AS fshmgat2,
+*             attrib2~attribute2_text  AS attrib2text,
+*             mara~fsh_mg_at3          AS fshmgat3,
+*             attrib3~attribute3_text  AS attrib3text,
+*             mara~fashgrd             AS fashgrd,
+*             textfashgrd~vtext        AS fashgrd_text,
+*             textgrart~wgbez          AS descrgrarticulo,
+*             caractdefus~srtpo        AS posclasificacion,
+*             caractdefus~cstfld01     AS sizeforcarelabel,
+
+             FROM mara
+            INNER JOIN      makt                                    ON  makt~matnr = mara~matnr
+                                                                    AND makt~spras = @i_idioma
+
+            LEFT OUTER JOIN wrf_charvalt     AS color               ON  color~atinn = mara~color_atinn
+                                                                    AND color~atwrt = mara~color
+                                                                    AND color~spras = @i_idioma
+
+            LEFT OUTER JOIN wrf_charvalt     AS talla               ON  talla~atinn = mara~size1_atinn
+                                                                    AND talla~atwrt = mara~size1
+                                                                    AND talla~spras = @i_idioma
+
+*          LEFT OUTER JOIN wrf_charval      AS caractdefus         ON  caractdefus~atinn = mara~size1_atinn
+*                                                                  AND caractdefus~atwrt = mara~size1
+
+            LEFT OUTER JOIN wrf_brands_t     AS textbrands          ON  textbrands~brand_id = mara~brand_id
+                                                                    AND textbrands~language = @i_idioma
+
+*          LEFT OUTER JOIN t6wfgt           AS textfashgrd         ON  textfashgrd~fashgrd = mara~fashgrd
+*                                                                  AND textfashgrd~spras   = @i_idioma
+
+*          LEFT OUTER JOIN fsh_mg_attrib1_t AS attrib1             ON  attrib1~attribute_1 = mara~fsh_mg_at1
+*                                                                  AND attrib1~spras       = @i_idioma
+*
+*          LEFT OUTER JOIN fsh_mg_attrib2_t AS attrib2             ON  attrib2~attribute_2 = mara~fsh_mg_at2
+*                                                                  AND attrib2~spras       = @i_idioma
+*
+*          LEFT OUTER JOIN fsh_mg_attrib3_t AS attrib3             ON  attrib3~attribute_3 = mara~fsh_mg_at3
+*                                                                  AND attrib3~spras       = @i_idioma
+
+            LEFT OUTER JOIN mean             AS ean                 ON  ean~matnr = mara~matnr
+                                                                    AND ean~meinh = mara~meins
+                                                                    AND ean~hpean = 'X'
+
+*          LEFT OUTER JOIN t023t            AS textgrart           ON  textgrart~spras = @i_idioma
+*                                                                  AND textgrart~matkl = mara~matkl
+
+            LEFT OUTER JOIN fsh_sc_vctp2     AS conversion          ON  conversion~fsh_sc_mid            = mara~fsh_sc_mid
+
+            LEFT OUTER JOIN fsh_sc_vconv     AS caractcolorcliente  ON  caractcolorcliente~fsh_sc_vctyp  = conversion~fsh_sc_vctyp
+                                                                    AND caractcolorcliente~fsh_sc_bezg   = mara~color_atinn
+                                                                    AND caractcolorcliente~fsh_sc_stxt   = mara~color
+
+            LEFT OUTER JOIN fsh_sc_vconv     AS caracttallacliente  ON  caracttallacliente~fsh_sc_vctyp  = conversion~fsh_sc_vctyp
+                                                                    AND caracttallacliente~fsh_sc_bezg   = mara~size1_atinn
+                                                                    AND caracttallacliente~fsh_sc_stxt   = mara~size1
+
+           WHERE mara~matnr               IN @r_material
+             AND makt~spras               EQ @i_idioma
+             AND conversion~fsh_sc_cid    EQ @i_id_conv_cliente
+            INTO TABLE @r_ti_info_materiales.
+      ENDIF.
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD obtener_variante_matriz_diam.
+
+    DATA: r_matnr TYPE range_t_matnr.
+
+    r_matnr = VALUE #( FOR s_generico IN i_ti_generico_matriz WHERE ( satnr NE space )
+                            ( sign = 'I' option = 'EQ' low = s_generico-satnr ) ).
+
+    DATA(ti_variantes) = obtener_datos_material( i_ti_range_matnr = r_matnr ip_tipo = 'VG' ).
+
+    LOOP AT i_ti_generico_matriz INTO DATA(es_generico).
+
+      DATA(long_matriz) = strlen( es_generico-matriz ).
+
+      CASE long_matriz.
+        WHEN 6.
+*       Solo Color
+*          READ TABLE ti_variantes INTO DATA(es_variantes) WITH KEY satnr = es_generico-satnr color = es_generico-matriz(6) size1 = space.
+          LOOP AT ti_variantes INTO DATA(es_variantes) WHERE satnr = es_generico-satnr.
+            APPEND es_variantes TO r_ti_variantes.
+          ENDLOOP.
+
+          IF sy-subrc <> 0.
+            e_ti_mensajes_retorno = VALUE #( ( id = 'ZMM01' number = '135' type = 'E' message_v1 = es_generico-satnr
+                                                 message_v2 = es_generico-matriz(6) ) ).
+          ENDIF.
+
+        WHEN 8.
+*       Talla y Color
+          READ TABLE ti_variantes INTO es_variantes WITH KEY satnr = es_generico-satnr color = es_generico-matriz+2(6) size1 = es_generico-matriz(2).
+          IF sy-subrc = 0.
+            APPEND es_variantes TO r_ti_variantes.
+            CLEAR: es_variantes.
+          ELSE.
+            e_ti_mensajes_retorno = VALUE #( ( id = 'ZMM01' number = '135' type = 'E' message_v1 = es_generico-satnr
+                                               message_v2 = es_generico-matriz(6) message_v3 = es_generico-matriz(2) ) ).
+          ENDIF.
+
+      ENDCASE.
+
+    ENDLOOP.
+
+    IF r_ti_variantes IS INITIAL.
+      e_ti_mensajes_retorno = VALUE #( ( id = '5@' number = '013' type = 'E' ) ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD obtener_caracteristica_cliente.
+
+    CONSTANTS: c_variante  TYPE klah-class VALUE 'OPS_VARIANTE',
+               c_generico  TYPE klah-class VALUE 'OPS_GENERICO',
+               c_clase_mov TYPE klah-klart VALUE '052'.
+
+    DATA: ti_class TYPE STANDARD TABLE OF sclass,
+          objeto   TYPE ausp-objek.
+
+    CLEAR: e_ti_caract_cliente_vv,
+           e_ti_caract_cliente_gv,
+           e_ti_caract_cliente_vg,
+           e_ti_caract_cliente_gg.
+
+    CHECK i_vkorg IS NOT INITIAL AND i_vtweg IS NOT INITIAL AND i_kunag IS NOT INITIAL AND i_matnr IS NOT INITIAL.
+
+    objeto = |{ i_vkorg }{ i_vtweg }{ i_kunag }{ i_matnr }|.
+
+    CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+      EXPORTING
+        class              = c_variante
+        classtype          = c_clase_mov
+        object             = objeto
+      TABLES
+        t_class            = ti_class
+        t_objectdata       = e_ti_caract_cliente_vv
+      EXCEPTIONS
+        no_classification  = 1
+        no_classtypes      = 2
+        invalid_class_type = 3
+        OTHERS             = 4.
+
+    DELETE e_ti_caract_cliente_vv WHERE ausp1 = '?'.
+
+    CLEAR: ti_class.
+    CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+      EXPORTING
+        class              = c_generico
+        classtype          = c_clase_mov
+        object             = objeto
+      TABLES
+        t_class            = ti_class
+        t_objectdata       = e_ti_caract_cliente_gv
+      EXCEPTIONS
+        no_classification  = 1
+        no_classtypes      = 2
+        invalid_class_type = 3
+        OTHERS             = 4.
+
+    DELETE e_ti_caract_cliente_gv WHERE ausp1 = '?'.
+    CLEAR: ti_class.
+    objeto = |{ i_vkorg }{ i_vtweg }{ i_kunag }{ i_satnr }|.
+
+    CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+      EXPORTING
+        class              = c_variante
+        classtype          = c_clase_mov
+        object             = objeto
+      TABLES
+        t_class            = ti_class
+        t_objectdata       = e_ti_caract_cliente_vg
+      EXCEPTIONS
+        no_classification  = 1
+        no_classtypes      = 2
+        invalid_class_type = 3
+        OTHERS             = 4.
+
+    DELETE e_ti_caract_cliente_vg WHERE ausp1 = '?'.
+    CLEAR: ti_class.
+    CALL FUNCTION 'CLAF_CLASSIFICATION_OF_OBJECTS'
+      EXPORTING
+        class              = c_generico
+        classtype          = c_clase_mov
+        object             = objeto
+      TABLES
+        t_class            = ti_class
+        t_objectdata       = e_ti_caract_cliente_gg
+      EXCEPTIONS
+        no_classification  = 1
+        no_classtypes      = 2
+        invalid_class_type = 3
+        OTHERS             = 4.
+
+    DELETE e_ti_caract_cliente_gg WHERE ausp1 = '?'.
+
+  ENDMETHOD.
+ENDCLASS.

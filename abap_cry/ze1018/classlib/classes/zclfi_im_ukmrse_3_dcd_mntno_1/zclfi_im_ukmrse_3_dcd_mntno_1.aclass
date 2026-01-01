@@ -1,0 +1,50 @@
+CLASS zclfi_im_ukmrse_3_dcd_mntno_1 DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_ukmrse_3_dcd_mntno .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_im_ukmrse_3_dcd_mntno_1 IMPLEMENTATION.
+  METHOD if_ukmrse_3_dcd_mntno~outbound_processing.
+
+  ENDMETHOD.
+
+  METHOD if_ukmrse_3_dcd_mntno~set_tech_context.
+
+  ENDMETHOD.
+
+ENDCLASS.
+CLASS zclfi_im_ukmrse_3_dcd_mntno_1 DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES if_badi_interface .
+    INTERFACES if_ukmrse_3_dcd_mntno .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zclfi_im_ukmrse_3_dcd_mntno_1 IMPLEMENTATION.
+  METHOD if_ukmrse_3_dcd_mntno~outbound_processing.
+
+  ENDMETHOD.
+
+  METHOD if_ukmrse_3_dcd_mntno~set_tech_context.
+
+  ENDMETHOD.
+
+ENDCLASS.

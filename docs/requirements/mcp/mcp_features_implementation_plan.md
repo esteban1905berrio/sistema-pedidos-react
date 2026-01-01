@@ -1,9 +1,9 @@
 # Plan de Implementación de Features MCP
 
 **Proyecto**: giralmcp (SAP ABAP MCP Server)
-**Fecha**: 2025-11-25
-**Versión**: 1.0
-**Estado**: Propuesta
+**Fecha**: 2025-12-09
+**Versión**: 1.1
+**Estado**: En Progreso
 
 ---
 
@@ -15,9 +15,9 @@ Este documento describe las funcionalidades del Model Context Protocol (MCP) que
 
 | Categoría | Estado | Cobertura |
 |-----------|--------|-----------|
-| Tools | ✅ Implementado | 117 tools en 13 archivos |
-| Resources | ❌ No implementado | 0% |
-| Prompts | ❌ No implementado | 0% |
+| Tools | ✅ Implementado | 43 tools en 16 archivos |
+| Resources | ✅ Implementado | 10 resource templates |
+| Prompts | ✅ Implementado | 8 prompts SAP |
 | Progress Reporting | ❌ No implementado | 0% |
 | Logging MCP | ❌ No implementado | 0% |
 | Elicitation | ❌ No implementado | 0% |
@@ -25,7 +25,7 @@ Este documento describe las funcionalidades del Model Context Protocol (MCP) que
 | Completions | ❌ No implementado | 0% |
 | Cancellation | ❌ No implementado | 0% |
 
-**Conclusión**: El servidor utiliza aproximadamente 30% de las capacidades de MCP.
+**Conclusión**: El servidor utiliza aproximadamente 55% de las capacidades de MCP (Tools + Resources + Prompts).
 
 ---
 
@@ -96,7 +96,7 @@ src/main/java/com/crystal/mcp/sapserver/tool/
 
 ---
 
-### 2. Resources (❌ No Implementado)
+### 2. Resources (✅ Implementado)
 
 #### Definición
 
@@ -206,9 +206,35 @@ Los clientes pueden subscribirse a cambios en resources:
 | `sap://table/{name}/fields` | Campos de tabla | `sap://table/MARA/fields` |
 | `sap://user/{id}/transports` | Transportes de usuario | `sap://user/DEVELOPER/transports` |
 
-**Prioridad**: 🔴 Alta
+**Prioridad**: ✅ Completado
 **Esfuerzo**: Medio (2-3 semanas)
 **Impacto**: Alto - Mejora significativa en eficiencia y UX
+
+#### Estado de Implementación (2025-12-09)
+
+**10 Resource Templates Implementados:**
+
+| URI Template | Provider | Estado |
+|--------------|----------|--------|
+| `sap://server/info` | ClassResourceProvider | ✅ Static |
+| `sap://class/{name}/definition` | ClassResourceProvider | ✅ |
+| `sap://class/{name}/implementation` | ClassResourceProvider | ✅ |
+| `sap://class/{name}/methods` | ClassResourceProvider | ✅ |
+| `sap://class/{name}/attributes` | ClassResourceProvider | ✅ |
+| `sap://transport/{id}/info` | TransportResourceProvider | ✅ |
+| `sap://transport/{id}/objects` | TransportResourceProvider | ✅ |
+| `sap://package/{name}/objects` | PackageResourceProvider | ✅ |
+| `sap://package/{name}/hierarchy` | PackageResourceProvider | ✅ |
+| `sap://table/{name}/fields` | TableResourceProvider | ✅ |
+
+**Archivos de Implementación:**
+```
+src/main/java/com/crystal/mcp/sapserver/resource/
+├── ClassResourceProvider.java       # 5 resources
+├── TransportResourceProvider.java   # 2 resources
+├── PackageResourceProvider.java     # 2 resources
+└── TableResourceProvider.java       # 1 resource
+```
 
 ---
 

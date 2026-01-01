@@ -1,0 +1,60 @@
+CLASS zpxcl_recibir_cajas_despacho_i DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES zpxii_recibir_cajas_despacho_i .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zpxcl_recibir_cajas_despacho_i IMPLEMENTATION.
+
+
+  METHOD zpxii_recibir_cajas_despacho_i~recibir_cajas_despacho_async.
+
+    TRY .
+
+        DATA(o_manejo_monitor) = NEW zclcxr1001_monitor_integracion( i_ricefw      = 'I1018'
+                                                                     i_datos_proxy = input ).
+
+        o_manejo_monitor->main( i_datos_proxy = REF #( input ) ).
+
+      CATCH zcxr1001_excepciones_monitor.
+    ENDTRY.
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS zpxcl_recibir_cajas_despacho_i DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    INTERFACES zpxii_recibir_cajas_despacho_i .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS zpxcl_recibir_cajas_despacho_i IMPLEMENTATION.
+
+
+  METHOD zpxii_recibir_cajas_despacho_i~recibir_cajas_despacho_async.
+
+    TRY .
+
+        DATA(o_manejo_monitor) = NEW zclcxr1001_monitor_integracion( i_ricefw      = 'I1018'
+                                                                     i_datos_proxy = input ).
+
+        o_manejo_monitor->main( i_datos_proxy = REF #( input ) ).
+
+      CATCH zcxr1001_excepciones_monitor.
+    ENDTRY.
+
+  ENDMETHOD.
+ENDCLASS.
