@@ -1,0 +1,84 @@
+class ZCLFIAAC001_EXTRACCION_ definition
+  public
+  final
+  create public .
+
+public section.
+
+  methods CONSTRUCTOR .
+  methods MOSTRAR_ALV .
+  methods EXPORTAR_CSV .
+  PROTECTED SECTION.
+private section.
+
+  methods GENERAR_UUID .
+  methods LOG_MENSAJE .
+ENDCLASS.
+
+
+
+CLASS ZCLFIAAC001_EXTRACCION_ IMPLEMENTATION.
+
+
+METHOD constructor.
+  generar_uuid( ).
+ENDMETHOD.
+
+
+  method EXPORTAR_CSV.
+  endmethod.
+
+
+  method GENERAR_UUID.
+  endmethod.
+
+
+  method LOG_MENSAJE.
+  endmethod.
+
+
+  method MOSTRAR_ALV.
+  endmethod.
+ENDCLASS.
+class ZCLFIAAC001_EXTRACCION_ definition
+  public
+  final
+  create public .
+
+public section.
+
+  methods CONSTRUCTOR .
+  methods MOSTRAR_ALV .
+  methods EXPORTAR_CSV .
+  PROTECTED SECTION.
+private section.
+
+  methods GENERAR_UUID .
+  methods LOG_MENSAJE .
+ENDCLASS.
+
+
+
+CLASS ZCLFIAAC001_EXTRACCION_ IMPLEMENTATION.
+
+
+METHOD constructor.
+  generar_uuid( ).
+ENDMETHOD.
+
+
+  method EXPORTAR_CSV.
+  endmethod.
+
+
+  method GENERAR_UUID.
+  endmethod.
+
+
+  method LOG_MENSAJE.
+  endmethod.
+
+
+  method MOSTRAR_ALV.
+  endmethod.
+ENDCLASS.

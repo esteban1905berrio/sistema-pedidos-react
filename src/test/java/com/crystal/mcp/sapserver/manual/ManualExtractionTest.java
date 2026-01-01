@@ -81,30 +81,25 @@ public class ManualExtractionTest implements CommandLineRunner {
         System.out.println("Discovering objects (Recursive)...");
         // ExtractionDiscovery discovery =
         // abapExtractionService.discover(ExtractionScope.USER, username);
-        /*
-         * ExtractionDiscovery discovery =
-         * abapExtractionService.discover(ExtractionScope.PACKAGE, pkgName);
-         * 
-         * System.out.println("Found " + discovery.totalObjects() + " objects.");
-         * discovery.objectsByType().forEach((type, info) -> System.out.println("  - " +
-         * type + ": " + info.count()));
-         * 
-         * if (discovery.totalObjects() == 0) {
-         * System.out.println("No objects found. Exiting.");
-         * return;
-         * }
-         * 
-         * // Step 2: Extract
-         * System.out.println("Extracting to ./abap_package_export ...");
-         * String targetPath = "./abap_package_export";
-         * 
-         * ExtractionResult result =
-         * componentExtractionService.extractDiscoveredObjects(
-         * discovery.objects(),
-         * targetPath);
-         * 
-         * printResult(result);
-         */
+        ExtractionDiscovery discovery = abapExtractionService.discover(ExtractionScope.PACKAGE, pkgName);
+
+        System.out.println("Found " + discovery.totalObjects() + " objects.");
+        discovery.objectsByType().forEach((type, info) -> System.out.println("  - " + type + ": " + info.count()));
+
+        if (discovery.totalObjects() == 0) {
+            System.out.println("No objects found. Exiting.");
+            return;
+        }
+
+        // Step 2: Extract
+        System.out.println("Extracting to ./abap_package_export ...");
+        String targetPath = "./abap_package_export";
+
+        ExtractionResult result = componentExtractionService.extractDiscoveredObjects(
+                discovery.objects(),
+                targetPath);
+
+        printResult(result);
     }
 
     private void runProjectReplication() {

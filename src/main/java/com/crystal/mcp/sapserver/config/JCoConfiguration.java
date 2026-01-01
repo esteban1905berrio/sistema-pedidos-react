@@ -15,8 +15,10 @@ import java.util.Properties;
 /**
  * SAP JCo (Java Connector) Configuration.
  *
- * This configuration class sets up the SAP JCo connection pool for RFC communication
- * with SAP systems. It provides thread-safe, pooled connections that can be reused
+ * This configuration class sets up the SAP JCo connection pool for RFC
+ * communication
+ * with SAP systems. It provides thread-safe, pooled connections that can be
+ * reused
  * across multiple MCP tool invocations.
  *
  * Key Features:
@@ -25,7 +27,8 @@ import java.util.Properties;
  * - Health check via ping() on startup
  * - Environment variable-based configuration
  *
- * Thread Safety: JCo connections are thread-safe by design and managed automatically
+ * Thread Safety: JCo connections are thread-safe by design and managed
+ * automatically
  * by JCoDestinationManager.
  */
 @Slf4j
@@ -94,6 +97,9 @@ public class JCoConfiguration {
         connectProperties.setProperty(DestinationDataProvider.JCO_USER, user);
         connectProperties.setProperty(DestinationDataProvider.JCO_PASSWD, passwd);
         connectProperties.setProperty(DestinationDataProvider.JCO_LANG, lang);
+
+        log.info("SAP Connection attempt with: Host={}, Client={}, User={}, SysNr={}, Lang={}",
+                ashost, client, user, sysnr, lang);
 
         // Optional SAP Router (for VPN scenarios)
         if (router != null && !router.isEmpty()) {

@@ -14,9 +14,7 @@ import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -73,8 +71,7 @@ public class CreationService {
             String functionGroupName,
             String description,
             String packageName,
-            String transport
-    ) {
+            String transport) {
         log.info("🔧 Creating function group: {}", functionGroupName);
 
         CreationResult result = new CreationResult();
@@ -88,8 +85,7 @@ public class CreationService {
             log.debug("  Step 1/3: Validating function group name...");
             if (!FUNCTION_GROUP_PATTERN.matcher(functionGroupName).matches()) {
                 throw new IllegalArgumentException(
-                        "Invalid function group name format. Must start with letter, max 26 chars, only A-Z0-9_"
-                );
+                        "Invalid function group name format. Must start with letter, max 26 chars, only A-Z0-9_");
             }
 
             // Step 2: Register in repository (POST to functions/groups)
@@ -104,12 +100,12 @@ public class CreationService {
                     null,
                     null,
                     registerXml,
-                    "application/vnd.sap.adt.functions.groups.v2+xml"
-            );
+                    "application/vnd.sap.adt.functions.groups.v2+xml");
 
             int registerStatus = registerResponse.statusCode();
             if (registerStatus != 200 && registerStatus != 201) {
-                throw new RuntimeException("Failed to register function group. Status: " + registerStatus + ", Body: " + registerResponse.text());
+                throw new RuntimeException("Failed to register function group. Status: " + registerStatus + ", Body: "
+                        + registerResponse.text());
             }
 
             log.debug("  ✓ Function group registered successfully");
@@ -151,7 +147,8 @@ public class CreationService {
      * @param functionGroupName  parent function group name
      * @param description        description (max 60 chars)
      * @param transport          optional transport number (null for local)
-     * @param processingType     optional processing type: null/empty for normal FM, "rfc" for RFC-enabled FM
+     * @param processingType     optional processing type: null/empty for normal FM,
+     *                           "rfc" for RFC-enabled FM
      * @return CreationResult with success status and details
      */
     public CreationResult createFunctionModule(
@@ -159,8 +156,7 @@ public class CreationService {
             String functionGroupName,
             String description,
             String transport,
-            String processingType
-    ) {
+            String processingType) {
         log.info("🔧 Creating function module: {} in group {}", functionModuleName, functionGroupName);
 
         CreationResult result = new CreationResult();
@@ -174,8 +170,7 @@ public class CreationService {
             log.debug("  Step 1/8: Validating function module name (local)...");
             if (!FUNCTION_MODULE_PATTERN.matcher(functionModuleName).matches()) {
                 throw new IllegalArgumentException(
-                        "Invalid function module name format. Must start with letter, max 30 chars, only A-Z0-9_"
-                );
+                        "Invalid function module name format. Must start with letter, max 30 chars, only A-Z0-9_");
             }
 
             // Step 2: ADT validation endpoint
@@ -185,8 +180,7 @@ public class CreationService {
                     "objtype", "FUGR/FF",
                     "objname", functionModuleName,
                     "fugrname", functionGroupName,
-                    "description", description
-            );
+                    "description", description);
 
             RfcAdapter.RfcResponse validationResponse = rfcAdapter.request(
                     validationUri,
@@ -194,8 +188,7 @@ public class CreationService {
                     Map.of("Accept", "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.StatusMessage"),
                     validationParams,
                     "",
-                    "application/xml"
-            );
+                    "application/xml");
 
             int validationStatus = validationResponse.statusCode();
             if (validationStatus != 200 && validationStatus != 201) {
@@ -207,11 +200,12 @@ public class CreationService {
             // Step 3: First transport check (get lock information)
             log.debug("  Step 3/8: First transport check (getting lock info)...");
             String fmUri = "/sap/bc/adt/functions/groups/" + functionGroupName.toLowerCase() +
-                          "/fmodules/" + functionModuleName.toLowerCase();
+                    "/fmodules/" + functionModuleName.toLowerCase();
 
             String transportCheckResult = performTransportCheck(fmUri, "I", "ZFI");
             log.debug("  ✓ First transport check completed");
-            log.debug("  Transport check result: {}", transportCheckResult.substring(0, Math.min(200, transportCheckResult.length())));
+            log.debug("  Transport check result: {}",
+                    transportCheckResult.substring(0, Math.min(200, transportCheckResult.length())));
 
             // Step 4: SSCR Registration (optional, non-blocking)
             log.debug("  Step 4/8: SSCR registration check...");
@@ -225,8 +219,7 @@ public class CreationService {
                         Map.of("Accept", "application/vnd.sap.adt.registration+xml"),
                         sscrParams,
                         "",
-                        "application/xml"
-                );
+                        "application/xml");
 
                 log.debug("  ✓ SSCR registration checked (status: {})", sscrResponse.statusCode());
             } catch (Exception e) {
@@ -241,7 +234,8 @@ public class CreationService {
             // Step 6: Create function module with corrNr parameter
             log.debug("  Step 6/8: Creating function module with transport...");
             String registerUri = "/sap/bc/adt/functions/groups/" + functionGroupName.toLowerCase() + "/fmodules";
-            String registerXml = buildFunctionModuleXmlV2(functionModuleName, description, functionGroupName, processingType);
+            String registerXml = buildFunctionModuleXmlV2(functionModuleName, description, functionGroupName,
+                    processingType);
 
             // Add corrNr parameter if transport is provided
             Map<String, String> createParams = null;
@@ -255,12 +249,12 @@ public class CreationService {
                     Map.of("Content-Type", "application/vnd.sap.adt.functions.fmodules.v2+xml"),
                     createParams,
                     registerXml,
-                    "application/vnd.sap.adt.functions.fmodules.v2+xml"
-            );
+                    "application/vnd.sap.adt.functions.fmodules.v2+xml");
 
             int registerStatus = registerResponse.statusCode();
             if (registerStatus != 200 && registerStatus != 201) {
-                throw new RuntimeException("Failed to create function module. Status: " + registerStatus + ", Body: " + registerResponse.text());
+                throw new RuntimeException("Failed to create function module. Status: " + registerStatus + ", Body: "
+                        + registerResponse.text());
             }
 
             log.debug("  ✓ Function module created successfully");
@@ -275,8 +269,7 @@ public class CreationService {
                         null,
                         null,
                         "",
-                        "text/plain"
-                );
+                        "text/plain");
                 log.debug("  ✓ Source retrieved (status: {})", sourceResponse.statusCode());
             } catch (Exception e) {
                 log.warn("  ⚠ Source retrieval failed (non-blocking): {}", e.getMessage());
@@ -328,8 +321,7 @@ public class CreationService {
             String description,
             String packageName,
             String transport,
-            String superclass
-    ) {
+            String superclass) {
         log.info("🔧 Creating class: {}", className);
 
         CreationResult result = new CreationResult();
@@ -343,8 +335,7 @@ public class CreationService {
             log.debug("  Step 1/2: Validating class name...");
             if (!CLASS_PATTERN.matcher(className).matches()) {
                 throw new IllegalArgumentException(
-                        "Invalid class name format. Must start with letter, max 30 chars, only A-Z0-9_"
-                );
+                        "Invalid class name format. Must start with letter, max 30 chars, only A-Z0-9_");
             }
 
             // Step 2: Create class
@@ -358,12 +349,12 @@ public class CreationService {
                     null,
                     null,
                     classXml,
-                    "application/vnd.sap.adt.oo.classes.v4+xml"
-            );
+                    "application/vnd.sap.adt.oo.classes.v4+xml");
 
             int createStatus = createResponse.statusCode();
             if (createStatus != 200 && createStatus != 201) {
-                throw new RuntimeException("Failed to create class. Status: " + createStatus + ", Body: " + createResponse.text());
+                throw new RuntimeException(
+                        "Failed to create class. Status: " + createStatus + ", Body: " + createResponse.text());
             }
 
             log.debug("  ✓ Class created successfully");
@@ -403,8 +394,7 @@ public class CreationService {
             String interfaceName,
             String description,
             String packageName,
-            String transport
-    ) {
+            String transport) {
         log.info("🔧 Creating interface: {}", interfaceName);
 
         CreationResult result = new CreationResult();
@@ -418,8 +408,7 @@ public class CreationService {
             log.debug("  Step 1/2: Validating interface name...");
             if (!INTERFACE_PATTERN.matcher(interfaceName).matches()) {
                 throw new IllegalArgumentException(
-                        "Invalid interface name format. Must start with letter, max 30 chars, only A-Z0-9_"
-                );
+                        "Invalid interface name format. Must start with letter, max 30 chars, only A-Z0-9_");
             }
 
             // Step 2: Create interface
@@ -433,12 +422,12 @@ public class CreationService {
                     null,
                     null,
                     interfaceXml,
-                    "application/vnd.sap.adt.oo.interfaces.v4+xml"
-            );
+                    "application/vnd.sap.adt.oo.interfaces.v4+xml");
 
             int createStatus = createResponse.statusCode();
             if (createStatus != 200 && createStatus != 201) {
-                throw new RuntimeException("Failed to create interface. Status: " + createStatus + ", Body: " + createResponse.text());
+                throw new RuntimeException(
+                        "Failed to create interface. Status: " + createStatus + ", Body: " + createResponse.text());
             }
 
             log.debug("  ✓ Interface created successfully");
@@ -498,12 +487,12 @@ public class CreationService {
                     null,
                     params,
                     "",
-                    "application/xml"
-            );
+                    "application/xml");
 
             int deleteStatus = deleteResponse.statusCode();
             if (deleteStatus != 200 && deleteStatus != 204) {
-                throw new RuntimeException("Failed to delete object. Status: " + deleteStatus + ", Body: " + deleteResponse.text());
+                throw new RuntimeException(
+                        "Failed to delete object. Status: " + deleteStatus + ", Body: " + deleteResponse.text());
             }
 
             log.debug("  ✓ Object deleted successfully");
@@ -522,6 +511,206 @@ public class CreationService {
         return result;
     }
 
+    /**
+     * Create a new ABAP program.
+     * <p>
+     * Workflow:
+     * 1. VALIDATE: Call ADT validation endpoint
+     * 2. SSCR: Registration check (optional)
+     * 3. CREATE: Create program with XML body
+     *
+     * @param programName name of the program (e.g., "ZREP_TEST")
+     * @param description description of the program
+     * @param packageName package name
+     * @param transport   transport request (optional)
+     * @return CreationResult with success status and details
+     */
+    public CreationResult createProgram(
+            String programName,
+            String description,
+            String packageName,
+            String transport) {
+        log.info("🔧 Creating program: {}", programName);
+
+        CreationResult result = new CreationResult();
+        result.setName(programName);
+        result.setObjectType("PROG/P");
+        result.setPackage_(packageName);
+        result.setTransport(transport);
+
+        try {
+            // Step 1: ADT validation
+            log.debug("  Step 1/3: Validating program...");
+            String validationUri = "/sap/bc/adt/programs/validation";
+            Map<String, String> validationParams = Map.of(
+                    "objname", programName,
+                    "packagename", packageName,
+                    "description", description,
+                    "objtype", "PROG/P");
+
+            RfcAdapter.RfcResponse validationResponse = rfcAdapter.request(
+                    validationUri,
+                    "POST",
+                    Map.of("Accept",
+                            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.programs.validation"),
+                    validationParams,
+                    "",
+                    "application/xml");
+
+            int validationStatus = validationResponse.statusCode();
+            if (validationStatus != 200 && validationStatus != 201) {
+                throw new RuntimeException(
+                        "Validation failed. Status: " + validationStatus + ", Body: " + validationResponse.text());
+            }
+
+            // Step 2: SSCR Check (optional, analogous to FM creation)
+            try {
+                String checkUri = "/sap/bc/adt/sscr/registration/objects";
+                String checkParamsUri = "/sap/bc/adt/programs/programs/" + programName.toLowerCase();
+                rfcAdapter.request(
+                        checkUri,
+                        "GET",
+                        Map.of("Accept", "application/vnd.sap.adt.registration+xml"),
+                        Map.of("uri", checkParamsUri),
+                        "",
+                        "application/xml");
+            } catch (Exception e) {
+                log.warn("  ⚠ SSCR registration check failed (non-blocking): {}", e.getMessage());
+            }
+
+            // Step 3: Create program
+            log.debug("  Step 3/3: Creating program...");
+            String createUri = "/sap/bc/adt/programs/programs";
+            String createXml = buildProgramXml(programName, description, packageName, transport);
+
+            // Add corrNr parameter if transport is provided
+            Map<String, String> createParams = null;
+            if (transport != null && !transport.isEmpty()) {
+                createParams = Map.of("corrNr", transport);
+            }
+
+            RfcAdapter.RfcResponse createResponse = rfcAdapter.request(
+                    createUri,
+                    "POST",
+                    Map.of("Content-Type", "application/vnd.sap.adt.programs.programs.v2+xml"),
+                    createParams,
+                    createXml,
+                    "application/vnd.sap.adt.programs.programs.v2+xml");
+
+            int createStatus = createResponse.statusCode();
+            if (createStatus != 200 && createStatus != 201) {
+                throw new RuntimeException(
+                        "Failed to create program. Status: " + createStatus + ", Body: " + createResponse.text());
+            }
+
+            String objectUri = "/sap/bc/adt/programs/programs/" + programName.toLowerCase();
+            result.setUri(objectUri);
+            result.setSuccess(true);
+            result.setMessage("Program created successfully");
+
+            log.info("✅ Program created: {}", programName);
+
+        } catch (Exception e) {
+            log.error("❌ Failed to create program: {}", e.getMessage());
+            result.setSuccess(false);
+            result.setMessage("Error: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * Create a new ABAP include.
+     * <p>
+     * Workflow:
+     * 1. VALIDATE: Call ADT validation endpoint
+     * 2. CREATE: Create include with XML body
+     *
+     * @param includeName name of the include (e.g., "ZREP_TEST_TOP")
+     * @param description description of the include
+     * @param packageName package name
+     * @param transport   transport request (optional)
+     * @return CreationResult with success status and details
+     */
+    public CreationResult createInclude(
+            String includeName,
+            String description,
+            String packageName,
+            String transport) {
+        log.info("🔧 Creating include: {}", includeName);
+
+        CreationResult result = new CreationResult();
+        result.setName(includeName);
+        result.setObjectType("PROG/I");
+        result.setPackage_(packageName);
+        result.setTransport(transport);
+
+        try {
+            // Step 1: ADT validation
+            log.debug("  Step 1/2: Validating include...");
+            String validationUri = "/sap/bc/adt/includes/validation";
+            Map<String, String> validationParams = Map.of(
+                    "objname", includeName,
+                    "packagename", packageName,
+                    "description", description,
+                    "objtype", "PROG/I");
+
+            RfcAdapter.RfcResponse validationResponse = rfcAdapter.request(
+                    validationUri,
+                    "POST",
+                    Map.of("Accept",
+                            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.programs.validation"),
+                    validationParams,
+                    "",
+                    "application/xml");
+
+            int validationStatus = validationResponse.statusCode();
+            if (validationStatus != 200 && validationStatus != 201) {
+                throw new RuntimeException(
+                        "Validation failed. Status: " + validationStatus + ", Body: " + validationResponse.text());
+            }
+
+            // Step 2: Create include
+            log.debug("  Step 2/2: Creating include...");
+            String createUri = "/sap/bc/adt/programs/includes";
+            String createXml = buildIncludeXml(includeName, description, packageName, transport);
+
+            // Add corrNr parameter if transport is provided
+            Map<String, String> createParams = null;
+            if (transport != null && !transport.isEmpty()) {
+                createParams = Map.of("corrNr", transport);
+            }
+
+            RfcAdapter.RfcResponse createResponse = rfcAdapter.request(
+                    createUri,
+                    "POST",
+                    Map.of("Content-Type", "application/vnd.sap.adt.programs.includes.v2+xml"),
+                    createParams,
+                    createXml,
+                    "application/vnd.sap.adt.programs.includes.v2+xml");
+
+            int createStatus = createResponse.statusCode();
+            if (createStatus != 200 && createStatus != 201) {
+                throw new RuntimeException(
+                        "Failed to create include. Status: " + createStatus + ", Body: " + createResponse.text());
+            }
+
+            String objectUri = "/sap/bc/adt/programs/includes/" + includeName.toLowerCase();
+            result.setUri(objectUri);
+            result.setSuccess(true);
+            result.setMessage("Include created successfully");
+
+            log.info("✅ Include created: {}", includeName);
+
+        } catch (Exception e) {
+            log.error("❌ Failed to create include: {}", e.getMessage());
+            result.setSuccess(false);
+            result.setMessage("Error: " + e.getMessage());
+        }
+
+        return result;
+    }
+
     // ========================================
     // XML Builder Helper Methods
     // ========================================
@@ -531,7 +720,8 @@ public class CreationService {
      * Format matches Eclipse ADT exactly.
      */
     private String buildFunctionGroupXml(String name, String description, String packageName, String transport) {
-        // Eclipse ADT format - all in one line after declaration, with language attributes
+        // Eclipse ADT format - all in one line after declaration, with language
+        // attributes
         return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
                 "<group:abapFunctionGroup xmlns:group=\"http://www.sap.com/adt/functions/groups\" " +
                 "xmlns:adtcore=\"http://www.sap.com/adt/core\" " +
@@ -545,15 +735,18 @@ public class CreationService {
     }
 
     /**
-     * Build XML body for function module creation (V2 format with container reference).
+     * Build XML body for function module creation (V2 format with container
+     * reference).
      * This matches the Eclipse ADT format from pr_fm_manager.md line 218-222.
      *
      * @param name              Function module name
      * @param description       Description
      * @param functionGroupName Parent function group
-     * @param processingType    Processing type: null/empty for normal FM, "rfc" for RFC-enabled FM
+     * @param processingType    Processing type: null/empty for normal FM, "rfc" for
+     *                          RFC-enabled FM
      */
-    private String buildFunctionModuleXmlV2(String name, String description, String functionGroupName, String processingType) {
+    private String buildFunctionModuleXmlV2(String name, String description, String functionGroupName,
+            String processingType) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
@@ -590,7 +783,8 @@ public class CreationService {
     }
 
     /**
-     * Build XML body for function module creation (legacy format - kept for compatibility).
+     * Build XML body for function module creation (legacy format - kept for
+     * compatibility).
      */
     @Deprecated
     private String buildFunctionModuleXml(String name, String description, String transport) {
@@ -620,7 +814,8 @@ public class CreationService {
     /**
      * Build XML body for class creation.
      */
-    private String buildClassXml(String name, String description, String packageName, String transport, String superclass) {
+    private String buildClassXml(String name, String description, String packageName, String transport,
+            String superclass) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
@@ -726,9 +921,9 @@ public class CreationService {
      * <p>
      * Based on Eclipse ADT flow from pr_fm_manager.md lines 24-105.
      *
-     * @param objectUri  ADT URI of the object
-     * @param operation  operation type ("I" for insert, "M" for modify)
-     * @param devclass   development class/package
+     * @param objectUri ADT URI of the object
+     * @param operation operation type ("I" for insert, "M" for modify)
+     * @param devclass  development class/package
      * @return XML response as string
      */
     private String performTransportCheck(String objectUri, String operation, String devclass) {
@@ -769,13 +964,13 @@ public class CreationService {
                     transportCheckUri,
                     "POST",
                     Map.of(
-                            "Accept", "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.transport.service.checkData",
-                            "Content-Type", "application/vnd.sap.as+xml; charset=UTF-8; dataname=com.sap.adt.transport.service.checkData"
-                    ),
+                            "Accept",
+                            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.transport.service.checkData",
+                            "Content-Type",
+                            "application/vnd.sap.as+xml; charset=UTF-8; dataname=com.sap.adt.transport.service.checkData"),
                     null,
                     requestXml,
-                    "application/vnd.sap.as+xml"
-            );
+                    "application/vnd.sap.as+xml");
 
             if (response.statusCode() != 200) {
                 log.warn("Transport check returned non-200 status: {}", response.statusCode());
@@ -828,20 +1023,18 @@ public class CreationService {
                     "parent_name", functionGroupName,
                     "parent_tech_name", "SAPL" + functionGroupName,
                     "parent_type", "FUGR/F",
-                    "withShortDescriptions", "true"
-            );
+                    "withShortDescriptions", "true");
 
             RfcAdapter.RfcResponse response = rfcAdapter.request(
                     nodeStructureUri,
                     "POST",
                     Map.of(
-                            "Accept", "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.RepositoryObjectTreeContent",
-                            "Content-Type", "application/vnd.sap.as+xml; charset=UTF-8; dataname=null"
-                    ),
+                            "Accept",
+                            "application/vnd.sap.as+xml;charset=UTF-8;dataname=com.sap.adt.RepositoryObjectTreeContent",
+                            "Content-Type", "application/vnd.sap.as+xml; charset=UTF-8; dataname=null"),
                     params,
                     requestXml,
-                    "application/vnd.sap.as+xml"
-            );
+                    "application/vnd.sap.as+xml");
 
             if (response.statusCode() != 200) {
                 log.warn("Node structure update returned non-200 status: {}", response.statusCode());
@@ -861,5 +1054,44 @@ public class CreationService {
             element.setTextContent(textContent);
         }
         parent.appendChild(element);
+    }
+
+    /**
+     * Build XML body for program creation.
+     * Match Eclipse ADT format.
+     */
+    private String buildProgramXml(String name, String description, String packageName, String transport) {
+        // Eclipse ADT format - similar to function group
+        return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<program:abapProgram xmlns:program=\"http://www.sap.com/adt/programs/programs\" " +
+                "xmlns:adtcore=\"http://www.sap.com/adt/core\" " +
+                "adtcore:description=\"%s\" " +
+                "adtcore:language=\"ES\" " +
+                "adtcore:name=\"%s\" " +
+                "adtcore:type=\"PROG/P\" " +
+                "adtcore:masterLanguage=\"ES\" " +
+                "adtcore:masterSystem=\"CAD\" " +
+                "adtcore:responsible=\"L_ABAPS_ITA\">" +
+                "<adtcore:packageRef adtcore:name=\"%s\"/>" +
+                "</program:abapProgram>").formatted(description, name, packageName);
+    }
+
+    /**
+     * Build XML body for include creation.
+     */
+    private String buildIncludeXml(String name, String description, String packageName, String transport) {
+        // Eclipse ADT format
+        return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<include:abapInclude xmlns:include=\"http://www.sap.com/adt/programs/includes\" " +
+                "xmlns:adtcore=\"http://www.sap.com/adt/core\" " +
+                "adtcore:description=\"%s\" " +
+                "adtcore:language=\"ES\" " +
+                "adtcore:name=\"%s\" " +
+                "adtcore:type=\"PROG/I\" " +
+                "adtcore:masterLanguage=\"ES\" " +
+                "adtcore:masterSystem=\"CAD\" " +
+                "adtcore:responsible=\"L_ABAPS_ITA\">" +
+                "<adtcore:packageRef adtcore:name=\"%s\"/>" +
+                "</include:abapInclude>").formatted(description, name, packageName);
     }
 }
