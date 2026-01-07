@@ -57,10 +57,16 @@ public class CreationTools {
          */
         @McpTool(description = "Create a new ABAP function group. " +
                         "Function groups are containers for function modules, providing shared data and includes. " +
-                        "Workflow: VALIDATE → REGISTER → CREATE. " +
+                        "\n\n⚠️ TRANSPORT WORKFLOW (MANDATORY before calling this tool): " +
+                        "1) Extract RICEFW code from object name (e.g., ZGFHCMR002→HCMR002, ZFI_R003→R003). " +
+                        "2) Use search_transports(description='%RICEFW%', status='D') to find existing OTs. " +
+                        "3) If OTs found: ASK USER which OT to use, do NOT auto-select. " +
+                        "4) If no OT found: ASK USER if they want to create a new one or use an existing one. " +
+                        "5) NEVER create a new OT automatically - only TransportCreationTools can create OTs. " +
+                        "\n\nWorkflow: VALIDATE → REGISTER → CREATE. " +
                         "Name must start with letter, max 26 chars, only A-Z0-9_. " +
-                        "Use $TMP package for local objects (no transport needed). " +
-                        "Example: create_function_group('ZTEST_FG', 'Test Function Group', '$TMP', null)")
+                        "Use $TMP package ONLY for temporary local testing (no transport needed). " +
+                        "Example: create_function_group('ZTEST_FG', 'Test Function Group', 'ZDEV_PKG', 'CADK911122')")
         public CreationResult create_function_group(
                         @McpToolParam(description = "Name of the function group. " +
                                         "Must start with letter, max 26 chars, only A-Z0-9_. " +
@@ -101,19 +107,19 @@ public class CreationTools {
          */
         @McpTool(description = "Create a new ABAP function module in an existing function group. " +
                         "Function modules are reusable procedures callable from ABAP programs. " +
-                        "Workflow: VALIDATE → VERIFY_GROUP → REGISTER → CREATE. " +
+                        "\n\n⚠️ TRANSPORT WORKFLOW (MANDATORY before calling this tool): " +
+                        "1) Extract RICEFW code from object name (e.g., Z_HCMR002_GET→HCMR002, ZFI_R003_CALC→R003). " +
+                        "2) Use search_transports(description='%RICEFW%', status='D') to find existing OTs. " +
+                        "3) If OTs found: ASK USER which OT to use, do NOT auto-select. " +
+                        "4) If no OT found: ASK USER if they want to create a new one or use an existing one. " +
+                        "5) NEVER create a new OT automatically - only TransportCreationTools can create OTs. " +
+                        "\n\nWorkflow: VALIDATE → VERIFY_GROUP → REGISTER → CREATE. " +
                         "Name must start with letter, max 30 chars, only A-Z0-9_. " +
                         "Function group must exist before creating function module. " +
-                        "\n\n⚠️ CRITICAL: " +
-                        "Signatures must NEVER include comments (*\" blocks). " +
+                        "\n\n⚠️ CRITICAL: Signatures must NEVER include comments (*\" blocks). " +
                         "\n\n📡 RFC-ENABLED FUNCTION MODULES: " +
-                        "To create an RFC-enabled function module (callable remotely from other SAP systems or external applications), "
-                        +
-                        "set processingType='rfc'. Only use 'rfc' when explicitly requested by the user. " +
-                        "Default behavior creates a normal (non-RFC) function module. " +
-                        "\n\nExample: create_function_module('Z_TEST_FM', 'ZTEST_FG', 'Test Function Module', null, null) "
-                        +
-                        "\nExample RFC: create_function_module('Z_RFC_TEST', 'ZTEST_FG', 'RFC Function Module', null, 'rfc')")
+                        "Set processingType='rfc' ONLY when user explicitly requests RFC-enabled FM. " +
+                        "\n\nExample: create_function_module('Z_TEST_FM', 'ZTEST_FG', 'Test Function Module', 'CADK911122', null)")
         public CreationResult create_function_module(
                         @McpToolParam(description = "Name of the function module. " +
                                         "Must start with letter, max 30 chars, only A-Z0-9_. " +
@@ -161,10 +167,16 @@ public class CreationTools {
          */
         @McpTool(description = "Create a new ABAP class. " +
                         "ABAP classes provide object-oriented programming capabilities. " +
-                        "Workflow: VALIDATE → CREATE. " +
+                        "\n\n⚠️ TRANSPORT WORKFLOW (MANDATORY before calling this tool): " +
+                        "1) Extract RICEFW code from object name (e.g., ZCL_HCMR002→HCMR002, ZCLPSR016→PSR016). " +
+                        "2) Use search_transports(description='%RICEFW%', status='D') to find existing OTs. " +
+                        "3) If OTs found: ASK USER which OT to use, do NOT auto-select. " +
+                        "4) If no OT found: ASK USER if they want to create a new one or use an existing one. " +
+                        "5) NEVER create a new OT automatically - only TransportCreationTools can create OTs. " +
+                        "\n\nWorkflow: VALIDATE → CREATE. " +
                         "Name must start with letter, max 30 chars, only A-Z0-9_. " +
                         "Can optionally inherit from a superclass. " +
-                        "Example: create_class('ZCL_TEST', 'Test Class', '$TMP', null, null)")
+                        "Example: create_class('ZCL_HCMR002', 'HCMR002 Report Class', 'ZHCM_DEV', 'CADK911122', null)")
         public CreationResult create_class(
                         @McpToolParam(description = "Name of the class. " +
                                         "Must start with letter, max 30 chars, only A-Z0-9_. " +
@@ -206,10 +218,16 @@ public class CreationTools {
          */
         @McpTool(description = "Create a new ABAP interface. " +
                         "ABAP interfaces define contracts that classes can implement. " +
-                        "Workflow: VALIDATE → CREATE. " +
+                        "\n\n⚠️ TRANSPORT WORKFLOW (MANDATORY before calling this tool): " +
+                        "1) Extract RICEFW code from object name (e.g., ZIF_HCMR002→HCMR002, ZIFPSR016→PSR016). " +
+                        "2) Use search_transports(description='%RICEFW%', status='D') to find existing OTs. " +
+                        "3) If OTs found: ASK USER which OT to use, do NOT auto-select. " +
+                        "4) If no OT found: ASK USER if they want to create a new one or use an existing one. " +
+                        "5) NEVER create a new OT automatically - only TransportCreationTools can create OTs. " +
+                        "\n\nWorkflow: VALIDATE → CREATE. " +
                         "Name must start with letter, max 30 chars, only A-Z0-9_. " +
                         "Convention: Start with ZIF_ or YIF_ for custom interfaces. " +
-                        "Example: create_interface('ZIF_TEST', 'Test Interface', '$TMP', null)")
+                        "Example: create_interface('ZIF_HCMR002', 'HCMR002 Interface', 'ZHCM_DEV', 'CADK911122')")
         public CreationResult create_interface(
                         @McpToolParam(description = "Name of the interface. " +
                                         "Must start with letter, max 30 chars, only A-Z0-9_. " +
@@ -238,10 +256,16 @@ public class CreationTools {
          * @return CreationResult with success status and details
          */
         @McpTool(description = "Create a new ABAP program. " +
-                        "Workflow: VALIDATE → CREATE. " +
+                        "\n\n⚠️ TRANSPORT WORKFLOW (MANDATORY before calling this tool): " +
+                        "1) Extract RICEFW code from object name (e.g., ZHCMR002_1→HCMR002, ZPSR016_1→PSR016). " +
+                        "2) Use search_transports(description='%RICEFW%', status='D') to find existing OTs. " +
+                        "3) If OTs found: ASK USER which OT to use, do NOT auto-select. " +
+                        "4) If no OT found: ASK USER if they want to create a new one or use an existing one. " +
+                        "5) NEVER create a new OT automatically - only TransportCreationTools can create OTs. " +
+                        "\n\nWorkflow: VALIDATE → CREATE. " +
                         "Name must start with letter, max 30 chars, only A-Z0-9_. " +
                         "Convention: Start with ZREP_ or Z_ for custom programs. " +
-                        "Example: create_program('ZREP_TEST', 'Test Program', '$TMP', null)")
+                        "Example: create_program('ZHCMR002_1', 'HCMR002 Main Program', 'ZHCM_DEV', 'CADK911122')")
         public CreationResult create_program(
                         @McpToolParam(description = "Name of the program. " +
                                         "Must start with letter, max 30 chars, only A-Z0-9_. " +
@@ -270,10 +294,16 @@ public class CreationTools {
          * @return CreationResult with success status and details
          */
         @McpTool(description = "Create a new ABAP include. " +
-                        "Workflow: VALIDATE → CREATE. " +
+                        "\n\n⚠️ TRANSPORT WORKFLOW (MANDATORY before calling this tool): " +
+                        "1) Extract RICEFW code from object name (e.g., ZHCMR002V_1→HCMR002, ZPSR016F_1→PSR016). " +
+                        "2) Use search_transports(description='%RICEFW%', status='D') to find existing OTs. " +
+                        "3) If OTs found: ASK USER which OT to use, do NOT auto-select. " +
+                        "4) If no OT found: ASK USER if they want to create a new one or use an existing one. " +
+                        "5) NEVER create a new OT automatically - only TransportCreationTools can create OTs. " +
+                        "\n\nWorkflow: VALIDATE → CREATE. " +
                         "Name must start with letter, max 30 chars, only A-Z0-9_. " +
-                        "Convention: Ends with _TOP, _F01, etc. " +
-                        "Example: create_include('ZREP_TEST_TOP', 'Top Include', '$TMP', null)")
+                        "Convention: Ends with _TOP, _F01, V_1, F_1, etc. " +
+                        "Example: create_include('ZHCMR002V_1', 'HCMR002 Data Include', 'ZHCM_DEV', 'CADK911122')")
         public CreationResult create_include(
                         @McpToolParam(description = "Name of the include. " +
                                         "Must start with letter, max 30 chars, only A-Z0-9_. " +
