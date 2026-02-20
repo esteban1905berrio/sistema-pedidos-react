@@ -52,7 +52,7 @@ export default function Login() {
           <p className="text-gray-500 mt-2 text-sm">Ingresa tus credenciales para continuar</p>
         </div>
 
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
           <div>
             <label className="block text-sm font-semibold text-gray-700">Correo Electrónico</label>
             <input 
@@ -79,6 +79,7 @@ export default function Login() {
 
           <div className="flex flex-col gap-3 pt-2">
             <button 
+              type="button"
               onClick={manejarIngreso}
               disabled={cargando}
               className="w-full py-2.5 text-white bg-blue-600 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:bg-gray-400"
@@ -87,6 +88,7 @@ export default function Login() {
             </button>
             
             <button 
+              type="button"
               onClick={manejarRegistro}
               disabled={cargando}
               className="w-full py-2.5 text-blue-600 border-2 border-blue-600 rounded-lg font-bold hover:bg-blue-50 transition-colors"
