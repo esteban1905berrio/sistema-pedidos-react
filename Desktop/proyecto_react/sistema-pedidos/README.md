@@ -1,16 +1,31 @@
-# React + Vite
+# 📦 Sistema de Pedidos Real-Time
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Este es un sistema de gestión de pedidos y productos moderno, construido con **React** para la interfaz y **Supabase** como infraestructura de base de datos y autenticación.
 
-Currently, two official plugins are available:
+## 🚀 Tecnologías Utilizadas
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+* **Frontend:** React 18 + Vite.
+* **Estilos:** [Tailwind CSS v4](https://tailwindcss.com/) (Última versión).
+* **Backend:** Supabase (PostgreSQL).
+* **Notificaciones:** Sonner (Toasts elegantes).
+* **Iconos:** Lucide React.
 
-## React Compiler
+## ✨ Características Principales
 
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
+* **Catálogo Dinámico:** Visualización de productos en tiempo real desde PostgreSQL.
+* **Gestión de Inventario:** El stock se actualiza automáticamente al realizar un pedido mediante políticas de seguridad (RLS).
+* **Autenticación:** Sistema de inicio de sesión integrado con Supabase Auth.
+* **Diseño Responsive:** Totalmente adaptado a dispositivos móviles y escritorio.
 
-## Expanding the ESLint configuration
+## 🛠️ Configuración de la Base de Datos
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Para que el proyecto funcione correctamente, se requieren las siguientes tablas en Supabase:
+
+1.  **productos:** `id, nombre, precio, imagen_url`.
+2.  **inventarios:** `id, id_producto, stock_actual`.
+3.  **pedidos:** `id, id_usuario, id_producto, cantidad, creado_en`.
+
+> **Nota:** Es necesario configurar las políticas RLS en Supabase para permitir el `UPDATE` en la tabla de inventarios.
+
+---
+Desarrollado con por Esteban.

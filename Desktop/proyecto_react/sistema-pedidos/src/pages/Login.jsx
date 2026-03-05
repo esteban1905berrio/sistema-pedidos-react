@@ -26,12 +26,13 @@ export default function Login() {
     setCargando(false);
   };
 
-  // Función para Registrarse
+ 
+// Función para Registrarse (Actualizada para Acceso Instantáneo)
   const manejarRegistro = async (e) => {
     e.preventDefault();
     setCargando(true);
     
-    const { error } = await clienteSupabase.auth.signUp({
+    const { data, error } = await clienteSupabase.auth.signUp({
       email: correo,
       password: clave,
     });
@@ -39,7 +40,16 @@ export default function Login() {
     if (error) {
       toast.error("Error al registrar: " + error.message);
     } else {
-      toast.success("Te enviamos un correo de confirmación.");
+      // Si no hay error y desactivaste "Confirm Email" en Supabase, 
+      // el usuario ya tiene una sesión activa aquí mismo.
+      toast.success("¡Cuenta SAMBER creada con éxito!", {
+        description: "Ya puedes usar el sistema sin verificar correos."
+      });
+      
+      // Opcional: Si quieres que entre automáticamente al catálogo:
+      if (data?.session) {
+        // Aquí podrías redirigir o simplemente dejar que el estado de auth cambie
+      }
     }
     setCargando(false);
   };
@@ -48,8 +58,8 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg border border-gray-200">
         <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-blue-700">Sistema de Pedidos</h2>
-          <p className="text-gray-500 mt-2 text-sm">Ingresa tus credenciales para continuar</p>
+          <h2 className="text-3xl font-extrabold text-blue-700">SAMBER Evolution</h2>
+<p className="text-gray-500 mt-2 text-sm">Usa cualquier correo con @ para registrarte</p>
         </div>
 
         <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
